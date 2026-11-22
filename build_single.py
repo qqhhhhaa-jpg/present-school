@@ -3,18 +3,18 @@ H=''
 def strip(src):
     src=re.sub(r'^import .*?;\s*$','',src,flags=re.M)
     return src
-util=strip(open(H+'js/util.js').read()).replace('export ','')
-store=strip(open(H+'js/store.js').read())
+util=strip(open(H+'js/util.js',encoding='utf-8').read()).replace('export ','')
+store=strip(open(H+'js/store.js',encoding='utf-8').read())
 names=re.findall(r'^export (?:const|function|let) (\w+)',store,flags=re.M)
 store=re.sub(r'^export ','',store,flags=re.M)
 store='const db = (() => {\n'+store+'\nreturn { '+', '.join(names)+' };\n})();\n'
-views=re.sub(r'^export ','',strip(open(H+'js/views.js').read()),flags=re.M)
-app=strip(open(H+'js/app.js').read())
+views=re.sub(r'^export ','',strip(open(H+'js/views.js',encoding='utf-8').read()),flags=re.M)
+app=strip(open(H+'js/app.js',encoding='utf-8').read())
 app=re.sub(r'^export ','',app,flags=re.M)
 js='"use strict";\n(() => {\n'+util+'\n'+store+'\n'+views+'\n'+app+'\n})();\n'
-css=open(H+'css/app.css').read()
+css=open(H+'css/app.css',encoding='utf-8').read()
 import re as _re
-FAV=_re.search(r'<link rel="icon" href="[^"]*">',open(H+'index.html').read()).group(0)
+FAV=_re.search(r'<link rel="icon" href="[^"]*">',open(H+'index.html',encoding='utf-8').read()).group(0)
 html=f'''<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
@@ -43,7 +43,8 @@ html=f'''<!doctype html>
 </body>
 </html>
 '''
-open('حاضر.html','w').write(html)
+open('حاضر.html','w',encoding='utf-8').write(html)
+open('index.html','w',encoding='utf-8').write(html)
 art=f'''<title>حاضر · الحضور والانصراف</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap">
 <style>

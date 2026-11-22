@@ -408,6 +408,24 @@ export function addDevice({ name, protocol, serial, model }) {
 // Demo stand-in for the device's first push reaching the server.
 export function firstHandshake(id) { const d = device(id); if (!d) return; d.pending = false; d.online = true; d.lastSeen = now(); log('أول اتصال من جهاز', d.name); emit('devices'); }
 export function removeDevice(id) { const d = device(id); S.devices = S.devices.filter(x => x.id !== id); if (d) log('فك ربط جهاز', d.name); emit('devices'); }
+export function updateDevice({ id, name, model, serial, protocol }) {
+  const d = device(id);
+  if (!d) return { ok: false, errors: { name: 'الجهاز غير موجود.' } };
+  const errors = {};
+  serial = String(serial || '').trim().toUpperCase();
+  if (!String(name || '').trim()) errors.name = 'اكتب اسم الجهاز أو مكانه.';
+  if (protocol && !PUSH[protocol]) errors.protocol = 'اختر نوع الجهاز.';
+  if (serial && !/^[A-Z0-9-]{6,24}$/.test(serial)) errors.serial = 'الرقم التسلسلي موجود على ملصق خلف الجهاز (6 أحرف أو أكثر).';
+  else if (serial && S.devices.some(x => x.id !== id && x.serial === serial)) errors.serial = 'هذا الرقم التسلسلي مستخدم بجهاز آخر.';
+  if (Object.keys(errors).length) return { ok: false, errors };
+  d.name = name.trim();
+  if (model !== undefined) d.model = String(model || '').trim() || (protocol && PUSH[protocol] ? PUSH[protocol].brand : d.model);
+  if (protocol) d.protocol = protocol;
+  if (serial) d.serial = serial;
+  log('تعديل جهاز بصمة', `${d.name} · ${d.serial || ''}`);
+  emit('devices');
+  return { ok: true, device: d };
+}
 export function setDeviceOnline(id, on) {
   const d = device(id); d.online = on; log(on ? 'إعادة اتصال جهاز' : 'قطع جهاز', d.name);
   notifyStaff({ kind: on ? 'in' : 'device', title: on ? `رجع الاتصال: ${d.name}` : `انقطع جهاز: ${d.name}`, body: on ? (d.buffer.length ? `وصلت ${d.buffer.length} بصمة مخزّنة` : 'يرسل البصمات مباشرة') : 'البصمات تتخزن بالجهاز وتنرسل من يرجع', ts: now() });

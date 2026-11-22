@@ -612,6 +612,8 @@ const devices = {
       const hs = e.target.closest('[data-hs]'); if (hs) { db.firstHandshake(hs.dataset.hs); toast('وصل أول اتصال من الجهاز', 'صار الجهاز يرسل البصمات للمنصة مباشرة'); }
       const t = e.target.closest('[data-toggle]'); if (t) { const d = db.device(t.dataset.toggle); db.setDeviceOnline(d.id, !d.online); toast(d.online ? 'رجع الاتصال' : 'انقطع الجهاز', d.name); }
       const s = e.target.closest('[data-scan]'); if (s) { const st = db.simulateScan(s.dataset.scan); if (!st) toast('كل الطلاب سجّلوا حضورهم', ''); else if (!db.device(s.dataset.scan).online) toast('خُزّنت البصمة في الجهاز', `${st.name} · تُرسل عند رجوع الاتصال`, 'late'); }
+      const ed = e.target.closest('[data-ed]'); if (ed) editDeviceModal(db.device(ed.dataset.ed));
+      const del = e.target.closest('[data-del]'); if (del) deleteDeviceModal(db.device(del.dataset.del));
     });
     this.update(el);
   },
@@ -620,7 +622,7 @@ const devices = {
     box.innerHTML = db.devices().map(d => {
       if (d.pending) return `<div class="tile" style="border-style:dashed"><div style="display:flex;gap:12px;align-items:center"><span class="ti">${icon('device', 22)}</span><div style="flex:1;min-width:0"><b>${esc(d.name)}</b><div class="muted small">${esc(d.model)} · <span class="num">${esc(d.serial)}</span></div></div><span class="pill p-late">بانتظار أول اتصال</span></div>
         <div class="small muted">اكتب إعدادات السيرفر بالجهاز وشغّله على الإنترنت. أول ما يتصل يتحول للأخضر.</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm pr" data-cfg="${d.id}">إعدادات الجهاز</button><button class="btn sm" data-hs="${d.id}">محاكاة أول اتصال</button></div></div>`;
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm pr" data-cfg="${d.id}">إعدادات الجهاز</button><button class="btn sm" data-hs="${d.id}">محاكاة أول اتصال</button><button class="btn sm" data-ed="${d.id}">${icon('edit', 14)}تعديل</button><button class="btn sm danger" data-del="${d.id}">${icon('trash', 14)}حذف</button></div></div>`;
       const n = db.recentEvents(9999, e => e.deviceId === d.id).length;
       return `<div class="tile ${d.online ? 'ok' : 'bad'}"><div style="display:flex;gap:12px;align-items:center"><span class="ti">${icon('device', 22)}</span><div style="flex:1;min-width:0"><b>${esc(d.name)}</b><div class="muted small">${esc(d.model)}</div></div><span class="pill ${d.online ? 'p-present' : 'p-absent'}">${d.online ? 'متصل' : 'منقطع'}</span></div>
       <div class="small">${d.methods.map(m => `<span class="pill p-quiet">${esc(m)}</span>`).join(' ')}</div>
@@ -628,10 +630,89 @@ const devices = {
       <div class="row" style="padding:4px 0"><span style="flex:1">بصمات اليوم</span><b class="num">${n}</b></div>
       <div class="row" style="padding:4px 0"><span style="flex:1">آخر اتصال</span><span class="num">${d.lastSeen ? fmtTime(d.lastSeen) : '—'}</span></div>
       ${d.buffer.length ? `<div class="row" style="padding:4px 0"><span style="flex:1">مخزّنة بانتظار الإرسال</span><b class="num">${d.buffer.length}</b></div>` : ''}
-      <div style="display:flex;gap:8px"><button class="btn sm" data-scan="${d.id}">محاكاة بصمة</button><button class="btn sm ${d.online ? 'dg' : 'pr'}" data-toggle="${d.id}">${d.online ? 'قطع الاتصال' : 'إعادة الاتصال'}</button></div></div>`;
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sm" data-scan="${d.id}">محاكاة بصمة</button>
+        <button class="btn sm ${d.online ? 'dg' : 'pr'}" data-toggle="${d.id}">${d.online ? 'قطع الاتصال' : 'إعادة الاتصال'}</button>
+        <button class="btn sm" data-cfg="${d.id}">إعدادات</button>
+        <button class="btn sm" data-ed="${d.id}">${icon('edit', 14)}تعديل</button>
+        <button class="btn sm danger" data-del="${d.id}">${icon('trash', 14)}حذف</button>
+      </div></div>`;
     }).join('');
   },
 };
+
+function deleteDeviceModal(d) {
+  if (!d) return;
+  modal('حذف جهاز البصمة', `<div style="display:flex;flex-direction:column;gap:14px">
+    <div>هل أنت متأكد من حذف جهاز البصمة <b>${esc(d.name)}</b> (${esc(d.model)})؟</div>
+    <div class="card" style="padding:10px 14px;background:var(--red-soft);border-color:#F5C6CB;font-size:13px">
+      <b>تنبيه:</b> سيتم فك ربط الجهاز ولن يستقبل النظام أي تسجيلات حضور جديدة منه إلا بعد إعادة ربطه.
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+      <button type="button" class="btn" data-close>إلغاء</button>
+      <button type="button" class="btn danger-solid" id="okdeldev">${icon('trash', 16)}تأكيد الحذف</button>
+    </div>
+  </div>`, (m, close) => {
+    $('#okdeldev', m).onclick = () => {
+      db.removeDevice(d.id);
+      close();
+      toast('تم حذف جهاز البصمة', d.name, 'absent');
+    };
+  });
+}
+
+function editDeviceModal(d) {
+  if (!d) return;
+  let protocol = d.protocol || 'adms';
+  modal('تعديل معلومات جهاز البصمة', `<form id="edf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+    <div class="field" data-k="protocol">نوع الجهاز
+      <div class="seg" role="group">
+        ${Object.entries(db.PUSH).map(([k, p]) => `<button type="button" data-pr="${k}" aria-pressed="${k === protocol}">${esc(p.label)}</button>`).join('')}
+      </div>
+      <span class="help"></span>
+    </div>
+    <label class="field" data-k="name">اسم الجهاز أو مكانه
+      <input class="input" name="name" value="${esc(d.name || '')}" placeholder="مثال: بوابة 1 · الدخول الرئيسي">
+      <span class="help"></span>
+    </label>
+    <div class="grid g2" style="gap:12px">
+      <label class="field" data-k="serial">الرقم التسلسلي (SN)
+        <input class="input num" name="serial" dir="ltr" value="${esc(d.serial || '')}" placeholder="CN4K...">
+        <span class="help">موجود على ملصق خلف الجهاز.</span>
+      </label>
+      <label class="field">الموديل
+        <input class="input" name="model" dir="ltr" value="${esc(d.model || '')}" placeholder="SpeedFace-V5L">
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+      <button type="button" class="btn" data-close>إلغاء</button>
+      <button class="btn pr" style="min-height:42px">${icon('check', 16)}حفظ التعديلات</button>
+    </div>
+  </form>`, (m, close) => {
+    m.addEventListener('click', e => {
+      const b = e.target.closest('[data-pr]');
+      if (b) {
+        protocol = b.dataset.pr;
+        $$('[data-pr]', m).forEach(x => x.setAttribute('aria-pressed', x === b));
+      }
+    });
+    $('#edf', m).onsubmit = e => {
+      e.preventDefault();
+      const f = e.target;
+      const r = db.updateDevice({ id: d.id, name: f.name.value, protocol, serial: f.serial.value, model: f.model.value });
+      $$('.field[data-k]', m).forEach(x => { x.classList.remove('err'); });
+      if (!r.ok) {
+        Object.entries(r.errors).forEach(([k, msg]) => {
+          const x = $(`[data-k="${k}"]`, m);
+          if (x) { x.classList.add('err'); $('.help', x).textContent = msg; }
+        });
+        return;
+      }
+      close();
+      toast('تم حفظ تعديل الجهاز', r.device.name);
+    };
+  });
+}
 
 function deviceConfig(d) {
   const p = db.PUSH[d.protocol];
