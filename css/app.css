@@ -529,3 +529,6 @@ details.perms summary{cursor:pointer}
 .evfacts div{background:var(--surface-100);border-radius:10px;padding:8px 12px;display:flex;flex-direction:column;gap:2px}
 .evfacts span{font-size:11.5px;color:var(--muted)} .evfacts b{font-size:13.5px}
 @media (max-width:640px){.evfacts{grid-template-columns:1fr}}
+/* Page scrollbar hidden; scrolling still works */
+html,body{scrollbar-width:none;-ms-overflow-style:none}
+html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;width:0;height:0}
