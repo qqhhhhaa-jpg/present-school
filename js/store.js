@@ -508,6 +508,47 @@ export function addStudent({ name, sectionId, gName, gPhone, relation, sPhone, q
   if (!quiet) { log('إضافة طالب', `${s.name} · ${sectionLabel(sectionId)}`); emit('student'); }
   return { ok: true, student: s, linked };
 }
+export function updateStudent(studentId, { name, sectionId, gName, gPhone, relation, sPhone }, by) {
+  const s = student(studentId);
+  if (!s) return { ok: false, errors: { name: 'الطالب غير موجود.' } };
+  name = String(name || '').trim().replace(/\s+/g, ' ');
+  const errors = {};
+  if (name.split(' ').length < 3) errors.name = 'اكتب الاسم الثلاثي على الأقل.';
+  if (!section(sectionId)) errors.sectionId = 'اختر الشعبة.';
+  if (!String(gName || '').trim()) errors.gName = 'اكتب اسم ولي الأمر.';
+  if (!validPhone(gPhone)) errors.gPhone = 'الرقم يجب أن يكون 11 رقماً ويبدأ بـ 07.';
+  if (sPhone && !validPhone(sPhone)) errors.sPhone = 'الرقم يجب أن يكون 11 رقماً ويبدأ بـ 07.';
+  else if (sPhone && rolesFor(sPhone).some(r => r.studentId !== studentId)) errors.sPhone = 'هذا الرقم مستخدم لحساب آخر.';
+  if (Object.keys(errors).length) return { ok: false, errors };
+
+  s.name = name;
+  s.sectionId = sectionId;
+  s.phone = sPhone ? normalizePhone(sPhone) : null;
+
+  let g = guardian(s.guardianId);
+  const p = normalizePhone(gPhone);
+  if (g) {
+    g.name = String(gName).trim();
+    g.phone = p;
+    if (relation) g.relation = relation;
+  }
+
+  log('تعديل بيانات طالب', `${s.name} · رقم ${s.no} · ${section(s.sectionId)?.name || ''}`, by);
+  save();
+  emit('student');
+  return { ok: true, student: s };
+}
+export function deleteStudent(studentId, by) {
+  const s = student(studentId);
+  if (!s) return { ok: false, error: 'الطالب غير موجود.' };
+  S.students = S.students.filter(x => x.id !== studentId);
+  S.events = S.events.filter(e => e.studentId !== studentId);
+  S.plan = S.plan.filter(p => p.studentId !== studentId);
+  log('حذف طالب', `${s.name} · رقم ${s.no} · ${section(s.sectionId)?.name || ''}`, by);
+  save();
+  emit('student');
+  return { ok: true, student: s };
+}
 // Face enrolment. The first photo is kept forever as the reference the administration compares against;
 // later captures are added as updates and never replace it.
 export function captureFace(studentId, data, by) {
@@ -542,7 +583,7 @@ export function readAll(phone) { S.notes.forEach(n => { if (n.phone === phone) n
 const OWNERS = [{ phone: '07700000000', name: 'مالك المنصة' }];
 let actor = 'النظام';
 export const setActor = name => { actor = name; };
-function log(action, detail) { S.audit.unshift({ ts: now(), by: actor, action, detail }); }
+function log(action, detail, by) { S.audit.unshift({ ts: now(), by: by || actor, action, detail }); }
 export const audit = () => S.audit;
 export function rolesFor(phone) {
   phone = normalizePhone(phone);

@@ -1356,6 +1356,47 @@ function addStudent({ name, sectionId, gName, gPhone, relation, sPhone, quiet })
   if (!quiet) { log('إضافة طالب', `${s.name} · ${sectionLabel(sectionId)}`); emit('student'); }
   return { ok: true, student: s, linked };
 }
+function updateStudent(studentId, { name, sectionId, gName, gPhone, relation, sPhone }, by) {
+  const s = student(studentId);
+  if (!s) return { ok: false, errors: { name: 'الطالب غير موجود.' } };
+  name = String(name || '').trim().replace(/\s+/g, ' ');
+  const errors = {};
+  if (name.split(' ').length < 3) errors.name = 'اكتب الاسم الثلاثي على الأقل.';
+  if (!section(sectionId)) errors.sectionId = 'اختر الشعبة.';
+  if (!String(gName || '').trim()) errors.gName = 'اكتب اسم ولي الأمر.';
+  if (!validPhone(gPhone)) errors.gPhone = 'الرقم يجب أن يكون 11 رقماً ويبدأ بـ 07.';
+  if (sPhone && !validPhone(sPhone)) errors.sPhone = 'الرقم يجب أن يكون 11 رقماً ويبدأ بـ 07.';
+  else if (sPhone && rolesFor(sPhone).some(r => r.studentId !== studentId)) errors.sPhone = 'هذا الرقم مستخدم لحساب آخر.';
+  if (Object.keys(errors).length) return { ok: false, errors };
+
+  s.name = name;
+  s.sectionId = sectionId;
+  s.phone = sPhone ? normalizePhone(sPhone) : null;
+
+  let g = guardian(s.guardianId);
+  const p = normalizePhone(gPhone);
+  if (g) {
+    g.name = String(gName).trim();
+    g.phone = p;
+    if (relation) g.relation = relation;
+  }
+
+  log('تعديل بيانات طالب', `${s.name} · رقم ${s.no} · ${section(s.sectionId)?.name || ''}`, by);
+  save();
+  emit('student');
+  return { ok: true, student: s };
+}
+function deleteStudent(studentId, by) {
+  const s = student(studentId);
+  if (!s) return { ok: false, error: 'الطالب غير موجود.' };
+  S.students = S.students.filter(x => x.id !== studentId);
+  S.events = S.events.filter(e => e.studentId !== studentId);
+  S.plan = S.plan.filter(p => p.studentId !== studentId);
+  log('حذف طالب', `${s.name} · رقم ${s.no} · ${section(s.sectionId)?.name || ''}`, by);
+  save();
+  emit('student');
+  return { ok: true, student: s };
+}
 // Face enrolment. The first photo is kept forever as the reference the administration compares against;
 // later captures are added as updates and never replace it.
 function captureFace(studentId, data, by) {
@@ -1390,7 +1431,7 @@ function readAll(phone) { S.notes.forEach(n => { if (n.phone === phone) n.read =
 const OWNERS = [{ phone: '07700000000', name: 'مالك المنصة' }];
 let actor = 'النظام';
 const setActor = name => { actor = name; };
-function log(action, detail) { S.audit.unshift({ ts: now(), by: actor, action, detail }); }
+function log(action, detail, by) { S.audit.unshift({ ts: now(), by: by || actor, action, detail }); }
 const audit = () => S.audit;
 function rolesFor(phone) {
   phone = normalizePhone(phone);
@@ -2076,7 +2117,7 @@ function saveAccount({ phone, name, admin, teacher, subject, sections: secs, dis
   return { ok: true };
 }
 
-return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, offDay, isHoliday, holidayName, addHoliday, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, eventById, evidenceOf, markManual, addExcuse, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
+return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, offDay, isHoliday, holidayName, addHoliday, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, eventById, evidenceOf, markManual, addExcuse, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, updateStudent, deleteStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
 })();
 
 
@@ -2495,6 +2536,18 @@ const students = {
     $('#ss', el).onchange = e => { stu.sec = e.target.value; this.update(el); };
     $('#add', el)?.addEventListener('click', () => addStudentModal());
     $("#impbtn", el)?.addEventListener('click', () => importModal());
+    el.addEventListener('click', e => {
+      const ed = e.target.closest('[data-sedit]');
+      if (ed) {
+        const s = db.student(ed.dataset.sedit);
+        if (s) editStudentModal(s);
+      }
+      const del = e.target.closest('[data-sdel]');
+      if (del) {
+        const s = db.student(del.dataset.sdel);
+        if (s) deleteStudentModal(s);
+      }
+    });
     if (location.hash.includes('?add')) { history.replaceState(null, '', '#/students'); setTimeout(() => addStudentModal(), 50); }
     this.update(el);
   },
@@ -2504,11 +2557,89 @@ const students = {
     if (sc.sections) list = list.filter(s => sc.sections.includes(s.sectionId));
     if (stu.q.trim()) { const r = db.search(stu.q, sc).students; const ids = new Set(r.map(s => s.id)); list = stu.q.length > 1 ? db.students().filter(s => ids.has(s.id) || s.name.includes(stu.q)) : list; if (sc.sections) list = list.filter(s => sc.sections.includes(s.sectionId)); }
     const sorted = [...list].sort((a, b) => b.no - a.no);
-    $('#list', el).innerHTML = `<div class="muted small" style="margin-bottom:6px">${list.length} طالباً</div><table><thead><tr><th>الطالب</th><th>الرقم</th><th>الشعبة</th><th>ولي الأمر</th><th>بصمة الوجه</th><th>اليوم</th></tr></thead><tbody>
-      ${sorted.slice(0, 200).map(s => { const g = db.guardian(s.guardianId); const x = db.statusOf(s.id); return `<tr><td><a href="#/student/${s.id}" style="color:inherit;display:flex;gap:10px;align-items:center;text-decoration:none">${avatar(s.name, x.status, db.photoOf(s.id))}<b>${esc(s.name)}</b></a></td><td class="num">${s.no}</td><td class="muted">${esc(db.sectionShort(s.sectionId))}</td><td>${esc(g.name)}<div class="muted small num" dir="ltr" style="text-align:right">${maskPhone(g.phone)}</div></td><td>${s.face ? '<span class="pill p-present">مسجّلة</span>' : '<span class="pill p-pending">غير مسجّلة</span>'}</td><td>${pill(x.status)}</td></tr>`; }).join('')}
+    $('#list', el).innerHTML = `<div class="muted small" style="margin-bottom:6px">${list.length} طالباً</div><table><thead><tr><th>الطالب</th><th>الرقم</th><th>الشعبة</th><th>ولي الأمر</th><th>بصمة الوجه</th><th>اليوم</th><th>الإجراءات</th></tr></thead><tbody>
+      ${sorted.slice(0, 200).map(s => { const g = db.guardian(s.guardianId) || { name: '—', phone: '—' }; const x = db.statusOf(s.id); return `<tr><td><a href="#/student/${s.id}" style="color:inherit;display:flex;gap:10px;align-items:center;text-decoration:none">${avatar(s.name, x.status, db.photoOf(s.id))}<b>${esc(s.name)}</b></a></td><td class="num">${s.no}</td><td class="muted">${esc(db.sectionShort(s.sectionId))}</td><td>${esc(g.name)}<div class="muted small num" dir="ltr" style="text-align:right">${maskPhone(g.phone)}</div></td><td>${s.face ? '<span class="pill p-present">مسجّلة</span>' : '<span class="pill p-pending">غير مسجّلة</span>'}</td><td>${pill(x.status)}</td><td style="white-space:nowrap"><div style="display:flex;gap:6px;align-items:center"><button type="button" class="btn sm" data-sedit="${s.id}" title="تعديل">${icon('edit', 14)}تعديل</button><button type="button" class="btn sm danger" data-sdel="${s.id}" title="حذف">${icon('trash', 14)}حذف</button></div></td></tr>`; }).join('')}
     </tbody></table>`;
   },
 };
+
+function editStudentModal(s) {
+  if (!s) return;
+  const c = ctx();
+  const u = db.credOf(c.phone)?.username;
+  const actorWithUser = `${c.name}${u ? ` (${u})` : ''}`;
+  const g = db.guardian(s.guardianId) || {};
+  const secs = db.sections();
+
+  modal('تعديل معلومات الطالب: ' + s.name, `
+    <form id="esf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+      <label class="field" data-k="name">الاسم الرباعي<input class="input" name="name" value="${esc(s.name)}"><span class="help"></span></label>
+      <label class="field" data-k="sectionId">الصف والشعبة<select class="input" name="sectionId">${secs.map(sec => `<option value="${sec.id}" ${sec.id === s.sectionId ? 'selected' : ''}>${esc(db.sectionLabel(sec.id))}</option>`).join('')}</select><span class="help"></span></label>
+      <div class="grid g2" style="gap:12px">
+        <label class="field" data-k="gName">اسم ولي الأمر<input class="input" name="gName" value="${esc(g.name || '')}"><span class="help"></span></label>
+        <label class="field">صلة القرابة<select class="input" name="relation"><option ${g.relation === 'الأب' ? 'selected' : ''}>الأب</option><option ${g.relation === 'الأم' ? 'selected' : ''}>الأم</option><option ${g.relation === 'الأخ' ? 'selected' : ''}>الأخ</option><option ${g.relation === 'آخر' ? 'selected' : ''}>آخر</option></select></label>
+      </div>
+      <label class="field" data-k="sPhone">رقم الطالب (اختياري)<input class="input num" name="sPhone" dir="ltr" data-phone inputmode="numeric" value="${esc(s.phone || '')}" placeholder="07XXXXXXXXX"><span class="help"></span></label>
+      <label class="field" data-k="gPhone">رقم ولي الأمر (للتحقق SMS)<input class="input num" name="gPhone" dir="ltr" value="${esc(g.phone || '')}" data-phone inputmode="numeric"><span class="help"></span></label>
+      <div class="card" style="padding:8px 12px;background:var(--surface-200);border-color:var(--line);font-size:12px">
+        المُعدِّل: <b>${esc(actorWithUser)}</b> · يظهر في سجل العمليات للإدارة.
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+        <button type="button" class="btn" data-close>إلغاء</button>
+        <button class="btn pr" style="min-height:44px">${icon('check', 16)}حفظ التعديل</button>
+      </div>
+    </form>`, (m, close) => {
+    $('#esf', m).onsubmit = e => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const data = {
+        name: fd.get('name'),
+        sectionId: fd.get('sectionId'),
+        gName: fd.get('gName'),
+        relation: fd.get('relation'),
+        sPhone: fd.get('sPhone'),
+        gPhone: fd.get('gPhone'),
+      };
+      const r = db.updateStudent(s.id, data, actorWithUser);
+      $$('[data-k]', m).forEach(f => {
+        const k = f.dataset.k;
+        f.classList.toggle('err', !!r.errors?.[k]);
+        const h = $('.help', f);
+        if (r.errors?.[k]) h.textContent = r.errors[k];
+      });
+      if (!r.ok) return;
+      close();
+      toast('تم حفظ تعديل الطالب', `${r.student.name} · تم بواسطة ${actorWithUser}`);
+      current?.view?.update?.(current.el);
+    };
+  });
+}
+
+function deleteStudentModal(s) {
+  if (!s) return;
+  const c = ctx();
+  const u = db.credOf(c.phone)?.username;
+  const actorWithUser = `${c.name}${u ? ` (${u})` : ''}`;
+
+  modal('حذف الطالب: ' + s.name, `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>هل أنت متأكد من حذف الطالب <b>${esc(s.name)}</b> (رقم <span class="num">${s.no}</span>) من شعبة <b>${esc(db.sectionShort(s.sectionId))}</b>؟</div>
+      <div class="card" style="padding:10px 14px;background:var(--red-soft);border-color:#F5C6CB;font-size:13px">
+        <b>تنبيه:</b> سيتم حذف بيانات الطالب وسجل حضوره ودرجاته، وسيظهر في سجل العمليات للإدارة أن الحذف تم بواسطة: <b>${esc(actorWithUser)}</b>.
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+        <button type="button" class="btn" data-close>إلغاء</button>
+        <button type="button" class="btn danger-solid" id="okdelstu">${icon('trash', 16)}تأكيد الحذف</button>
+      </div>
+    </div>`, (m, close) => {
+    $('#okdelstu', m).onclick = () => {
+      db.deleteStudent(s.id, actorWithUser);
+      close();
+      toast('تم حذف الطالب', `${s.name} · تم الحذف بواسطة ${actorWithUser}`, 'absent');
+      current?.view?.update?.(current.el);
+    };
+  });
+}
 
 function addStudentModal(preSection = '') {
   const secs = db.sections();
@@ -3505,7 +3636,7 @@ const AUD_CATS = [
   ['post', 'النشر', /نشر/, 'book'],
   ['set', 'الإعدادات', /إعدادات/, 'gear'],
 ];
-const AUD_SENSITIVE = /تعديل درجة|حذف درجة|دخول من جهاز جديد|تعديل صلاحيات|إلغاء عطلة|فك ربط جهاز|قطع جهاز|توليد يوزر/;
+const AUD_SENSITIVE = /تعديل درجة|حذف درجة|دخول من جهاز جديد|تعديل صلاحيات|إلغاء عطلة|فك ربط جهاز|قطع جهاز|توليد يوزر|حذف طالب|تعديل بيانات طالب/;
 const audCat = a => AUD_CATS.find(c => c[2].test(a.action)) || ['other', 'أخرى', null, 'report'];
 const aud = { q: '', cat: '', by: '', sens: false };
 const auditView = {
