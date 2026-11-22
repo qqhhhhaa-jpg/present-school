@@ -1,0 +1,93 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>حاضر promo</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1080px;height:1350px;overflow:hidden;background:#0D1430}
+body{font-family:"Noto Sans Arabic","DejaVu Sans",sans-serif;color:#fff}
+#stage{position:relative;width:1080px;height:1350px;overflow:hidden;background:radial-gradient(120% 90% at 80% 0%,#2E408A 0%,#1E2B5C 45%,#0D1430 100%)}
+.grid{position:absolute;inset:-100px;background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);background-size:60px 60px}
+.blob{position:absolute;border-radius:50%;filter:blur(80px);opacity:.55}
+.scene{position:absolute;inset:0;display:none}
+.center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.chap{position:absolute;top:84px;right:80px;display:flex;gap:16px;align-items:center;font-weight:700;font-size:30px;color:#9FB2E8}
+.chap .n{width:58px;height:58px;border-radius:16px;background:#34C3AE;color:#0D1430;display:flex;align-items:center;justify-content:center;font-size:30px;font-family:"DejaVu Sans"}
+.h{position:absolute;top:170px;right:80px;left:80px;font-size:74px;font-weight:800;line-height:1.25}
+.h em{font-style:normal;color:#34C3AE}
+.h b{color:#F2A93B}
+.sub{position:absolute;top:360px;right:80px;left:80px;font-size:36px;line-height:1.6;color:#C9D6F0}
+.cap{position:absolute;bottom:70px;right:80px;left:80px;display:flex;gap:14px;flex-wrap:wrap;justify-content:flex-start}
+.tag{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:12px 26px;font-size:30px;font-weight:700;backdrop-filter:blur(6px)}
+.tag.t{background:#34C3AE;color:#0D1430;border-color:#34C3AE}
+.phone{position:absolute;width:420px;height:820px;border-radius:64px;background:#0B1028;border:14px solid #222B52;box-shadow:0 40px 90px rgba(0,0,0,.5),inset 0 0 0 2px rgba(255,255,255,.06);overflow:hidden}
+.phone .scr{position:absolute;inset:0;background:#F5F7FA;color:#1E2B5C;padding:70px 26px 26px;display:flex;flex-direction:column;gap:16px}
+.phone .notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:120px;height:32px;border-radius:20px;background:#0B1028;z-index:3}
+.card{background:#fff;border-radius:22px;padding:20px;box-shadow:0 4px 16px rgba(30,43,92,.08);color:#1E2B5C}
+.pill{display:inline-block;border-radius:999px;padding:4px 16px;font-size:22px;font-weight:700}
+.p-ok{background:#0B7F70;color:#fff}.p-late{background:#F2A93B;color:#1E2B5C}.p-ab{background:#C8453F;color:#fff}
+.notif{position:absolute;right:26px;left:26px;top:60px;background:rgba(255,255,255,.97);color:#1E2B5C;border-radius:24px;padding:18px 20px;display:flex;gap:14px;align-items:center;box-shadow:0 18px 40px rgba(0,0,0,.25);z-index:4}
+.notif .ic{width:54px;height:54px;border-radius:14px;background:#1E2B5C;display:flex;align-items:center;justify-content:center;flex:none}
+.big3d{position:absolute;border-radius:36px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(8px)}
+.num{font-family:"DejaVu Sans";font-weight:700}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:50}
+.prog{position:absolute;bottom:0;right:0;height:8px;background:linear-gradient(90deg,#F2A93B,#34C3AE);z-index:40}
+</style></head><body><div id="stage">
+<div class="grid"></div>
+<div class="blob" style="width:560px;height:560px;background:#0B7F70;top:-160px;left:-160px"></div>
+<div class="blob" style="width:620px;height:620px;background:#3A4FA8;bottom:-220px;right:-200px"></div>
+<div class="blob" style="width:320px;height:320px;background:#F2A93B;top:560px;left:620px;opacity:.2"></div>
+<div id="root"></div></div>
+<script>
+const WM = (h, c1 = '#FFFFFF', c2 = '#34C3AE', id = '') => `<svg ${id ? `id="${id}"` : ''} height="${h}" viewBox="44 4 242 140" style="overflow:visible"><g fill="none" stroke-width="19" stroke-linecap="round" stroke-linejoin="round"><g stroke="${c1}"><path class="wp" d="M198 100 V16"/><path class="wp" d="M118 100 V88 Q118 64 141 64 Q164 64 164 88 V100 H78 Q62 100 60 116 L57 132"/><path class="wp" d="M98 100 V86"/></g><g stroke="${c2}"><path class="wp" d="M226 62 H272 L240 100 H198"/></g></g><rect class="wd" x="131.5" y="26.5" width="19" height="19" rx="2.3" transform="rotate(45 141 36)" fill="#F2A93B"/></svg>`;
+const I = {
+  finger: '<path d="M12 11c0 3-1 6-3 8M8 6.5A6 6 0 0 1 18 11c0 2-.3 4-1 6M5 9a8 8 0 0 1 2-4M15.5 21c.5-1.5 1-3.5 1-6M12 7a4 4 0 0 0-4 4c0 1.5-.3 3-1 4.5" />',
+  bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/>',
+  book: '<path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M4 21.5A2.5 2.5 0 0 1 6.5 19H20v3H6.5"/>',
+  pdf: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+  play: '<path d="M7 5v14l11-7z"/>',
+  grade: '<path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="M6 10.5V16c0 1.5 2.7 3 6 3s6-1.5 6-3v-5.5"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  up: '<path d="M12 19V6M6 12l6-6 6 6"/><path d="M5 21h14"/>',
+  chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>',
+  chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
+  users: '<circle cx="8" cy="6" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 21v-2a5 5 0 0 1 10 0v2M13 21v-1.5a4 4 0 0 1 8 0V21"/>',
+  child: '<circle cx="12" cy="7" r="4"/><path d="M5 21v-1a7 7 0 0 1 14 0v1"/>',
+  check: '<path d="m5 12 5 5L20 7"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+  paper: '<path d="M6 2h9l4 4v16H6z"/><path d="M9 9h7M9 13h7M9 17h4"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+};
+const ic = (n, s = 40, c = 'currentColor', w = 2) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${I[n]}</svg>`;
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const p = (t, a, b) => clamp((t - a) / (b - a));
+const eo = x => 1 - Math.pow(1 - x, 3);                       // ease out
+const eio = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const back = x => { const c = 1.7; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+const lerp = (a, b, x) => a + (b - a) * x;
+const $ = (s, r = document) => r.querySelector(s); const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+function set(el, o) { if (!el) return; if (o.o !== undefined) el.style.opacity = o.o; const tr = []; if (o.x !== undefined || o.y !== undefined) tr.push(`translate(${o.x || 0}px,${o.y || 0}px)`); if (o.s !== undefined) tr.push(`scale(${o.s})`); if (o.r !== undefined) tr.push(`rotate(${o.r}deg)`); el.style.transform = tr.join(' '); if (o.f !== undefined) el.style.filter = `blur(${o.f}px)`; if (o.cp !== undefined) el.style.clipPath = o.cp; }
+// rise-in for text lines: words come up with a blur
+function rise(el, t, t0, dur = .7, dy = 50) { const k = eo(p(t, t0, t0 + dur)); set(el, { o: k, y: (1 - k) * dy, f: (1 - k) * 10 }); }
+function words(el) { if (el.dataset.w) return; el.dataset.w = 1; el.innerHTML = el.innerHTML.split(/(\s+|<[^>]+>)/).map(w => /^\s+$|^<|^$/.test(w) ? w : `<span class="w" style="display:inline-block">${w}</span>`).join(''); }
+function riseWords(el, t, t0, gap = .07, dur = .55) { words(el); $$('.w', el).forEach((w, i) => { const k = eo(p(t, t0 + i * gap, t0 + i * gap + dur)); set(w, { o: k, y: (1 - k) * 40, f: (1 - k) * 8 }); }); }
+
+const S = []; const add = (start, end, html, fn, enter = 'wipe') => { const el = document.createElement('div'); el.className = 'scene'; el.innerHTML = html; $('#scenes').append(el); S.push({ start, end, el, fn, enter }); };
+const chapter = (n, label, h, sub) => `<div class="chap"><span class="n">${n}</span>${label}</div><div class="h">${h}</div>${sub ? `<div class="sub">${sub}</div>` : ''}`;
+function chapterAnim(el, t) { rise($('.chap', el), t, .15); riseWords($('.h', el), t, .3); if ($('.sub', el)) rise($('.sub', el), t, .9, .8, 30); }
+const phone = (inner, extra = '') => `<div class="phone" ${extra}><div class="notch"></div><div class="scr">${inner}</div></div>`;
+
+
+const feats=[['finger','بصمة وحضور لحظي'],['bell','إشعار فوري لولي الأمر'],['book','واجبات وملازم وفيديو'],['grade','درجات ضد التزوير'],['up','ترحيل تلقائي للطلبة'],['shield','خصوصية وأمان عالي']];
+document.getElementById('root').innerHTML=`
+<div style="position:absolute;top:70px;right:80px;display:flex;align-items:center;gap:20px">${WM(86)}<div style="font-size:26px;color:#9FB2E8;font-weight:700;line-height:1.4">منصة الحضور<br>والتعليم الذكية</div></div>
+<div style="position:absolute;top:210px;right:80px;left:80px;font-size:80px;font-weight:800;line-height:1.2">مدرستك كلها…<br><span style="color:#34C3AE">بمنصة وحدة</span></div>
+<div style="position:absolute;top:430px;right:80px;width:560px;font-size:31px;line-height:1.6;color:#C9D6F0">الإدارة والمدرس وولي الأمر والطالب مربوطين لحظة بلحظة، من بصمة الصبح لحد نتيجة آخر السنة.</div>
+${phone(`<div style="font-weight:800;font-size:28px">لوحة اليوم</div>
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="card"><div style="font-size:19px;color:#5B6478">نسبة الحضور</div><div class="num" style="font-size:48px;color:#0B7F70">97%</div></div><div class="card"><div style="font-size:19px;color:#5B6478">متأخر</div><div class="num" style="font-size:48px;color:#B9770E">4</div></div></div>
+ <div class="card" style="display:flex;flex-direction:column;gap:12px">${[['أحمد علي','7:42','p-ok','حاضر'],['زينب حسن','7:44','p-ok','حاضر'],['مريم ناصر','7:58','p-late','متأخر'],['حيدر جواد','7:46','p-ok','حاضر'],['سارة كريم','7:47','p-ok','حاضر']].map(([n,tm,cl,l])=>`<div style="display:flex;align-items:center;gap:10px"><span style="width:42px;height:42px;border-radius:50%;background:#1E2B5C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">${n[0]}</span><b style="flex:1;font-size:21px;white-space:nowrap">${n}</b><span class="num" style="font-size:19px">${tm}</span><span class="pill ${cl}" style="font-size:19px">${l}</span></div>`).join('')}</div>`, 'style="left:70px;top:590px;transform:rotate(-6deg) scale(.82);transform-origin:top left"')}
+<div class="notif" style="position:absolute;left:150px;right:auto;width:400px;top:560px;transform:rotate(3deg)"><div class="ic">${ic('check',30,'#34C3AE',3)}</div><div><b style="font-size:24px">أحمد وصل المدرسة</b><div style="font-size:20px;color:#5B6478">7:42 · البوابة الرئيسية</div></div></div>
+<div style="position:absolute;top:640px;right:80px;width:480px;display:grid;grid-template-columns:1fr 1fr;gap:14px">${feats.map(([i,l])=>`<div class="big3d" style="position:relative;display:flex;gap:12px;align-items:center;padding:18px 18px;font-size:24px;font-weight:700;line-height:1.3"><span style="color:#34C3AE;flex:none">${ic(i,34)}</span>${l}</div>`).join('')}</div>
+<div style="position:absolute;top:1100px;right:80px;width:480px;font-size:24px;color:#9FB2E8;text-align:center">للإدارة · للمدرس · لولي الأمر · للطالب</div>
+<div style="position:absolute;bottom:70px;right:80px;width:480px;text-align:center;background:#F2A93B;color:#0D1430;border-radius:22px;padding:26px 16px;font-size:31px;font-weight:800;white-space:nowrap">اطلب نسخة تجريبية لمدرستك</div>`;
+</script></body></html>

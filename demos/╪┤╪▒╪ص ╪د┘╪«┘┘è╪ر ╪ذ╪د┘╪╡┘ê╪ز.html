@@ -1,0 +1,206 @@
+<title>سبورة الخلية</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap">
+<style>
+/* Layout: control strip above a scaled 16:9 app stage */
+:root{--bg:#E9EDF3;--ink:#1E2B5C;--muted:#5B6478;--teal:#0B7F70;--amber:#F2A93B;--red:#C8453F;--card:#FFFFFF;--line:#C9D1DE;--font:'Cairo','Plus Jakarta Sans',system-ui,sans-serif}
+body{background:var(--bg);color:var(--ink);font-family:var(--font)}
+.wrap{max-width:1280px;margin:0 auto;padding-block:20px 32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.bar h1{margin:0;font-size:22px}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.cbtn{min-height:46px;padding:0 20px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:15px;font-weight:700;cursor:pointer}
+.cbtn.go{background:var(--teal);border-color:var(--teal);color:#fff}
+.cbtn:focus-visible,select:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+select{min-height:46px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:14px;padding:0 10px;max-width:240px}
+.note{font-size:14px;color:var(--muted);line-height:1.7}
+.note b{color:var(--ink)}
+#holder{width:100%;position:relative;overflow:hidden;border-radius:18px;box-shadow:0 10px 30px rgba(30,43,92,.15)}
+#stage{width:1280px;height:720px;overflow:hidden;font-family:var(--font);color:#1E2B5C;background:#F5F7FA;position:relative;transform-origin:top right}
+#stage *{box-sizing:border-box}
+.view{position:absolute;inset:0}
+.m{color:#5B6478}
+.pill{display:inline-block;padding:6px 16px;border-radius:999px;font-size:16px;font-weight:700;border:2px solid #1E2B5C;color:#1E2B5C;background:#fff}
+.chip{display:inline-block;padding:10px 18px;border-radius:999px;font-size:17px;font-weight:700;border:1px solid #C9D1DE;background:#fff;color:#1E2B5C}
+.card{background:#fff;border:1px solid #E3E8EF;border-radius:20px}
+.stp{display:flex;gap:12px;align-items:center;font-size:16px;padding:6px 0;color:#5B6478}
+.stp b{width:28px;height:28px;border-radius:50%;background:#C9D1DE;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+.stp.on{color:#1E2B5C;font-weight:700}.stp.on b{background:#1E2B5C}
+.stp.dn b{background:#0B7F70}
+.bub{border-radius:16px;padding:12px 14px;font-size:15px;line-height:1.75}
+.tbtn{display:inline-block;padding:9px 16px;border-radius:10px;border:1px solid #C9D1DE;background:#fff;font-size:14px;font-weight:700}
+svg text{font-family:'Cairo',sans-serif;font-weight:700}
+@media (prefers-reduced-motion: reduce){.cbtn{transition:none}}
+</style>
+<div class="wrap" dir="rtl">
+<div class="bar"><h1>اسأل السبورة: الخلية</h1>
+<div class="ctl"><select id="voice" aria-label="الصوت"><option>جاري تحميل الأصوات…</option></select><button class="cbtn go" id="play" type="button">▶ شغّل الشرح بالصوت</button></div></div>
+<div class="note" id="vnote">اضغط «شغّل الشرح» وارفع صوت جهازك. الصوت يأتي من محرك النطق في جهازك نفسه.</div>
+<div id="holder"><div id="stage" dir="rtl">
+
+<div id="v1" class="view">
+  <div style="position:absolute;top:70px;left:170px;right:170px;display:flex;flex-direction:column;align-items:center;gap:18px">
+    <div style="font-size:46px;font-weight:700">اسأل السبورة</div>
+    <div class="m" style="font-size:20px">اكتب ما تريد أن تفهمه، وسأشرح لك بالرسم والصوت</div>
+    <div style="display:flex;gap:10px;align-items:center"><span class="pill">الأول متوسط</span><span class="pill">الأحياء</span><span class="m" style="font-size:14px">من حسابك تلقائياً</span></div>
+    <div class="card" style="width:100%;height:150px;padding:22px 26px;position:relative;border:2px solid #1E2B5C">
+      <div style="font-size:14px;font-weight:700;color:#5B6478;margin-bottom:8px">مساعد الطالب</div>
+      <div style="font-size:30px;line-height:1.6;min-height:50px"><span id="typed"></span><span id="caret" style="display:inline-block;width:3px;height:34px;background:#1E2B5C;vertical-align:middle;margin-right:2px"></span></div>
+    </div>
+    <div style="display:flex;gap:10px"><span class="chip">اشرح من البداية</span><span class="chip">أعطني مثالاً</span><span class="chip">أعطني سؤالاً للتدرب</span></div>
+    <div id="go" style="width:100%;height:64px;border-radius:14px;background:#0B7F70;color:#fff;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center"><span id="gotxt">اشرح لي على السبورة</span></div>
+  </div>
+</div>
+
+<div id="v2" class="view" style="opacity:0">
+  <div style="position:absolute;top:20px;right:20px;width:860px;height:680px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;height:48px"><div><div style="font-size:22px;font-weight:700">السبورة · الخلية</div><div class="m" style="font-size:14px">الأول متوسط · الأحياء</div></div><span class="tbtn">إغلاق</span></div>
+    <div class="card" style="flex:1;position:relative;overflow:hidden;background-image:radial-gradient(#E3E8EF 1.2px,transparent 1.2px);background-size:26px 26px">
+      <div style="position:absolute;top:12px;right:12px;display:flex;gap:8px"><span class="tbtn" style="background:#1E2B5C;color:#fff;border-color:#1E2B5C">قلم</span><span class="tbtn">مظلل</span><span class="tbtn">ممحاة</span></div>
+      <div style="position:absolute;top:56px;right:0;left:0;bottom:92px;display:flex;justify-content:center">
+        <svg viewBox="0 0 780 470" height="100%" style="display:block;overflow:visible">
+          <!-- animal cell -->
+          <ellipse id="cyto" cx="300" cy="245" rx="175" ry="150" fill="#E8F4F1" fill-opacity="0"/>
+          <ellipse id="mem" cx="300" cy="245" rx="175" ry="150" fill="none" stroke="#0B7F70" stroke-width="7" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+          <path id="arIn" d="M70 210 L132 228 M118 214 L132 228 L114 236" fill="none" stroke="#F2A93B" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+          <path id="arOut" d="M468 268 L530 286 M516 272 L530 286 L512 294" fill="none" stroke="#C8453F" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+          <text id="tIn" x="78" y="196" font-size="17" fill="#B9801F" text-anchor="middle" opacity="0">غذاء وماء</text>
+          <text id="tOut" x="505" y="322" font-size="17" fill="#C8453F" text-anchor="middle" opacity="0">فضلات</text>
+          <g id="ribo" opacity="0" fill="#1E2B5C"><circle cx="190" cy="300" r="4"/><circle cx="215" cy="330" r="4"/><circle cx="245" cy="320" r="4"/><circle cx="400" cy="320" r="4"/><circle cx="420" cy="180" r="4"/><circle cx="370" cy="130" r="4"/><circle cx="240" cy="140" r="4"/><circle cx="440" cy="260" r="4"/><circle cx="170" cy="250" r="4"/></g>
+          <circle id="nuc" cx="320" cy="235" r="58" fill="#DDE3F5" fill-opacity="0" stroke="#1E2B5C" stroke-width="5" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+          <circle id="nucl" cx="335" cy="225" r="16" fill="#1E2B5C" opacity="0"/>
+          <path id="dna" d="M282 250 q8 -14 16 0 t16 0 t16 0 t16 0" fill="none" stroke="#C8453F" stroke-width="3" stroke-linecap="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+          <g transform="rotate(-18 205 190)">
+            <ellipse id="mito" cx="205" cy="190" rx="46" ry="20" fill="#FDE7BF" fill-opacity="0" stroke="#F2A93B" stroke-width="5" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+            <path id="cris" d="M170 190 l8 -10 l8 20 l8 -20 l8 20 l8 -20 l8 20 l8 -20 l6 10" fill="none" stroke="#B9801F" stroke-width="3" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+          </g>
+          <g id="lMem" opacity="0"><line x1="300" y1="95" x2="300" y2="66" stroke="#0B7F70" stroke-width="2"/><text x="300" y="56" font-size="20" fill="#0B7F70" text-anchor="middle">غشاء الخلية</text></g>
+          <g id="lCyto" opacity="0"><text x="300" y="376" font-size="18" fill="#0B7F70" text-anchor="middle">السيتوبلازم</text></g>
+          <g id="lNuc" opacity="0"><line x1="360" y1="282" x2="392" y2="318" stroke="#1E2B5C" stroke-width="2"/><text x="410" y="340" font-size="20" fill="#1E2B5C" text-anchor="middle">النواة</text></g>
+          <g id="lMito" opacity="0"><line x1="180" y1="168" x2="150" y2="128" stroke="#B9801F" stroke-width="2"/><text x="140" y="116" font-size="19" fill="#B9801F" text-anchor="middle">ميتوكوندريا</text></g>
+          <text id="tAnimal" x="300" y="440" font-size="22" fill="#1E2B5C" text-anchor="middle" opacity="0">خلية حيوانية</text>
+          <!-- plant cell -->
+          <rect id="wall" x="560" y="110" width="200" height="270" rx="10" fill="none" stroke="#2E7D32" stroke-width="9" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+          <rect id="pmem" x="572" y="122" width="176" height="246" rx="6" fill="#E8F4F1" fill-opacity="0" stroke="#0B7F70" stroke-width="3" opacity="0"/>
+          <rect id="vac" x="610" y="165" width="105" height="150" rx="30" fill="#DCEBFA" opacity="0"/>
+          <g id="chl" opacity="0" fill="#43A047" stroke="#2E7D32" stroke-width="2"><ellipse cx="592" cy="150" rx="14" ry="8"/><ellipse cx="730" cy="160" rx="14" ry="8"/><ellipse cx="590" cy="250" rx="14" ry="8"/><ellipse cx="732" cy="300" rx="14" ry="8"/><ellipse cx="600" cy="345" rx="14" ry="8"/><ellipse cx="690" cy="348" rx="14" ry="8"/></g>
+          <circle id="pnuc" cx="595" cy="300" r="18" fill="#DDE3F5" stroke="#1E2B5C" stroke-width="3" opacity="0"/>
+          <g id="lWall" opacity="0"><text x="660" y="94" font-size="19" fill="#2E7D32" text-anchor="middle">جدار خلوي</text></g>
+          <g id="lChl" opacity="0"><text x="660" y="410" font-size="18" fill="#2E7D32" text-anchor="middle">بلاستيدات خضراء</text></g>
+          <text id="tPlant" x="660" y="440" font-size="22" fill="#1E2B5C" text-anchor="middle" opacity="0">خلية نباتية</text>
+          <ellipse id="hl" cx="320" cy="235" rx="78" ry="74" fill="none" stroke="#F2A93B" stroke-width="4" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+        </svg>
+      </div>
+      <div style="position:absolute;right:14px;left:14px;bottom:14px;height:70px;background:#1E2B5C;color:#fff;border-radius:16px;padding:0 20px;display:flex;gap:16px;align-items:center">
+        <div id="wave" style="display:flex;gap:4px;align-items:center;height:40px;width:70px;flex:none"></div>
+        <div id="cap" style="font-size:20px;line-height:1.5"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;height:56px">
+      <span class="tbtn" style="background:#0B7F70;color:#fff;border-color:#0B7F70;padding:12px 20px" id="pp">إيقاف مؤقت</span>
+      <span class="m" id="tm" dir="ltr" style="font-size:14px;width:44px;text-align:center">0:00</span>
+      <div style="flex:1;height:10px;border-radius:6px;background:#E3E8EF;overflow:hidden"><i id="prog" style="display:block;height:100%;width:0;background:#0B7F70"></i></div>
+      <span class="m" dir="ltr" style="font-size:14px;width:44px;text-align:center">0:36</span>
+      <span class="tbtn">السرعة 1x</span><span class="tbtn">النص: يظهر</span>
+    </div>
+  </div>
+  <div style="position:absolute;top:20px;left:20px;width:360px;height:680px;display:flex;flex-direction:column;gap:12px">
+    <div class="card" style="padding:14px 18px"><div style="font-size:18px;font-weight:700;margin-bottom:4px">الخطوات</div>
+      <div id="s1" class="stp"><b>1</b>الخلية والغشاء</div>
+      <div id="s2" class="stp"><b>2</b>السيتوبلازم</div>
+      <div id="s3" class="stp"><b>3</b>النواة</div>
+      <div id="s4" class="stp"><b>4</b>الميتوكوندريا</div>
+      <div id="s5" class="stp"><b>5</b>الخلية النباتية</div>
+      <div id="s6" class="stp"><b>6</b>الخلاصة</div>
+    </div>
+    <div class="card" style="flex:1;padding:14px 18px;display:flex;flex-direction:column;gap:10px;overflow:hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:18px">مساعد الطالب</b><span style="background:#1E2B5C;color:#fff;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700">شرح آلي</span></div>
+      <div class="bub" style="background:#1E2B5C;color:#fff;align-self:flex-start;max-width:94%">اشرح لي الخلية وأجزاءها</div>
+      <div id="a1" class="bub" style="background:#EEF1F6;align-self:flex-end;max-width:94%">أشرح لك على السبورة الآن، تابع الرسم والصوت.</div>
+      <div id="a2" class="bub" style="background:#EEF1F6;align-self:flex-end;max-width:94%;opacity:0">الخلاصة: الغشاء يحمي الخلية ويتحكم بما يدخل ويخرج، والنواة تتحكم بها، والميتوكوندريا تنتج الطاقة. والخلية النباتية تزيد عليها الجدار والبلاستيدات الخضراء.</div>
+      <div id="chips" style="display:flex;gap:8px;flex-wrap:wrap;opacity:0"><span class="chip" style="font-size:14px;padding:8px 14px">قارن بين الخليتين</span><span class="chip" style="font-size:14px;padding:8px 14px">سؤال للتدرب</span></div>
+    </div>
+  </div>
+</div>
+
+</div></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
+const P=(t,a,b)=>ease(clamp((t-a)/(b-a)));
+const Q="اشرح لي الخلية وأجزاءها";
+const CAPS=[
+ [7.0,11.4,"الخلية هي أصغر وحدة حية، ومنها يتكوّن جسم كل كائن حي."],
+ [11.8,16.0,"يحيط بها غشاء الخلية، ويتحكم بما يدخل إليها ويخرج منها."],
+ [16.4,20.4,"في داخلها السيتوبلازم، وهو سائل تسبح فيه أجزاء الخلية."],
+ [20.8,25.4,"وفي الوسط النواة، وهي مركز التحكم وتحمل المادة الوراثية."],
+ [25.8,30.0,"والميتوكوندريا تنتج الطاقة، لذلك تسمى محطة الطاقة."],
+ [30.4,35.6,"أما الخلية النباتية فلها جدار خلوي، وبلاستيدات خضراء تصنع الغذاء."],
+ [36.0,41.0,"إذن: الغشاء يحمي، والنواة تتحكم، والميتوكوندريا تعطي الطاقة."]
+];
+const END=43.5;
+const wave=$('wave'); const bars=[];
+for(let i=0;i<9;i++){const b=document.createElement('i');b.style.cssText='display:block;width:5px;border-radius:3px;background:#2BC4AE;height:6px';wave.appendChild(b);bars.push(b);}
+const draw=(id,p)=>{ $(id).style.strokeDashoffset=1-p; };
+const show=(id,p)=>{ $(id).setAttribute('opacity',p); };
+function render(t){
+  const v1=1-P(t,6.2,6.8); $('v1').style.opacity=v1; $('v1').style.display=v1<=0.001?'none':'block';
+  $('v2').style.opacity=P(t,6.4,7.0);
+  const n=Math.floor(Q.length*clamp((t-0.8)/3.0)); $('typed').textContent=Q.slice(0,n);
+  $('caret').style.opacity=(Math.floor(t*2)%2===0)?1:0;
+  const press=t>4.5&&t<5.0; $('go').style.transform=press?'scale(.97)':'scale(1)'; $('go').style.background=press?'#096659':'#0B7F70';
+  if(t>=5.0&&t<6.8){const d='.'.repeat(1+Math.floor((t-5.0)*3)%3);$('gotxt').textContent='جاري تجهيز الشرح'+d;} else $('gotxt').textContent='اشرح لي على السبورة';
+  // 1 cell + membrane
+  draw('mem',P(t,7.2,9.4)); show('tAnimal',P(t,9.4,10.2)); show('lMem',P(t,12.0,12.8));
+  draw('arIn',P(t,13.0,14.0)); show('tIn',P(t,13.6,14.2)); draw('arOut',P(t,14.2,15.2)); show('tOut',P(t,14.8,15.4));
+  // 2 cytoplasm
+  $('cyto').setAttribute('fill-opacity',P(t,16.6,17.8)); show('ribo',P(t,17.6,18.6)); show('lCyto',P(t,18.4,19.2));
+  // 3 nucleus
+  draw('nuc',P(t,21.0,22.4)); $('nuc').setAttribute('fill-opacity',P(t,22.2,23.0)); show('nucl',P(t,22.8,23.4)); draw('dna',P(t,23.2,24.2)); show('lNuc',P(t,24.0,24.8));
+  // 4 mito
+  draw('mito',P(t,26.0,27.4)); $('mito').setAttribute('fill-opacity',P(t,27.2,27.9)); draw('cris',P(t,27.6,28.6)); show('lMito',P(t,28.6,29.4));
+  // 5 plant
+  draw('wall',P(t,30.6,32.4)); show('lWall',P(t,32.0,32.8)); show('pmem',P(t,32.4,33.0)); $('pmem').setAttribute('fill-opacity',P(t,32.4,33.0));
+  show('vac',P(t,32.8,33.4)); show('pnuc',P(t,33.0,33.6)); show('chl',P(t,33.4,34.2)); show('lChl',P(t,34.0,34.8)); show('tPlant',P(t,34.6,35.4));
+  // 6 summary highlight
+  draw('hl',P(t,37.6,38.8));
+  // captions + wave
+  let cap='',speaking=0;
+  for(const [s,e,tx] of CAPS){ if(t>=s&&t<=e+0.8){ const w=tx.split(' '); const k=Math.ceil(w.length*clamp((t-s)/((e-s)*0.85))); cap=w.slice(0,k).join(' '); if(t<=e) speaking=1; } }
+  $('cap').textContent=cap;
+  const sp=(window.TTS_ON&&playing)?window.TTS_SPEAKING:speaking;
+  bars.forEach((b,i)=>{ const h=sp?(8+30*Math.abs(Math.sin(t*9+i*1.7))*(0.6+0.4*Math.abs(Math.sin(t*3.1+i)))):6; b.style.height=h+'px'; b.style.opacity=sp?1:.45;});
+  const S=(id,a,b)=>{const el=$(id); el.className='stp'+(t>=b?' dn':(t>=a?' on':''));};
+  S('s1',7.0,16.4);S('s2',16.4,20.8);S('s3',20.8,25.8);S('s4',25.8,30.4);S('s5',30.4,36.0);S('s6',36.0,41.6);
+  const pr=clamp((t-7.0)/(41.0-7.0)); $('prog').style.width=(pr*100)+'%';
+  const sec=Math.floor(clamp(t-7.0,0,36)); $('tm').textContent='0:'+String(sec).padStart(2,'0');
+  $('pp').textContent=t>=41.6?'إعادة الشرح':'إيقاف مؤقت';
+  $('a2').style.opacity=P(t,41.0,41.8); $('chips').style.opacity=P(t,41.8,42.6);
+  $('a1').style.display=t>=41.0?'none':'block';
+}
+const stage=$('stage'),holder=$('holder');
+function fit(){const k=holder.clientWidth/1280;stage.style.transform='scale('+k+')';holder.style.height=(720*k)+'px';}
+addEventListener('resize',fit);fit();
+const synth=window.speechSynthesis;let voices=[];const vs=$('voice'),vnote=$('vnote');
+function loadVoices(){if(!synth)return;voices=synth.getVoices().filter(v=>/^ar/i.test(v.lang));vs.innerHTML='';
+ if(!voices.length){vs.innerHTML='<option>لا يوجد صوت عربي</option>';vnote.innerHTML='<b>جهازك لا يحتوي على صوت عربي مثبَّت.</b> سنحاول النطق على أي حال، وإن لم تسمع شيئاً فأضف اللغة العربية لإعدادات النطق في جهازك (Windows: الإعدادات ← الوقت واللغة ← الكلام).';return;}
+ voices.forEach((v,i)=>{const o=document.createElement('option');o.value=i;o.textContent=v.name+' ('+v.lang+')';vs.appendChild(o);});
+ vnote.textContent='اضغط «شغّل الشرح» وارفع صوت جهازك. الصوت يأتي من محرك النطق في جهازك نفسه.';}
+if(synth){loadVoices();synth.onvoiceschanged=loadVoices;}else{vs.innerHTML='<option>المتصفح لا يدعم النطق</option>';}
+window.TTS_ON=!!synth;window.TTS_SPEAKING=false;
+let t=0,playing=false,last=0,spoken=new Set(),hold=0,raf=0;
+function say(txt){if(!synth)return;const u=new SpeechSynthesisUtterance(txt);u.lang='ar-SA';const v=voices[+vs.value];if(v){u.voice=v;u.lang=v.lang;}u.rate=0.95;
+ window.TTS_SPEAKING=true;hold=performance.now();u.onend=u.onerror=()=>{window.TTS_SPEAKING=false;};synth.speak(u);}
+function tick(now){if(!playing)return;const dt=Math.min(0.1,(now-last)/1000);last=now;
+ CAPS.forEach(([s,e,tx],i)=>{if(t>=s&&!spoken.has(i)){spoken.add(i);say(tx);}});
+ const cur=CAPS.find(([s,e])=>t>=s&&t<e+0.2);const waiting=window.TTS_SPEAKING&&cur&&t>=cur[1]&&(now-hold)<15000;
+ if(!waiting)t+=dt; render(Math.min(t,END));
+ if(t>=END){playing=false;btn.textContent='↺ أعد الشرح';return;} raf=requestAnimationFrame(tick);}
+const btn=$('play');
+btn.addEventListener('click',()=>{if(synth){synth.cancel();const w=new SpeechSynthesisUtterance(' ');w.volume=0;synth.speak(w);}
+ if(playing){playing=false;cancelAnimationFrame(raf);if(synth)synth.cancel();window.TTS_SPEAKING=false;btn.textContent='▶ تابع';return;}
+ if(t>=END){t=0;spoken.clear();} playing=true;btn.textContent='⏸ إيقاف';last=performance.now();raf=requestAnimationFrame(tick);});
+render(34.8);
+</script>

@@ -1,0 +1,270 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>حاضر promo</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1080px;height:1350px;overflow:hidden;background:#0D1430}
+body{font-family:"Noto Sans Arabic","DejaVu Sans",sans-serif;color:#fff}
+#stage{position:relative;width:1080px;height:1350px;overflow:hidden;background:radial-gradient(120% 90% at 80% 0%,#2E408A 0%,#1E2B5C 45%,#0D1430 100%)}
+.grid{position:absolute;inset:-100px;background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);background-size:60px 60px}
+.blob{position:absolute;border-radius:50%;filter:blur(80px);opacity:.55}
+.scene{position:absolute;inset:0;display:none}
+.center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.chap{position:absolute;top:84px;right:80px;display:flex;gap:16px;align-items:center;font-weight:700;font-size:30px;color:#9FB2E8}
+.chap .n{width:58px;height:58px;border-radius:16px;background:#34C3AE;color:#0D1430;display:flex;align-items:center;justify-content:center;font-size:30px;font-family:"DejaVu Sans"}
+.h{position:absolute;top:170px;right:80px;left:80px;font-size:74px;font-weight:800;line-height:1.25}
+.h em{font-style:normal;color:#34C3AE}
+.h b{color:#F2A93B}
+.sub{position:absolute;top:360px;right:80px;left:80px;font-size:36px;line-height:1.6;color:#C9D6F0}
+.cap{position:absolute;bottom:70px;right:80px;left:80px;display:flex;gap:14px;flex-wrap:wrap;justify-content:flex-start}
+.tag{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:12px 26px;font-size:30px;font-weight:700;backdrop-filter:blur(6px)}
+.tag.t{background:#34C3AE;color:#0D1430;border-color:#34C3AE}
+.phone{position:absolute;width:420px;height:820px;border-radius:64px;background:#0B1028;border:14px solid #222B52;box-shadow:0 40px 90px rgba(0,0,0,.5),inset 0 0 0 2px rgba(255,255,255,.06);overflow:hidden}
+.phone .scr{position:absolute;inset:0;background:#F5F7FA;color:#1E2B5C;padding:70px 26px 26px;display:flex;flex-direction:column;gap:16px}
+.phone .notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:120px;height:32px;border-radius:20px;background:#0B1028;z-index:3}
+.card{background:#fff;border-radius:22px;padding:20px;box-shadow:0 4px 16px rgba(30,43,92,.08);color:#1E2B5C}
+.pill{display:inline-block;border-radius:999px;padding:4px 16px;font-size:22px;font-weight:700}
+.p-ok{background:#0B7F70;color:#fff}.p-late{background:#F2A93B;color:#1E2B5C}.p-ab{background:#C8453F;color:#fff}
+.notif{position:absolute;right:26px;left:26px;top:60px;background:rgba(255,255,255,.97);color:#1E2B5C;border-radius:24px;padding:18px 20px;display:flex;gap:14px;align-items:center;box-shadow:0 18px 40px rgba(0,0,0,.25);z-index:4}
+.notif .ic{width:54px;height:54px;border-radius:14px;background:#1E2B5C;display:flex;align-items:center;justify-content:center;flex:none}
+.big3d{position:absolute;border-radius:36px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(8px)}
+.num{font-family:"DejaVu Sans";font-weight:700}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:50}
+.prog{position:absolute;bottom:0;right:0;height:8px;background:linear-gradient(90deg,#F2A93B,#34C3AE);z-index:40}
+</style></head><body>
+<div id="stage">
+  <div class="grid" id="grid"></div>
+  <div class="blob" id="b1" style="width:520px;height:520px;background:#0B7F70;top:-120px;left:-120px"></div>
+  <div class="blob" id="b2" style="width:600px;height:600px;background:#3A4FA8;bottom:-200px;right:-180px"></div>
+  <div class="blob" id="b3" style="width:300px;height:300px;background:#F2A93B;top:520px;left:640px;opacity:.18"></div>
+  <div id="scenes"></div>
+  <div class="flash" id="flash"></div>
+  <div class="prog" id="prog"></div>
+</div>
+<script>
+const WM = (h, c1 = '#FFFFFF', c2 = '#34C3AE', id = '') => `<svg ${id ? `id="${id}"` : ''} height="${h}" viewBox="44 4 242 140" style="overflow:visible"><g fill="none" stroke-width="19" stroke-linecap="round" stroke-linejoin="round"><g stroke="${c1}"><path class="wp" d="M198 100 V16"/><path class="wp" d="M118 100 V88 Q118 64 141 64 Q164 64 164 88 V100 H78 Q62 100 60 116 L57 132"/><path class="wp" d="M98 100 V86"/></g><g stroke="${c2}"><path class="wp" d="M226 62 H272 L240 100 H198"/></g></g><rect class="wd" x="131.5" y="26.5" width="19" height="19" rx="2.3" transform="rotate(45 141 36)" fill="#F2A93B"/></svg>`;
+const I = {
+  finger: '<path d="M12 11c0 3-1 6-3 8M8 6.5A6 6 0 0 1 18 11c0 2-.3 4-1 6M5 9a8 8 0 0 1 2-4M15.5 21c.5-1.5 1-3.5 1-6M12 7a4 4 0 0 0-4 4c0 1.5-.3 3-1 4.5" />',
+  bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/>',
+  book: '<path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M4 21.5A2.5 2.5 0 0 1 6.5 19H20v3H6.5"/>',
+  pdf: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+  play: '<path d="M7 5v14l11-7z"/>',
+  grade: '<path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="M6 10.5V16c0 1.5 2.7 3 6 3s6-1.5 6-3v-5.5"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  up: '<path d="M12 19V6M6 12l6-6 6 6"/><path d="M5 21h14"/>',
+  chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>',
+  chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
+  users: '<circle cx="8" cy="6" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 21v-2a5 5 0 0 1 10 0v2M13 21v-1.5a4 4 0 0 1 8 0V21"/>',
+  child: '<circle cx="12" cy="7" r="4"/><path d="M5 21v-1a7 7 0 0 1 14 0v1"/>',
+  check: '<path d="m5 12 5 5L20 7"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+  paper: '<path d="M6 2h9l4 4v16H6z"/><path d="M9 9h7M9 13h7M9 17h4"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+};
+const ic = (n, s = 40, c = 'currentColor', w = 2) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${I[n]}</svg>`;
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const p = (t, a, b) => clamp((t - a) / (b - a));
+const eo = x => 1 - Math.pow(1 - x, 3);                       // ease out
+const eio = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const back = x => { const c = 1.7; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2); };
+const lerp = (a, b, x) => a + (b - a) * x;
+const $ = (s, r = document) => r.querySelector(s); const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+function set(el, o) { if (!el) return; if (o.o !== undefined) el.style.opacity = o.o; const tr = []; if (o.x !== undefined || o.y !== undefined) tr.push(`translate(${o.x || 0}px,${o.y || 0}px)`); if (o.s !== undefined) tr.push(`scale(${o.s})`); if (o.r !== undefined) tr.push(`rotate(${o.r}deg)`); el.style.transform = tr.join(' '); if (o.f !== undefined) el.style.filter = `blur(${o.f}px)`; if (o.cp !== undefined) el.style.clipPath = o.cp; }
+// rise-in for text lines: words come up with a blur
+function rise(el, t, t0, dur = .7, dy = 50) { const k = eo(p(t, t0, t0 + dur)); set(el, { o: k, y: (1 - k) * dy, f: (1 - k) * 10 }); }
+function words(el) { if (el.dataset.w) return; el.dataset.w = 1; el.innerHTML = el.innerHTML.split(/(\s+|<[^>]+>)/).map(w => /^\s+$|^<|^$/.test(w) ? w : `<span class="w" style="display:inline-block">${w}</span>`).join(''); }
+function riseWords(el, t, t0, gap = .07, dur = .55) { words(el); $$('.w', el).forEach((w, i) => { const k = eo(p(t, t0 + i * gap, t0 + i * gap + dur)); set(w, { o: k, y: (1 - k) * 40, f: (1 - k) * 8 }); }); }
+
+const S = []; const add = (start, end, html, fn, enter = 'wipe') => { const el = document.createElement('div'); el.className = 'scene'; el.innerHTML = html; $('#scenes').append(el); S.push({ start, end, el, fn, enter }); };
+const chapter = (n, label, h, sub) => `<div class="chap"><span class="n">${n}</span>${label}</div><div class="h">${h}</div>${sub ? `<div class="sub">${sub}</div>` : ''}`;
+function chapterAnim(el, t) { rise($('.chap', el), t, .15); riseWords($('.h', el), t, .3); if ($('.sub', el)) rise($('.sub', el), t, .9, .8, 30); }
+const phone = (inner, extra = '') => `<div class="phone" ${extra}><div class="notch"></div><div class="scr">${inner}</div></div>`;
+
+/* ===== 1 · intro 0–7 ===== */
+add(0, 7, `<div class="center"><div id="logo1" style="transform:scale(1)">${WM(300, '#FFFFFF', '#34C3AE')}</div><div id="tg1" style="margin-top:50px;font-size:54px;font-weight:700;color:#C9D6F0">مدرستك بجيبك</div><div id="tg1b" style="margin-top:18px;font-size:34px;color:#7F93CC">منصة الحضور والتعليم الذكية</div></div>
+  <div id="ring1" style="position:absolute;left:50%;top:44%;width:900px;height:900px;margin:-450px;border-radius:50%;border:3px solid rgba(52,195,174,.35)"></div>`, (el, t) => {
+  const paths = $$('.wp', el); paths.forEach((pa, i) => { const L = pa.getTotalLength(); pa.style.strokeDasharray = L; pa.style.strokeDashoffset = L * (1 - eio(p(t, .3 + i * .25, 1.4 + i * .25))); });
+  const d = $('.wd', el); const kd = back(p(t, 1.9, 2.4)); d.style.transformOrigin = '141px 36px'; d.setAttribute('transform', `rotate(45 141 36) translate(0 0)`); d.style.opacity = p(t, 1.9, 2.0); d.style.transform = `scale(${kd})`;
+  set($('#logo1', el), { s: lerp(1.15, 1, eo(p(t, 0, 3))) });
+  riseWords($('#tg1', el), t, 2.5, .12); rise($('#tg1b', el), t, 3.3);
+  const kr = eo(p(t, 2.0, 3.2)); set($('#ring1', el), { s: .3 + kr * .9, o: (1 - p(t, 2.6, 4)) * kr });
+}, 'none');
+
+/* ===== 2 · problem 7–15 ===== */
+add(7, 15, `<div class="h" style="top:160px">كل يوم بالمدرسة<br><b>نفس المعاناة؟</b></div>
+  <div id="probs" style="position:absolute;top:470px;right:80px;left:80px;display:flex;flex-direction:column;gap:26px">
+   ${[['paper', 'دفاتر حضور ورقية وتأخير بالتسجيل'], ['phone', 'اتصالات لا تنتهي ويه أولياء الأمور'], ['x', 'واجبات وملازم تضيع بالكروبات'], ['grade', 'درجات بدون سجل ولا رقابة']].map(([i, t2]) => `<div class="prob big3d" style="position:relative;display:flex;gap:24px;align-items:center;padding:28px 34px"><span style="width:76px;height:76px;border-radius:20px;background:rgba(200,69,63,.2);display:flex;align-items:center;justify-content:center;color:#FF8A80">${ic(i, 42)}</span><span style="font-size:38px;font-weight:700">${t2}</span><span class="strike" style="position:absolute;right:30px;left:30px;top:50%;height:5px;background:#C8453F;border-radius:4px;transform-origin:right;transform:scaleX(0)"></span></div>`).join('')}
+  </div>`, (el, t) => {
+  riseWords($('.h', el), t, .2, .1);
+  $$('.prob', el).forEach((pr, i) => { const k = back(p(t, 1.2 + i * .45, 1.9 + i * .45)); set(pr, { o: p(t, 1.2 + i * .45, 1.6 + i * .45), x: (1 - k) * -300 }); const st = $('.strike', pr); st.style.transform = `scaleX(${eo(p(t, 4.6 + i * .25, 5.1 + i * .25))})`; pr.style.opacity = Math.min(+pr.style.opacity, 1 - .5 * p(t, 4.8 + i * .25, 5.3 + i * .25)); });
+});
+
+/* ===== 3 · solution 15–23 ===== */
+const ROLES = [['الإدارة', 'users', '#F2A93B'], ['المدرس', 'book', '#34C3AE'], ['ولي الأمر', 'child', '#9FB2E8'], ['الطالب', 'grade', '#FF8A80']];
+add(15, 23, `<div class="center" style="padding-top:90px"><div id="core" style="width:300px;height:300px;border-radius:80px;background:linear-gradient(145deg,#2E408A,#111936);border:4px solid #F2A93B;display:flex;align-items:center;justify-content:center;box-shadow:0 0 120px rgba(52,195,174,.45)">${WM(120)}</div></div>
+  ${ROLES.map(([n, i, c], k) => `<div class="role" style="position:absolute;left:540px;top:720px;width:230px;margin-left:-115px;margin-top:-90px;text-align:center"><div style="width:130px;height:130px;margin:0 auto;border-radius:40px;background:rgba(255,255,255,.08);border:2px solid ${c};display:flex;align-items:center;justify-content:center;color:${c}">${ic(i, 64)}</div><div style="margin-top:14px;font-size:36px;font-weight:700">${n}</div></div>`).join('')}
+  <svg id="links" width="1080" height="1350" style="position:absolute;inset:0"></svg>
+  <div class="h" style="top:110px;text-align:center"><em>حاضر</em> يربط الكل<br>بمنصة وحدة</div>
+  <div class="sub" style="top:auto;bottom:110px;text-align:center">حضور · واجبات · درجات · جدول · رسائل · تقارير</div>`, (el, t) => {
+  riseWords($('.h', el), t, .2, .1); rise($('.sub', el), t, 3.2);
+  set($('#core', el), { s: back(p(t, .5, 1.3)), r: (1 - eo(p(t, .5, 1.5))) * -20 });
+  const pos = [[0, -300], [330, 0], [0, 300], [-330, 0]]; let svg = '';
+  $$('.role', el).forEach((r, k) => { const kk = back(p(t, 1.4 + k * .3, 2.1 + k * .3)); const ang = (1 - eo(p(t, 1.4, 4))) * 0.8 + Math.sin(t * .8 + k) * .02; const [dx, dy] = pos[k]; const x = dx * Math.cos(ang) - dy * Math.sin(ang), y = dx * Math.sin(ang) + dy * Math.cos(ang); set(r, { o: p(t, 1.4 + k * .3, 1.8 + k * .3), x: x * kk, y: y * kk - 0, s: kk });
+    const lk = p(t, 2.6 + k * .2, 3.3 + k * .2); svg += `<line x1="540" y1="720" x2="${540 + x * kk * lk}" y2="${720 + y * kk * lk}" stroke="rgba(52,195,174,.5)" stroke-width="3" stroke-dasharray="8 10"/>`; });
+  $('#links', el).innerHTML = svg;
+});
+
+/* ===== 4 · fingerprint 23–35 ===== */
+add(23, 35, chapter(1, 'البصمة والحضور', 'بصمة وحدة…<br>و<em>الحضور يتسجّل لحظياً</em>', 'أجهزة البصمة (وجه، إصبع، بطاقة) ترسل كل بصمة للمنصة عبر الإنترنت مباشرة.') + `
+  <div id="dev" style="position:absolute;right:120px;top:640px;width:330px;height:470px;border-radius:44px;background:linear-gradient(160deg,#2B3666,#141B3D);border:3px solid rgba(255,255,255,.15);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px">
+    <div id="fp" style="width:190px;height:190px;border-radius:50%;background:rgba(52,195,174,.12);display:flex;align-items:center;justify-content:center;color:#34C3AE;position:relative">${ic('finger', 120, '#34C3AE', 1.5)}<span id="scan" style="position:absolute;left:20px;right:20px;height:6px;border-radius:4px;background:#34C3AE;box-shadow:0 0 20px #34C3AE;top:20px"></span></div>
+    <div id="ok" style="font-size:32px;font-weight:700;color:#34C3AE">✓ تم · 7:42</div></div>
+  <div id="beam" style="position:absolute;right:450px;top:870px;height:6px;width:0;background:linear-gradient(270deg,#34C3AE,transparent);border-radius:4px"></div>
+  ${phone(`<div style="font-weight:800;font-size:30px">لوحة اليوم</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="card"><div style="font-size:20px;color:#5B6478">حاضر</div><div class="num" id="cnt" style="font-size:52px;color:#0B7F70">0</div></div><div class="card"><div style="font-size:20px;color:#5B6478">متأخر</div><div class="num" style="font-size:52px;color:#B9770E">4</div></div></div>
+    <div class="card" style="display:flex;flex-direction:column;gap:12px" id="feed">${[['أحمد علي', '7:42', 'p-ok', 'حاضر'], ['زينب حسن', '7:44', 'p-ok', 'حاضر'], ['مريم ناصر', '7:58', 'p-late', 'متأخر'], ['حيدر جواد', '7:46', 'p-ok', 'حاضر']].map(([n, tm, cl, l]) => `<div class="fr" style="display:flex;align-items:center;gap:10px"><span style="width:44px;height:44px;border-radius:50%;background:#1E2B5C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">${n[0]}</span><b style="flex:1;font-size:21px;white-space:nowrap">${n}</b><span class="num" style="font-size:20px">${tm}</span><span class="pill ${cl}">${l}</span></div>`).join('')}</div>`, 'id="ph4" style="left:90px;top:520px"')}`, (el, t) => {
+  chapterAnim(el, t);
+  set($('#dev', el), { o: p(t, .8, 1.3), x: (1 - eo(p(t, .8, 1.5))) * 200 });
+  set($('#ph4', el), { o: p(t, 1.2, 1.7), y: (1 - eo(p(t, 1.2, 2))) * 300 });
+  const sc = $('#scan', el); const sp = p(t, 2.3, 3.6); sc.style.top = (20 + Math.abs(Math.sin(sp * Math.PI * 2)) * 150) + 'px'; sc.style.opacity = sp > 0 && sp < 1 ? 1 : 0;
+  set($('#ok', el), { o: p(t, 3.7, 4), s: back(p(t, 3.7, 4.2)) });
+  $('#fp', el).style.boxShadow = `0 0 ${p(t, 3.7, 4) * 80 * (1 - p(t, 4.5, 6))}px #34C3AE`;
+  $('#beam', el).style.width = (eo(p(t, 4, 4.8)) * 160) + 'px'; $('#beam', el).style.opacity = 1 - p(t, 5, 5.6);
+  $('#cnt', el).textContent = Math.round(lerp(78, 93, eo(p(t, 4.6, 8))));
+  $$('.fr', el).forEach((r, i) => set(r, { o: p(t, 4.6 + i * .5, 5 + i * .5), x: (1 - eo(p(t, 4.6 + i * .5, 5.2 + i * .5))) * 80 }));
+  set($('#ph4', el).querySelector('.scr'), {});
+});
+
+/* ===== 5 · absence alert 35–43 ===== */
+add(35, 43, chapter(2, 'إشعارات أولياء الأمور', 'ولي الأمر <em>يعرف أول بأول</em>', 'وصل، تأخر، انصرف، أو غاب: إشعار فوري، ويبرر الغياب من تليفونه.') + phone(`
+  <div class="notif n1"><div class="ic">${ic('check', 30, '#34C3AE', 3)}</div><div><b style="font-size:24px">أحمد وصل المدرسة</b><div style="font-size:20px;color:#5B6478">7:42 · البوابة الرئيسية</div></div></div>
+  <div class="notif n2" style="top:200px"><div class="ic" style="background:#C8453F">${ic('bell', 30, '#fff')}</div><div><b style="font-size:24px">زينب ما وصلت لحد 8:30</b><div style="font-size:20px;color:#5B6478">اضغط لتبرير الغياب</div></div></div>
+  <div class="card n3" style="margin-top:330px;display:flex;flex-direction:column;gap:12px"><b style="font-size:26px">تبرير غياب زينب</b><div style="display:flex;gap:8px;flex-wrap:wrap">${['مريضة', 'ظرف عائلي', 'سفر'].map((x, i) => `<span class="pill" style="background:${i === 0 ? '#1E2B5C' : '#EEF1F6'};color:${i === 0 ? '#fff' : '#1E2B5C'}">${x}</span>`).join('')}</div><span class="pill p-ok" style="align-self:flex-start">✓ وصل لمربي الشعبة</span></div>`, 'id="ph5" style="left:330px;top:500px;background:#0B1028"'), (el, t) => {
+  chapterAnim(el, t);
+  set($('#ph5', el), { o: p(t, .8, 1.2), s: lerp(.85, 1, eo(p(t, .8, 1.6))) });
+  ['.n1', '.n2'].forEach((s, i) => set($(s, el), { o: p(t, 1.8 + i * 1.4, 2.1 + i * 1.4), y: (1 - back(p(t, 1.8 + i * 1.4, 2.4 + i * 1.4))) * -160 }));
+  set($('.n3', el), { o: p(t, 4.6, 5), y: (1 - eo(p(t, 4.6, 5.3))) * 120 });
+});
+
+/* ===== 6 · posts & files 43–54 ===== */
+add(43, 54, chapter(3, 'الواجبات والملازم والفيديو', 'كل الدروس <em>بمكان واحد</em>', 'المدرس ينشر واجب أو ملزمة PDF أو فيديو من جهازه، ويوصل للطالب وولي الأمر بإشعار.') + `
+  <div id="types" style="position:absolute;top:560px;right:80px;left:80px;display:grid;grid-template-columns:repeat(4,1fr);gap:22px">${[['واجب', 'book', '#F2A93B'], ['تبليغ', 'bell', '#9FB2E8'], ['ملزمة', 'pdf', '#FF6B60'], ['فيديو', 'play', '#34C3AE']].map(([n, i, c]) => `<div class="ty big3d" style="position:relative;padding:30px 10px;text-align:center"><div style="width:96px;height:96px;margin:0 auto;border-radius:28px;background:${c};color:#0D1430;display:flex;align-items:center;justify-content:center">${ic(i, 52, '#0D1430')}</div><div style="margin-top:16px;font-size:32px;font-weight:700">${n}</div></div>`).join('')}</div>
+  <div id="pdfv" style="position:absolute;top:840px;right:140px;width:520px;height:420px;border-radius:26px;background:#fff;color:#1E2B5C;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.4)"><div style="background:#1E2B5C;color:#fff;padding:18px 24px;font-size:28px;font-weight:700;display:flex;justify-content:space-between"><span>ملزمة الفصل الثاني</span><span style="color:#F2A93B">PDF</span></div><div style="padding:24px;display:flex;flex-direction:column;gap:14px">${[90, 70, 84, 60, 76, 50].map(w => `<div class="ln" style="height:16px;border-radius:8px;background:#E3E8EF;width:${w}%"></div>`).join('')}</div></div>
+  <div id="vid" style="position:absolute;top:900px;left:110px;width:380px;height:300px;border-radius:26px;background:linear-gradient(135deg,#0B7F70,#1E2B5C);display:flex;align-items:center;justify-content:center;box-shadow:0 30px 70px rgba(0,0,0,.4)"><div style="width:110px;height:110px;border-radius:50%;background:rgba(255,255,255,.95);display:flex;align-items:center;justify-content:center">${ic('play', 54, '#0B7F70')}</div><div style="position:absolute;bottom:22px;right:24px;left:24px;height:8px;border-radius:4px;background:rgba(255,255,255,.3)"><div id="vbar" style="height:100%;width:0;border-radius:4px;background:#F2A93B"></div></div></div>`, (el, t) => {
+  chapterAnim(el, t);
+  $$('.ty', el).forEach((x, i) => set(x, { o: p(t, 1.2 + i * .2, 1.5 + i * .2), y: (1 - back(p(t, 1.2 + i * .2, 1.9 + i * .2))) * 120 }));
+  set($('#pdfv', el), { o: p(t, 3, 3.4), r: lerp(8, -2, eo(p(t, 3, 4))), y: (1 - eo(p(t, 3, 4))) * 200 });
+  $$('.ln', el).forEach((l, i) => l.style.transform = `scaleX(${eo(p(t, 3.6 + i * .15, 4.1 + i * .15))})`); $$('.ln', el).forEach(l => l.style.transformOrigin = 'right');
+  set($('#vid', el), { o: p(t, 4.2, 4.6), r: lerp(-8, 3, eo(p(t, 4.2, 5.2))), y: (1 - eo(p(t, 4.2, 5.2))) * 200 });
+  $('#vbar', el).style.width = (p(t, 5.5, 10) * 100) + '%';
+});
+
+/* ===== 7 · marks 54–64 ===== */
+add(54, 64, chapter(4, 'الدرجات', 'درجات <em>واضحة</em><br>و<b>ضد التزوير</b>', 'كل تعديل يحتاج سبب، وينسجل باسم ويوزر اللي عدّل، وولي الأمر يوصله إشعار.') + `
+  <div id="sheet" class="card" style="position:absolute;top:620px;right:80px;left:80px;padding:28px;font-size:30px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:16px"><b>الرياضيات · امتحان الشهر</b><span style="color:#5B6478" class="num">/100</span></div>
+    ${[['أحمد علي', 86], ['زينب حسن', 92], ['مريم ناصر', 64], ['حيدر جواد', 78]].map(([n, v], i) => `<div class="mr" style="display:flex;align-items:center;gap:14px;padding:12px 0;border-top:1px solid #E3E8EF"><b style="flex:1">${n}</b><div style="width:300px;height:14px;border-radius:7px;background:#EEF1F6;overflow:hidden"><div class="mb" data-v="${v}" style="height:100%;width:0;background:${v >= 80 ? '#0B7F70' : '#F2A93B'}"></div></div><span class="num mv" style="width:70px;text-align:left">0</span></div>`).join('')}
+  </div>
+  <div id="hist" style="position:absolute;top:1100px;right:80px;left:80px;background:#FDF1DA;color:#8A5A0B;border-radius:24px;padding:22px 28px;font-size:28px;display:flex;gap:16px;align-items:center">${ic('lock', 44, '#8A5A0B')}<div><b>معدّلة: 64 ← 68</b><div style="font-size:24px">السبب: خطأ بالجمع · أ. حيدر جاسم (t1001) · 10:14</div></div></div>`, (el, t) => {
+  chapterAnim(el, t);
+  set($('#sheet', el), { o: p(t, 1, 1.4), y: (1 - eo(p(t, 1, 1.8))) * 150 });
+  $$('.mr', el).forEach((r, i) => { const k = eo(p(t, 1.6 + i * .3, 2.6 + i * .3)); const v = +$('.mb', r).dataset.v; const vv = i === 2 && t > 5.2 ? lerp(64, 68, eo(p(t, 5.2, 5.8))) : v; $('.mb', r).style.width = (vv * k) + '%'; $('.mv', r).textContent = Math.round(vv * k); });
+  set($('#hist', el), { o: p(t, 5.2, 5.5), x: (1 - back(p(t, 5.2, 5.9))) * -400 });
+});
+
+/* ===== 8 · timetable 64–72 ===== */
+const SUBJ = ['رياضيات', 'عربي', 'علوم', 'إنكليزي', 'إسلامية', 'اجتماعيات'];
+add(64, 72, chapter(5, 'الجدول الأسبوعي', 'تعدّل <em>براحتك</em>…<br>وتنشره بضغطة', 'مسودة عند المدرس والإدارة، ومقارنة بين المنشور والجديد، وبعدها «نشر» للطلاب.') + `
+  <div id="tt" style="position:absolute;top:640px;right:80px;left:80px;display:grid;grid-template-columns:110px repeat(5,1fr);gap:10px;font-size:24px">
+   ${['', 'الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة'].map(h => `<div style="text-align:center;color:#9FB2E8;font-weight:700">${h}</div>`).join('')}
+   ${['أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس'].map((d, r) => `<div style="color:#9FB2E8;font-weight:700;display:flex;align-items:center">${d}</div>` + [0, 1, 2, 3, 4].map(c => `<div class="tc" data-k="${r}-${c}" style="height:88px;border-radius:16px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-weight:700">${SUBJ[(r * 2 + c) % 6]}</div>`).join('')).join('')}
+  </div>
+  <div id="pubbtn" style="position:absolute;bottom:90px;left:80px;background:#34C3AE;color:#0D1430;border-radius:20px;padding:22px 36px;font-size:32px;font-weight:800">نشر للطلاب ✓</div>`, (el, t) => {
+  chapterAnim(el, t);
+  $$('.tc', el).forEach((c, i) => set(c, { o: p(t, 1 + i * .03, 1.3 + i * .03), s: lerp(.6, 1, back(p(t, 1 + i * .03, 1.5 + i * .03))) }));
+  const ch = $('[data-k="1-2"]', el); const on = t > 3.8; ch.textContent = on ? 'حاسوب' : 'علوم'; ch.style.background = on ? 'rgba(242,169,59,.3)' : ''; ch.style.borderColor = on ? '#F2A93B' : ''; set(ch, { o: 1, s: on ? lerp(1.25, 1, eo(p(t, 3.8, 4.3))) : 1 });
+  set($('#pubbtn', el), { o: p(t, 4.8, 5.1), s: back(p(t, 4.8, 5.4)) * (t > 6 && t < 6.3 ? .92 : 1) });
+  if (t > 6.2) $$('.tc', el).forEach(c => c.style.borderColor = 'rgba(52,195,174,' + (.7 * (1 - p(t, 6.2, 7.5))) + ')');
+});
+
+/* ===== 9 · promotion 72–82 ===== */
+add(72, 82, chapter(6, 'ترحيل الطلبة', 'النتائج تنحسب<br><em>والترحيل تلقائي</em>', 'من الدرجات مباشرة: ناجح يترحّل للصف الجاي، ومكمل للدور الثاني، وإشعار لكل ولي أمر.') + `
+  <div id="stairs" style="position:absolute;top:660px;right:80px;left:80px;height:560px">
+   ${['الأول', 'الثاني', 'الثالث', 'الرابع'].map((g, i) => `<div class="st" style="position:absolute;bottom:0;right:${i * 230}px;width:220px;height:${150 + i * 110}px;border-radius:24px 24px 0 0;background:linear-gradient(180deg,rgba(52,195,174,${.25 + i * .12}),rgba(52,195,174,.05));border:2px solid rgba(52,195,174,.4);display:flex;align-items:flex-end;justify-content:center;padding-bottom:20px;font-size:30px;font-weight:700">${g}</div>`).join('')}
+   <div id="stu" style="position:absolute;width:110px;height:110px;border-radius:50%;background:#F2A93B;color:#0D1430;display:flex;align-items:center;justify-content:center;font-size:48px;font-weight:800;box-shadow:0 10px 30px rgba(242,169,59,.5)">أ</div>
+   <div id="badge" style="position:absolute;top:40px;right:0;background:#fff;color:#0B7F70;border-radius:20px;padding:16px 24px;font-size:28px;font-weight:800">ناجح 7/7 ✓</div>
+  </div>`, (el, t) => {
+  chapterAnim(el, t);
+  $$('.st', el).forEach((s, i) => set(s, { o: p(t, 1 + i * .2, 1.3 + i * .2), y: (1 - eo(p(t, 1 + i * .2, 1.8 + i * .2))) * 200 }));
+  const step = Math.min(3, Math.floor(p(t, 2.6, 7) * 3.999)); const sp = (p(t, 2.6, 7) * 3.999) % 1; const from = step, to = Math.min(3, step + 1);
+  const pos = i => [800 - i * 230 + 55, 560 - (150 + i * 110) - 120]; const [x0, y0] = pos(from), [x1, y1] = pos(to);
+  const k = t < 2.6 ? 0 : step >= 3 ? 1 : eio(clamp(sp * 1.4)); const x = lerp(x0, x1, k), y = lerp(y0, y1, k) - Math.sin(k * Math.PI) * 90;
+  const su = $('#stu', el); su.style.left = (x - 55) + 'px'; su.style.top = y + 'px'; su.style.opacity = p(t, 1.8, 2.2);
+  set($('#badge', el), { o: p(t, 2.3, 2.6), s: back(p(t, 2.3, 2.8)) });
+});
+
+/* ===== 10 · assistant 82–92 ===== */
+add(82, 92, chapter(7, 'اسأل المدرسة', 'مساعد <em>يجاوب</em><br>أولياء الأمور', 'من بيانات المنصة: حضور، واجبات، درجات، دوام. والشي المهم يتحوّل للإدارة.') + phone(`
+  <div style="font-weight:800;font-size:28px">اسأل المدرسة</div>
+  ${[['u', 'ابني وصل للمدرسة؟'], ['b', 'إي، أحمد وصل 7:42 ✓<br>هالشهر: حضور 19، غياب 1.'], ['u', 'باچر دوام؟'], ['b', 'باچر دوام عادي من 7:45 لحد 1:30.']].map(([w, m]) => `<div class="msg" style="align-self:${w === 'u' ? 'flex-start' : 'flex-end'};max-width:86%;background:${w === 'u' ? '#1E2B5C' : '#fff'};color:${w === 'u' ? '#fff' : '#1E2B5C'};border-radius:22px;padding:14px 18px;font-size:23px;line-height:1.5;box-shadow:0 2px 8px rgba(30,43,92,.08)">${m}</div>`).join('')}
+  <div class="typ" style="align-self:flex-end;background:#fff;border-radius:20px;padding:14px 20px;display:flex;gap:7px">${[0, 1, 2].map(() => '<i style="width:10px;height:10px;border-radius:50%;background:#5B6478;display:block"></i>').join('')}</div>`, 'id="ph10" style="left:330px;top:500px"'), (el, t) => {
+  chapterAnim(el, t);
+  set($('#ph10', el), { o: p(t, .8, 1.2), y: (1 - eo(p(t, .8, 1.6))) * 200 });
+  const at = [1.6, 2.6, 4.4, 5.4]; $$('.msg', el).forEach((m, i) => { m.style.display = t > at[i] ? '' : 'none'; set(m, { o: p(t, at[i], at[i] + .3), s: lerp(.8, 1, back(p(t, at[i], at[i] + .4))) }); });
+  const ty = $('.typ', el); const show = (t > 1.9 && t < 2.6) || (t > 4.7 && t < 5.4); ty.style.display = show ? 'flex' : 'none'; $$('i', ty).forEach((d, i) => d.style.opacity = .3 + .7 * Math.abs(Math.sin(t * 6 + i)));
+});
+
+/* ===== 11 · dashboard 92–102 ===== */
+add(92, 102, chapter(8, 'لوحة الإدارة والتقارير', 'المدرسة كلها<br><em>بنظرة وحدة</em>', 'عدادات مباشرة، اتجاه الحضور، الأكثر غياباً، وتقرير اليوم PDF جاهز للطباعة.') + `
+  <div id="kpis" style="position:absolute;top:620px;right:80px;left:80px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px">${[['نسبة الحضور', 97, '%', '#34C3AE'], ['متأخر', 4, '', '#F2A93B'], ['غائب', 3, '', '#FF6B60']].map(([l, v, s, c]) => `<div class="kp big3d" style="position:relative;padding:28px"><div style="font-size:26px;color:#C9D6F0">${l}</div><div class="num kv" data-v="${v}" data-s="${s}" style="font-size:72px;color:${c}">0</div></div>`).join('')}</div>
+  <svg id="chart" width="920" height="340" viewBox="0 0 920 340" style="position:absolute;top:880px;left:80px"><defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34C3AE" stop-opacity=".45"/><stop offset="1" stop-color="#34C3AE" stop-opacity="0"/></linearGradient></defs><path id="area" fill="url(#cg)"/><path id="line" fill="none" stroke="#34C3AE" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/></svg>
+  <div id="rep" style="position:absolute;bottom:80px;right:80px;background:#fff;color:#1E2B5C;border-radius:20px;padding:18px 28px;font-size:28px;font-weight:800;display:flex;gap:12px;align-items:center">${ic('pdf', 36, '#C8453F')}تقرير اليوم PDF</div>`, (el, t) => {
+  chapterAnim(el, t);
+  $$('.kp', el).forEach((k, i) => { set(k, { o: p(t, 1 + i * .2, 1.3 + i * .2), y: (1 - back(p(t, 1 + i * .2, 1.8 + i * .2))) * 100 }); const kv = $('.kv', k); kv.textContent = Math.round(+kv.dataset.v * eo(p(t, 1.4 + i * .2, 3))) + kv.dataset.s; });
+  const pts = [92, 95, 90, 97, 94, 96, 93, 98, 95, 97, 96, 99].map((v, i) => [i * 80 + 20, 320 - (v - 85) * 20]); const k = eo(p(t, 2.6, 5));
+  const n = Math.max(2, Math.ceil(pts.length * k)); const sub = pts.slice(0, n); const d = sub.map((q, i) => `${i ? 'L' : 'M'}${q[0]},${q[1]}`).join('');
+  $('#line', el).setAttribute('d', d); $('#area', el).setAttribute('d', d + `L${sub.at(-1)[0]},340L${sub[0][0]},340Z`); $('#chart', el).style.opacity = p(t, 2.5, 2.8);
+  set($('#rep', el), { o: p(t, 5.5, 5.8), s: back(p(t, 5.5, 6.1)) });
+});
+
+/* ===== 12 · privacy 102–111 ===== */
+add(102, 111, chapter(9, 'الخصوصية والأمان', 'بيانات مدرستك<br><b>مقفولة</b> بالكامل', 'كل شخص يشوف بس اللي يخصه، والملفات محمية بعلامة مائية ومنع تنزيل.') + `
+  <div class="center" style="top:200px"><div id="shield" style="width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,rgba(52,195,174,.35),rgba(52,195,174,0) 70%);display:flex;align-items:center;justify-content:center">${ic('shield', 230, '#34C3AE', 1.4)}</div></div>
+  <div id="feats" style="position:absolute;bottom:90px;right:80px;left:80px;display:grid;grid-template-columns:1fr 1fr;gap:16px">${[['lock', 'صلاحيات لكل حساب'], ['eye', 'علامة مائية باسم المشاهد'], ['phone', 'جهاز واحد لكل حساب'], ['paper', 'سجل عمليات ما يتمسح']].map(([i, l]) => `<div class="ft big3d" style="position:relative;display:flex;gap:16px;align-items:center;padding:22px 24px;font-size:28px;font-weight:700"><span style="color:#34C3AE">${ic(i, 40)}</span>${l}</div>`).join('')}</div>`, (el, t) => {
+  chapterAnim(el, t);
+  set($('#shield', el), { o: p(t, 1, 1.4), s: back(p(t, 1, 1.8)) * (1 + Math.sin(t * 3) * .015) });
+  $$('.ft', el).forEach((f, i) => set(f, { o: p(t, 2.2 + i * .3, 2.5 + i * .3), y: (1 - eo(p(t, 2.2 + i * .3, 3 + i * .3))) * 80 }));
+});
+
+/* ===== 13 · outro 111–120 ===== */
+add(111, 120, `<div class="center"><div id="logo2">${WM(260)}</div><div id="o1" style="margin-top:50px;font-size:58px;font-weight:800">حضور، تعليم، وتواصل</div><div id="o2" style="margin-top:12px;font-size:58px;font-weight:800;color:#34C3AE">بمنصة وحدة</div>
+  <div id="cta" style="margin-top:70px;background:#F2A93B;color:#0D1430;border-radius:24px;padding:26px 50px;font-size:40px;font-weight:800">اطلب نسخة تجريبية لمدرستك</div>
+  <div id="o3" style="margin-top:34px;font-size:30px;color:#9FB2E8">للإدارة · للمدرس · لولي الأمر · للطالب</div></div>`, (el, t) => {
+  set($('#logo2', el), { o: p(t, .2, .6), s: back(p(t, .2, 1)) });
+  $$('.wp', el).forEach(pa => { pa.style.strokeDasharray = 'none'; });
+  riseWords($('#o1', el), t, .9, .1); riseWords($('#o2', el), t, 1.5, .1);
+  set($('#cta', el), { o: p(t, 2.4, 2.7), s: back(p(t, 2.4, 3)) * (1 + Math.sin(Math.max(0, t - 3) * 3) * .02) });
+  rise($('#o3', el), t, 3.1);
+});
+
+/* ===== transitions & render ===== */
+const TR = .6;
+window.render = t => {
+  // background drift
+  set($('#grid'), { x: (t * 12) % 60, y: (t * 7) % 60 });
+  set($('#b1'), { x: Math.sin(t * .3) * 80, y: Math.cos(t * .25) * 60 }); set($('#b2'), { x: Math.cos(t * .2) * 90, y: Math.sin(t * .3) * 70 }); set($('#b3'), { x: Math.sin(t * .5) * 120, y: Math.cos(t * .4) * 90 });
+  S.forEach((s, i) => {
+    const vis = t >= s.start - (i ? TR / 2 : 0) && t < s.end + TR / 2;
+    s.el.style.display = vis ? 'block' : 'none'; if (!vis) return;
+    const lt = t - s.start; s.fn(s.el, Math.max(0, lt));
+    // enter: circle wipe from the corner; exit: push back and fade
+    const kin = i ? eio(p(t, s.start - TR / 2, s.start + TR / 2)) : 1, kout = i < S.length - 1 ? eio(p(t, s.end - TR / 2, s.end + TR / 2)) : 0;
+    s.el.style.clipPath = kin < 1 ? `circle(${kin * 150}% at 100% 0%)` : 'none';
+    s.el.style.opacity = 1 - kout; s.el.style.transform = `scale(${1 - kout * .08}) translateY(${-kout * 40}px)`; s.el.style.filter = kout > 0 ? `blur(${kout * 8}px)` : '';
+  });
+  $('#flash').style.opacity = S.slice(1).reduce((a, s) => Math.max(a, (1 - Math.abs(t - s.start) / .12) * .12), 0) + (1 - p(t, 111, 111.25)) * p(t, 110.9, 111) * .6;
+  $('#prog').style.width = (t / 120 * 100) + '%';
+};
+window.render(0);
+</script></body></html>

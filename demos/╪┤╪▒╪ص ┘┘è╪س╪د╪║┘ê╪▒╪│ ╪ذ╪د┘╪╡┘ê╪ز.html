@@ -1,0 +1,205 @@
+<title>عرض السبورة الذكية</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap">
+<style>
+/* Layout: control strip above a scaled 16:9 app stage */
+:root{--bg:#E9EDF3;--ink:#1E2B5C;--muted:#5B6478;--teal:#0B7F70;--amber:#F2A93B;--card:#FFFFFF;--line:#C9D1DE;--font:'Cairo','Plus Jakarta Sans',system-ui,sans-serif}
+body{background:var(--bg);color:var(--ink);font-family:var(--font)}
+.wrap{max-width:1280px;margin:0 auto;padding-block:20px 32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.bar h1{margin:0;font-size:22px}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.cbtn{min-height:46px;padding:0 20px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:15px;font-weight:700;cursor:pointer}
+.cbtn.go{background:var(--teal);border-color:var(--teal);color:#fff}
+.cbtn:focus-visible,select:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+select{min-height:46px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:14px;padding:0 10px;max-width:240px}
+.note{font-size:14px;color:var(--muted);line-height:1.7}
+.note b{color:var(--ink)}
+#holder{width:100%;position:relative;overflow:hidden;border-radius:18px;box-shadow:0 10px 30px rgba(30,43,92,.15)}
+
+#stage{width:1280px;height:720px;overflow:hidden;font-family:'Cairo','Plus Jakarta Sans',sans-serif;color:#1E2B5C;background:#F5F7FA;position:relative;transform-origin:top right}
+*{box-sizing:border-box}
+.view{position:absolute;inset:0}
+.m{color:#5B6478}
+.pill{display:inline-block;padding:6px 16px;border-radius:999px;font-size:16px;font-weight:700;border:2px solid #1E2B5C;color:#1E2B5C;background:#fff}
+.chip{display:inline-block;padding:10px 18px;border-radius:999px;font-size:17px;font-weight:700;border:1px solid #C9D1DE;background:#fff;color:#1E2B5C}
+.card{background:#fff;border:1px solid #E3E8EF;border-radius:20px}
+.stp{display:flex;gap:12px;align-items:center;font-size:16px;padding:7px 0;color:#5B6478}
+.stp b{width:28px;height:28px;border-radius:50%;background:#C9D1DE;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+.stp.on{color:#1E2B5C;font-weight:700}.stp.on b{background:#1E2B5C}
+.stp.dn b{background:#0B7F70}
+.bub{border-radius:16px;padding:12px 14px;font-size:15px;line-height:1.75}
+.tbtn{display:inline-block;padding:9px 16px;border-radius:10px;border:1px solid #C9D1DE;background:#fff;font-size:14px;font-weight:700}
+
+</style>
+<div class="wrap" dir="rtl">
+<div class="bar"><h1>اسأل السبورة: عرض تجريبي بالصوت</h1>
+<div class="ctl"><select id="voice" aria-label="الصوت"><option>جاري تحميل الأصوات…</option></select><button class="cbtn go" id="play" type="button">▶ شغّل العرض بالصوت</button></div></div>
+<div class="note" id="vnote">اضغط «شغّل العرض» وارفع صوت جهازك. الصوت يأتي من محرك النطق في جهازك نفسه.</div>
+<div id="holder"><div id="stage" dir="rtl">
+
+<!-- VIEW 1: ask screen -->
+<div id="v1" class="view">
+  <div style="position:absolute;top:70px;left:170px;right:170px;display:flex;flex-direction:column;align-items:center;gap:18px">
+    <div style="font-size:46px;font-weight:700">اسأل السبورة</div>
+    <div class="m" style="font-size:20px">اكتب ما تريد أن تفهمه، وسأشرح لك بالرسم والصوت</div>
+    <div style="display:flex;gap:10px;align-items:center"><span class="pill">الثالث متوسط</span><span class="pill">الرياضيات</span><span class="m" style="font-size:14px">من حسابك تلقائياً</span></div>
+    <div class="card" style="width:100%;height:150px;padding:22px 26px;position:relative;border:2px solid #1E2B5C">
+      <div style="font-size:14px;font-weight:700;color:#5B6478;margin-bottom:8px">مساعد الطالب</div>
+      <div style="font-size:30px;line-height:1.6;min-height:50px"><span id="typed"></span><span id="caret" style="display:inline-block;width:3px;height:34px;background:#1E2B5C;vertical-align:middle;margin-right:2px"></span></div>
+      <div style="position:absolute;left:20px;bottom:18px;width:52px;height:52px;border-radius:50%;border:1px solid #C9D1DE;display:flex;align-items:center;justify-content:center">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1E2B5C" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px"><span class="chip">اشرح من البداية</span><span class="chip">أعطني مثالاً</span><span class="chip">أعطني سؤالاً للتدرب</span></div>
+    <div id="go" style="width:100%;height:64px;border-radius:14px;background:#0B7F70;color:#fff;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center"><span id="gotxt">اشرح لي على السبورة</span></div>
+  </div>
+</div>
+
+<!-- VIEW 2: whiteboard -->
+<div id="v2" class="view" style="opacity:0">
+  <div style="position:absolute;top:20px;right:20px;width:860px;height:680px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;height:48px"><div><div style="font-size:22px;font-weight:700">السبورة · فيثاغورس</div><div class="m" style="font-size:14px">الثالث متوسط · الرياضيات</div></div><span class="tbtn">إغلاق</span></div>
+    <div class="card" style="flex:1;position:relative;overflow:hidden;background-image:radial-gradient(#E3E8EF 1.2px,transparent 1.2px);background-size:26px 26px">
+      <div style="position:absolute;top:12px;right:12px;display:flex;gap:8px"><span class="tbtn" style="background:#1E2B5C;color:#fff;border-color:#1E2B5C">قلم</span><span class="tbtn">مظلل</span><span class="tbtn">ممحاة</span></div>
+      <div dir="ltr" style="position:absolute;top:62px;right:0;left:0;bottom:92px;display:flex;justify-content:center">
+        <svg viewBox="0 0 760 470" height="100%" style="display:block;overflow:visible">
+          <path id="sqL" d="M80 180 H200 V300 H80 Z" fill="#F2A93B" fill-opacity="0" stroke="#F2A93B" stroke-width="4" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+          <path id="sqB" d="M200 300 H360 V460 H200 Z" fill="#0B7F70" fill-opacity="0" stroke="#0B7F70" stroke-width="4" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+          <path id="sqH" d="M200 180 L360 300 L480 140 L320 20 Z" fill="#C8453F" fill-opacity="0" stroke="#C8453F" stroke-width="4" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+          <path id="tri" d="M200 180 L200 300 L360 300 Z" fill="none" stroke="#1E2B5C" stroke-width="6" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+          <path id="ra" d="M200 272 H228 V300" fill="none" stroke="#1E2B5C" stroke-width="3" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+          <g font-family="Plus Jakarta Sans, Cairo, sans-serif" font-weight="700" text-anchor="middle">
+            <text id="l3" x="219" y="250" font-size="24" fill="#1E2B5C" opacity="0">3</text>
+            <text id="l4" x="290" y="286" font-size="24" fill="#1E2B5C" opacity="0">4</text>
+            <text id="lc" x="292" y="244" font-size="24" fill="#C8453F" opacity="0">c = ?</text>
+            <text id="tL" style="direction:ltr;unicode-bidi:bidi-override" x="140" y="248" font-size="26" fill="#1E2B5C" opacity="0" direction="ltr">3² = 9</text>
+            <text id="tB" style="direction:ltr;unicode-bidi:bidi-override" x="280" y="392" font-size="26" fill="#1E2B5C" opacity="0" direction="ltr">4² = 16</text>
+            <text id="tH" x="345" y="170" font-size="28" fill="#1E2B5C" opacity="0" direction="ltr">c²</text>
+          </g>
+          <g font-family="Plus Jakarta Sans, Cairo, sans-serif" font-weight="700" font-size="30" fill="#1E2B5C" direction="ltr" text-anchor="start">
+            <text id="e1" x="530" y="110" opacity="0" direction="ltr">a² + b² = c²</text>
+            <text id="e2" x="530" y="170" opacity="0" direction="ltr">3² + 4² = c²</text>
+            <text id="e3" x="530" y="230" opacity="0" direction="ltr">9 + 16 = c²</text>
+            <text id="e4" x="530" y="290" opacity="0" direction="ltr" fill="#0B7F70">25 = c²</text>
+            <text id="e5" x="530" y="372" opacity="0" direction="ltr" fill="#0B7F70" font-size="34">c = √25 = 5</text>
+          </g>
+          <ellipse id="ell" cx="636" cy="220" rx="110" ry="30" fill="none" stroke="#F2A93B" stroke-width="4" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" transform="rotate(-2 636 220)"/>
+          <path id="box" d="M518 336 H760 V392 H518 Z" fill="none" stroke="#0B7F70" stroke-width="4" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+        </svg>
+      </div>
+      <div style="position:absolute;right:14px;left:14px;bottom:14px;height:70px;background:#1E2B5C;color:#fff;border-radius:16px;padding:0 20px;display:flex;gap:16px;align-items:center">
+        <div id="wave" style="display:flex;gap:4px;align-items:center;height:40px;width:70px;flex:none"></div>
+        <div id="cap" style="font-size:20px;line-height:1.5"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;height:56px">
+      <span class="tbtn" style="background:#0B7F70;color:#fff;border-color:#0B7F70;padding:12px 20px" id="pp">إيقاف مؤقت</span>
+      <span class="m" id="tm" dir="ltr" style="font-size:14px;width:44px;text-align:center">0:00</span>
+      <div style="flex:1;height:10px;border-radius:6px;background:#E3E8EF;overflow:hidden"><i id="prog" style="display:block;height:100%;width:0;background:#0B7F70"></i></div>
+      <span class="m" dir="ltr" style="font-size:14px;width:44px;text-align:center">0:31</span>
+      <span class="tbtn">السرعة 1x</span><span class="tbtn">النص: يظهر</span>
+    </div>
+  </div>
+  <div style="position:absolute;top:20px;left:20px;width:360px;height:680px;display:flex;flex-direction:column;gap:12px">
+    <div class="card" style="padding:14px 18px"><div style="font-size:18px;font-weight:700;margin-bottom:4px">الخطوات</div>
+      <div id="s1" class="stp"><b>1</b>نرسم المثلث القائم</div>
+      <div id="s2" class="stp"><b>2</b>نرسم مربعاً على الضلعين</div>
+      <div id="s3" class="stp"><b>3</b>نقارن مع مربع الوتر</div>
+      <div id="s4" class="stp"><b>4</b>نعوّض ونجمع</div>
+      <div id="s5" class="stp"><b>5</b>نأخذ الجذر</div>
+    </div>
+    <div class="card" style="flex:1;padding:14px 18px;display:flex;flex-direction:column;gap:10px;overflow:hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:18px">مساعد الطالب</b><span style="background:#1E2B5C;color:#fff;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700">شرح آلي</span></div>
+      <div class="bub" style="background:#1E2B5C;color:#fff;align-self:flex-start;max-width:94%">ليش نجمع المربعات في قانون فيثاغورس؟</div>
+      <div id="a1" class="bub" style="background:#EEF1F6;align-self:flex-end;max-width:94%">أشرح لك على السبورة الآن، تابع الرسم والصوت.</div>
+      <div id="a2" class="bub" style="background:#EEF1F6;align-self:flex-end;max-width:94%;opacity:0">الخلاصة: مساحة مربع الوتر تساوي مجموع مساحتي المربعين على الضلعين، ولهذا نجمع المربعات.</div>
+      <div id="chips" style="display:flex;gap:8px;flex-wrap:wrap;opacity:0"><span class="chip" style="font-size:14px;padding:8px 14px">اشرح بطريقة أبسط</span><span class="chip" style="font-size:14px;padding:8px 14px">سؤال للتدرب</span></div>
+    </div>
+  </div>
+</div>
+
+
+
+</div></div>
+</div>
+<script>
+
+const $=id=>document.getElementById(id);
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const ease=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
+const P=(t,a,b)=>ease(clamp((t-a)/(b-a)));
+const Q="ليش نجمع المربعات في قانون فيثاغورس؟";
+const CAPS=[
+ [7.0,11.2,"قانون فيثاغورس يخص المثلث قائم الزاوية."],
+ [11.8,17.0,"نرسم مربعاً على كل ضلع. مساحة المربع الأول تساوي تسعة."],
+ [17.2,21.4,"ومساحة المربع الثاني تساوي ستة عشر."],
+ [21.8,27.4,"والسر أن مساحة مربع الوتر تساوي مجموع المساحتين."],
+ [27.8,32.6,"إذن: تسعة زائد ستة عشر يساوي خمسة وعشرين."],
+ [33.0,37.5,"نأخذ الجذر التربيعي، فيكون طول الوتر خمسة سنتيمترات."]
+];
+const wave=$('wave'); const bars=[];
+for(let i=0;i<9;i++){const b=document.createElement('i');b.style.cssText='display:block;width:5px;border-radius:3px;background:#2BC4AE;height:6px';wave.appendChild(b);bars.push(b);}
+const draw=(id,p)=>{ $(id).style.strokeDashoffset=1-p; };
+const show=(id,p)=>{ $(id).setAttribute('opacity',p); };
+function render(t){
+  // view 1
+  const v1=1-P(t,6.2,6.8); $('v1').style.opacity=v1; $('v1').style.display=v1<=0.001?'none':'block';
+  $('v2').style.opacity=P(t,6.4,7.0);
+  const n=Math.floor(Q.length*clamp((t-0.8)/3.2)); $('typed').textContent=Q.slice(0,n);
+  $('caret').style.opacity=(Math.floor(t*2)%2===0)?1:0;
+  const press=t>4.5&&t<5.0; $('go').style.transform=press?'scale(.97)':'scale(1)'; $('go').style.background=press?'#096659':'#0B7F70';
+  if(t>=5.0&&t<6.8){const d='.'.repeat(1+Math.floor((t-5.0)*3)%3);$('gotxt').textContent='جاري تجهيز الشرح'+d;} else $('gotxt').textContent='اشرح لي على السبورة';
+  // board drawing
+  draw('tri',P(t,7.2,9.2)); draw('ra',P(t,9.0,9.6));
+  show('l3',P(t,9.4,10.0)); show('l4',P(t,9.7,10.3)); show('lc',P(t,10.0,10.6));
+  draw('sqL',P(t,12.0,13.8)); $('sqL').setAttribute('fill-opacity',0.28*P(t,13.4,14.4)); show('tL',P(t,14.4,15.2));
+  draw('sqB',P(t,17.2,19.0)); $('sqB').setAttribute('fill-opacity',0.28*P(t,18.6,19.6)); show('tB',P(t,19.6,20.4));
+  draw('sqH',P(t,22.0,24.0)); $('sqH').setAttribute('fill-opacity',0.28*P(t,23.6,24.6)); show('tH',P(t,24.6,25.4));
+  show('e1',P(t,25.0,26.0));
+  show('e2',P(t,28.0,28.8)); show('e3',P(t,29.0,29.8)); draw('ell',P(t,29.6,30.6)); show('e4',P(t,30.8,31.6));
+  $('tH').textContent=t>=31.6?'25':'c²';
+  draw('box',P(t,34.0,35.2)); show('e5',P(t,33.6,34.6));
+  $('lc').textContent=t>=34.2?'c = 5':'c = ?'; $('lc').setAttribute('fill',t>=34.2?'#0B7F70':'#C8453F');
+  // captions + wave
+  let cap='',speaking=0;
+  for(const [s,e,tx] of CAPS){ if(t>=s&&t<=e+0.8){ const w=tx.split(' '); const k=Math.ceil(w.length*clamp((t-s)/((e-s)*0.85))); cap=w.slice(0,k).join(' '); if(t<=e) speaking=1; } }
+  $('cap').textContent=cap;
+  bars.forEach((b,i)=>{ const sp=(window.TTS_ON?window.TTS_SPEAKING:speaking); const h=sp?(8+30*Math.abs(Math.sin(t*9+i*1.7))*(0.6+0.4*Math.abs(Math.sin(t*3.1+i)))):6; b.style.height=h+'px'; b.style.opacity=sp?1:.45;});
+  // steps
+  const S=(id,a,b)=>{const el=$(id); el.className='stp'+(t>=b?' dn':(t>=a?' on':''));};
+  S('s1',7.0,11.8);S('s2',11.8,21.8);S('s3',21.8,27.8);S('s4',27.8,33.0);S('s5',33.0,37.8);
+  // progress
+  const pr=clamp((t-7.0)/(37.5-7.0)); $('prog').style.width=(pr*100)+'%';
+  const sec=Math.floor(clamp(t-7.0,0,31)); $('tm').textContent='0:'+String(sec).padStart(2,'0');
+  $('pp').textContent=t>=37.8?'إعادة الشرح':'إيقاف مؤقت';
+  // chat
+  const f=P(t,37.6,38.4); $('a2').style.opacity=f; $('chips').style.opacity=P(t,38.4,39.2);
+  $('a1').style.display=t>=37.6?'none':'block';
+}
+
+
+const stage=document.getElementById('stage'),holder=document.getElementById('holder');
+function fit(){const k=holder.clientWidth/1280;stage.style.transform='scale('+k+')';holder.style.height=(720*k)+'px';}
+addEventListener('resize',fit);fit();
+const synth=window.speechSynthesis;let voices=[];const vs=document.getElementById('voice'),vnote=document.getElementById('vnote');
+function loadVoices(){if(!synth)return;voices=synth.getVoices().filter(v=>/^ar/i.test(v.lang));vs.innerHTML='';
+ if(!voices.length){vs.innerHTML='<option>لا يوجد صوت عربي</option>';vnote.innerHTML='<b>جهازك لا يحتوي على صوت عربي مثبَّت.</b> سنحاول النطق على أي حال، وإن لم تسمع شيئاً فأضف اللغة العربية لإعدادات النطق في جهازك (Windows: الإعدادات ← الوقت واللغة ← الكلام).';return;}
+ voices.forEach((v,i)=>{const o=document.createElement('option');o.value=i;o.textContent=v.name+' ('+v.lang+')';vs.appendChild(o);});
+ vnote.textContent='اضغط «شغّل العرض» وارفع صوت جهازك. الصوت يأتي من محرك النطق في جهازك نفسه.';}
+if(synth){loadVoices();synth.onvoiceschanged=loadVoices;}else{vs.innerHTML='<option>المتصفح لا يدعم النطق</option>';}
+window.TTS_ON=!!synth;window.TTS_SPEAKING=false;
+let t=0,playing=false,last=0,spoken=new Set(),hold=0,raf=0;const END=41;
+function say(txt){if(!synth)return;const u=new SpeechSynthesisUtterance(txt);u.lang='ar-SA';const v=voices[+vs.value];if(v){u.voice=v;u.lang=v.lang;}u.rate=0.95;
+ window.TTS_SPEAKING=true;hold=performance.now();u.onend=u.onerror=()=>{window.TTS_SPEAKING=false;};synth.speak(u);}
+function tick(now){if(!playing)return;const dt=Math.min(0.1,(now-last)/1000);last=now;
+ CAPS.forEach(([s,e,tx],i)=>{if(t>=s&&!spoken.has(i)){spoken.add(i);say(tx);}});
+ const cur=CAPS.find(([s,e])=>t>=s&&t<e+0.2);const waiting=window.TTS_SPEAKING&&cur&&t>=cur[1]&&(now-hold)<15000;
+ if(!waiting)t+=dt; render(Math.min(t,END));
+ if(t>=END){playing=false;btn.textContent='↺ أعد العرض';return;} raf=requestAnimationFrame(tick);}
+const btn=document.getElementById('play');
+btn.addEventListener('click',()=>{if(synth){synth.cancel();const w=new SpeechSynthesisUtterance(' ');w.volume=0;synth.speak(w);}
+ if(playing){playing=false;cancelAnimationFrame(raf);if(synth)synth.cancel();window.TTS_SPEAKING=false;btn.textContent='▶ تابع';return;}
+ if(t>=END){t=0;spoken.clear();} playing=true;btn.textContent='⏸ إيقاف';last=performance.now();raf=requestAnimationFrame(tick);});
+render(22.5);t=0;
+</script>
