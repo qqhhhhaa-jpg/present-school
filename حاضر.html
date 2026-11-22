@@ -3379,6 +3379,30 @@ const parent = {
         ${x.status === 'absent' ? `<button class="btn pr" data-excuse="${s.id}">تبرير الغياب</button>` : ''}
         <div style="display:flex;gap:6px">${db.days().slice(0, 6).reverse().map(d => { const y = db.statusOf(s.id, d); const col = { present: 'var(--teal)', left: 'var(--teal)', late: 'var(--amber)', absent: 'var(--red)', excused: 'var(--amber)', pending: 'var(--surface-300)', none: 'var(--surface-300)', holiday: 'var(--surface-300)' }[y.status]; return `<div style="flex:1;text-align:center"><div style="height:28px;border-radius:8px;background:${col}" title="${db.STATUS[y.status]}"></div><div class="small muted">${dayName(new Date(d))}</div></div>`; }).join('')}</div>
       </div>`; }).join('')}</div>
+      ${(() => {
+        const gid = ctx().roleInfo.guardianId;
+        const nMarks = db.newMarks(gid);
+        const kidMarks = db.childrenOf(gid).flatMap(k => db.marks({ studentId: k.id }).slice(0, 3).map(m => ({ m, kid: k })));
+        if (!kidMarks.length) return '';
+        return `<div class="card" style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <h2 style="display:flex;align-items:center;gap:6px">${icon('grade', 20)} درجات أولادك المعلنة</h2>
+            <a href="#/marks" class="btn sm pr">عرض كل الدرجات</a>
+          </div>
+          ${nMarks ? `<div class="pill p-late" style="align-self:flex-start;font-weight:700">يوجد ${nMarks} درجات جديدة غير مقروءة</div>` : ''}
+          <div style="display:flex;flex-direction:column;gap:8px">
+            ${kidMarks.slice(0, 4).map(({ m, kid }) => `
+              <div class="row" style="background:var(--surface-200);border-radius:10px;padding:8px 12px">
+                <div style="flex:1">
+                  <b>${esc(db.first(kid.name))} · ${esc(m.subject)}</b>
+                  <div class="muted small">${esc(m.exam)} · ${esc(m.lesson)} · ${fmtDay(new Date(m.ts))}</div>
+                </div>
+                ${scoreChip(m.scores[kid.id], m.max)}
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+      })()}
       ${(() => { const gid = ctx().roleInfo.guardianId; const n = db.newPosts(gid); return n ? `<a class="card" href="#/posts" style="background:var(--brand);color:var(--on-brand);border:0;text-decoration:none;display:flex;gap:12px;align-items:center"><div style="flex:1"><b style="font-size:17px">${n} منشورات جديدة لأولادك</b><div class="small" style="opacity:.85">واجبات وتبليغات من المدرسين والإدارة</div></div><span class="btn pr">عرض</span></a>` : ''; })()}
       <div class="card"><h2 style="margin-bottom:6px">آخر الإشعارات</h2>${notesList(db.notes(ctx().inbox).slice(0, 5))}</div>`;
   },
@@ -3386,9 +3410,22 @@ const parent = {
 
 function notesList(list, fresh) {
   if (!list.length) return '<div class="empty">لا إشعارات بعد</div>';
-  const tone = { in: 'p-present', late: 'p-late', out: 'p-left', absent: 'p-absent', excuse: 'p-excused', post: 'p-quiet', mark: 'p-left', device: 'p-absent' };
-  const label = { in: 'وصول', late: 'تأخير', out: 'انصراف', absent: 'غياب', excuse: 'عذر', post: 'منشور', mark: 'درجة', device: 'جهاز' };
-  return list.map(n => `<div class="row" style="${(fresh ? !fresh.has(n.id ?? n.ts) : n.read) ? '' : 'background:var(--surface-300);margin:0 -10px;padding:10px'}"><span class="pill ${tone[n.kind]}">${label[n.kind]}</span><div style="flex:1;min-width:0"><b>${esc(n.title)}</b><div class="muted small">${esc(n.body)}</div></div><span class="num small muted">${ago(n.ts, db.now())}</span></div>`).join('');
+  const tone = { in: 'p-present', late: 'p-late', out: 'p-left', absent: 'p-absent', excuse: 'p-excused', post: 'p-quiet', mark: 'p-late', device: 'p-absent' };
+  const label = { in: 'وصول', late: 'تأخير', out: 'انصراف', absent: 'غياب', excuse: 'عذر', post: 'منشور', mark: 'درجة جديدة', device: 'جهاز' };
+  return list.map(n => {
+    const isMark = n.kind === 'mark';
+    const href = isMark ? '#/marks' : (n.kind === 'post' ? '#/posts' : '');
+    const tag = href ? 'a' : 'div';
+    return `<${tag} ${href ? `href="${href}"` : ''} class="row al" style="text-decoration:none;color:inherit;${(fresh ? !fresh.has(n.id ?? n.ts) : n.read) ? '' : 'background:var(--surface-300);margin:0 -10px;padding:10px'}">
+      <span class="pill ${tone[n.kind]}">${label[n.kind]}</span>
+      <div style="flex:1;min-width:0">
+        <b>${esc(n.title)}</b>
+        <div class="muted small">${esc(n.body)}</div>
+      </div>
+      <span class="num small muted">${ago(n.ts, db.now())}</span>
+      ${href ? icon('back', 14) : ''}
+    </${tag}>`;
+  }).join('');
 }
 
 
@@ -3723,6 +3760,27 @@ const me = {
       <div class="card" style="background:${tone};display:flex;flex-direction:column;gap:10px"><div style="display:flex;justify-content:space-between;align-items:center"><h2>حضوري اليوم</h2>${pill(x.status)}</div><b>${esc(line)}</b>
         <div class="row" style="padding:4px 0"><span style="flex:1">نسبة حضوري هذا الشهر</span><b class="num">${r.rate}%</b></div></div>
       <a class="card" href="#/posts" style="background:var(--brand);color:var(--on-brand);border:0;text-decoration:none;display:flex;flex-direction:column;gap:10px"><h2>${n ? `عندك ${n} أشياء جديدة` : 'لا جديد الآن'}</h2><div class="small" style="opacity:.85">واجبات وتبليغات وملازم وفيديوهات من مدرسيك</div><span class="btn pr" style="align-self:flex-start">افتح واجباتي</span></a></div>
+      ${(() => {
+        const myMarks = db.marks({ studentId: s.id }).slice(0, 3);
+        if (!myMarks.length) return '';
+        return `<div class="card" style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <h2 style="display:flex;align-items:center;gap:6px">${icon('grade', 20)} آخر الدرجات المنشورة لك</h2>
+            <a href="#/marks" class="btn sm pr">عرض كل درجاتي</a>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            ${myMarks.map(m => `
+              <div class="row" style="background:var(--surface-200);border-radius:10px;padding:8px 12px">
+                <div style="flex:1">
+                  <b>${esc(m.subject)} · ${esc(m.exam)}</b>
+                  <div class="muted small">${esc(m.lesson)} · ${fmtDay(new Date(m.ts))}</div>
+                </div>
+                ${scoreChip(m.scores[s.id], m.max)}
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+      })()}
       <div class="card"><h2 style="margin-bottom:8px">آخر ما نُشر</h2><div style="display:flex;flex-direction:column;gap:10px">${db.posts({ studentId: s.id, forStudent: true }).slice(0, 4).map(p => postCard(p, c)).join('') || '<div class="empty">لا منشورات بعد</div>'}</div></div>`;
   },
 };
@@ -4029,7 +4087,17 @@ function sheetModal(m) {
       <b>قائمة درجات الطلاب (${studs.length})</b>
       ${can ? `<button type="button" class="btn sm pr" id="add-stu-res-btn">${icon('plus', 14)}إضافة طالب / نتيجة</button>` : ''}
     </div>
-    <div style="max-height:40vh;overflow:auto">${studs.map(s => { const edited = hist.some(h => h.studentId === s.id); return `<div class="row">${avatar(s.name, '', db.photoOf(s.id))}<span style="flex:1"><b>${esc(s.name)}</b>${edited ? ' <span class="pill p-late" style="font-size:10px;padding:0 6px">معدّلة</span>' : ''}</span>${scoreChip(m.scores[s.id] ?? null, m.max)}${can ? `<button type="button" class="btn sm" data-edm="${s.id}">تعديل</button>` : ''}</div>`; }).join('')}</div>
+    <div style="max-height:40vh;overflow:auto">${studs.map(s => {
+      const edited = hist.some(h => h.studentId === s.id);
+      const val = m.scores[s.id] ?? null;
+      return `<div class="row">${avatar(s.name, '', db.photoOf(s.id))}
+        <span style="flex:1"><b>${esc(s.name)}</b>${edited ? ' <span class="pill p-late" style="font-size:10px;padding:0 6px">معدّلة</span>' : ''}</span>
+        ${!m.draft && val !== null ? '<span class="pill p-present" style="font-size:10px;padding:2px 6px">وصل لولي الأمر ✓</span>' : ''}
+        ${scoreChip(val, m.max)}
+        ${!m.draft && val !== null ? `<button type="button" class="btn sm" data-wa="${s.id}" title="إرسال النتيجة لواتساب ولي الأمر" style="padding:4px 8px;font-size:11px">${icon('send', 12)} واتساب</button>` : ''}
+        ${can ? `<button type="button" class="btn sm" data-edm="${s.id}">تعديل</button>` : ''}
+      </div>`;
+    }).join('')}</div>
     ${hist.length ? `<div><b>سجل التعديلات</b><div class="small muted" style="margin:2px 0 4px">ينحفظ دائماً ولا يمكن حذفه.</div>${hist.map(h => histLine(h)).join('')}</div>` : ''}
     ${can ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;border-top:1px solid var(--line);padding-top:8px">
       ${m.draft ? `<button type="button" class="btn pr" id="pub-curr-sheet-btm">${icon('send', 16)}نشر الامتحان وإشعار أولياء الأمور</button>` : '<span></span>'}
@@ -4040,6 +4108,17 @@ function sheetModal(m) {
     el.addEventListener('click', e => {
       const b = e.target.closest('[data-edm]');
       if (b) editMarkModal(m, b.dataset.edm, () => { const box = $('#shbody', el); if (box) box.innerHTML = draw(); });
+      const wb = e.target.closest('[data-wa]');
+      if (wb) {
+        const st = db.student(wb.dataset.wa);
+        const g = db.guardian(st?.guardianId);
+        const val = m.scores[st?.id] ?? 'لم يُمتحن';
+        const rawPhone = (g?.phone || '').replace(/\D/g, '');
+        const phone = rawPhone.replace(/^0/, '964');
+        const txt = encodeURIComponent(`السلام عليكم ورحمة الله،\nنود إعلامكم بنتيجة الطالب (${st?.name}) في مادة (${m.subject}) - ${m.exam}:\nالدرجة: ${val} من ${m.max}.\n${db.settings().schoolName}`);
+        window.open(`https://wa.me/${phone}?text=${txt}`, '_blank');
+        return;
+      }
       if (e.target.closest('#add-stu-res-btn')) {
         addStudentScoreModal(m, () => { const box = $('#shbody', el); if (box) box.innerHTML = draw(); });
       }
