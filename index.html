@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.supabase.co; media-src 'self' blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdnjs.cloudflare.com; worker-src 'self' blob: https://cdnjs.cloudflare.com; frame-src 'self' blob:; object-src 'none'; base-uri 'self';">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <title>حاضر · الحضور والانصراف</title>
 <meta name="theme-color" content="#1E2B5C">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2264%22%20height%3D%2264%22%20viewBox%3D%220%200%201024%201024%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22g%22%20cx%3D%2228%25%22%20cy%3D%2218%25%22%20r%3D%22100%25%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%232E408A%22/%3E%3Cstop%20offset%3D%22.55%22%20stop-color%3D%22%231E2B5C%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23111936%22/%3E%3C/radialGradient%3E%3ClinearGradient%20id%3D%22gl%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23F7C873%22/%3E%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%23F2A93B%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23C98322%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width%3D%221024%22%20height%3D%221024%22%20rx%3D%22220%22%20fill%3D%22url%28%23g%29%22/%3E%3Cg%20transform%3D%22translate%28512%20512%29%20scale%283.5%29%20translate%28-165%20-74%29%22%3E%3Cg%20fill%3D%22none%22%20stroke-width%3D%2219%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cg%20stroke%3D%22%23FFFFFF%22%3E%3Cpath%20d%3D%22M198%20100%20V16%22/%3E%3Cpath%20d%3D%22M118%20100%20V88%20Q118%2064%20141%2064%20Q164%2064%20164%2088%20V100%20H78%20Q62%20100%2060%20116%20L57%20132%22/%3E%3Cpath%20d%3D%22M98%20100%20V86%22/%3E%3C/g%3E%3Cg%20stroke%3D%22%2334C3AE%22%3E%3Cpath%20d%3D%22M226%2062%20H272%20L240%20100%20H198%22/%3E%3C/g%3E%3C/g%3E%3Crect%20x%3D%22131.5%22%20y%3D%2226.5%22%20width%3D%2219%22%20height%3D%2219%22%20rx%3D%222.3%22%20transform%3D%22rotate%2845%20141%2036%29%22%20fill%3D%22%23F2A93B%22/%3E%3C/g%3E%3C/svg%3E">
@@ -576,7 +579,21 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 function esc(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return String(s ?? '').replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c]));
+}
+
+// URL sanitization: prevents javascript:, data:, and other XSS vectors
+function safeUrl(url) {
+  if (!url) return '#';
+  const u = String(url).trim();
+  if (/^(?:#|\/|https?:\/\/|blob:|mailto:|tel:)/i.test(u)) return esc(u);
+  return '#';
+}
+
+// Strip null bytes and dangerous control characters
+function cleanText(s, maxLen = 1000) {
+  if (typeof s !== 'string') return '';
+  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim().slice(0, maxLen);
 }
 
 // Arabic search normalization: أ/إ/آ → ا, ة → ه, ى → ي, strip tashkeel and tatweel.
@@ -1394,8 +1411,31 @@ function requestCode(phone) {
   if (S.disabled.includes(normalizePhone(phone))) return { ok: false, error: 'هذا الحساب موقوف. تواصل مع إدارة المنصة.' };
   return { ok: true, demoCode: '123456' }; // the server sends a real SMS here
 }
+function safeCompare(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  }
+  return diff === 0;
+}
+
 function verifyCode(phone, code) {
-  if (code !== '123456') return { ok: false, error: 'الرمز غير صحيح. تأكد من الرسالة وحاول مرة ثانية.' };
+  phone = normalizePhone(phone);
+  if (!phone) return { ok: false, error: 'رقم الهاتف غير صالح.' };
+  S.smsFails = S.smsFails || {};
+  const f = S.smsFails[phone];
+  if (f && f.until > Date.now()) {
+    return { ok: false, error: `محاولات كثيرة خاطئة. حاول بعد ${Math.ceil((f.until - Date.now()) / 60000)} دقيقة.` };
+  }
+  if (!safeCompare(String(code).trim(), '123456')) {
+    const n = (f?.n || 0) + 1;
+    S.smsFails[phone] = { n, until: n >= 5 ? Date.now() + 5 * 60000 : 0 };
+    save();
+    return { ok: false, error: n >= 5 ? 'خمس محاولات خاطئة. انقفل الدخول 5 دقائق.' : `الرمز غير صحيح. تبقى لديك ${5 - n} محاولات.` };
+  }
+  delete S.smsFails[phone];
+  save();
   return startSession(phone);
 }
 
@@ -1463,7 +1503,7 @@ function setOwnPassword(username, code, pw, pw2) {
   const c = phone && S.creds[phone];
   // Either the activation code from the admin, or a reset code sent by SMS ("نسيت الرمز").
   const t = c && (c.temp ? { h: c.temp, until: c.until } : c.reset ? { h: c.reset.h, until: c.reset.until } : null);
-  if (!t || t.h !== hashPw(code)) return { ok: false, error: 'الرمز ما يطابق. اطلب رمز جديد.' };
+  if (!t || !safeCompare(t.h, hashPw(code))) return { ok: false, error: 'الرمز ما يطابق. اطلب رمز جديد.' };
   if (t.until < Date.now()) return { ok: false, error: 'الرمز انتهى. اطلب رمز جديد.' };
   const bad = checkNewPassword(pw, username); if (bad) return { ok: false, field: 'pw', error: bad };
   if (pw !== pw2) return { ok: false, field: 'pw2', error: 'الرمزين مو نفس الشي.' };
@@ -1475,7 +1515,7 @@ function setOwnPassword(username, code, pw, pw2) {
 // Signed-in staff changing their own password.
 function changeOwnPassword(oldPw, pw, pw2) {
   const s = session(); const c = s && (S.creds || {})[s.phone];
-  if (!c || c.hash !== hashPw(oldPw)) return { ok: false, field: 'old', error: 'الرمز الحالي غير صحيح.' };
+  if (!c || !safeCompare(c.hash, hashPw(oldPw))) return { ok: false, field: 'old', error: 'الرمز الحالي غير صحيح.' };
   const bad = checkNewPassword(pw, c.username); if (bad) return { ok: false, field: 'pw', error: bad };
   if (pw !== pw2) return { ok: false, field: 'pw2', error: 'الرمزين مو نفس الشي.' };
   c.hash = hashPw(pw); c.ts = Date.now(); log('تغيير الرمز', c.username); save();
@@ -1501,13 +1541,13 @@ function loginWithPassword(username, password) {
   if (f && f.until > Date.now()) return { ok: false, error: `محاولات كثيرة خاطئة. حاول بعد ${Math.ceil((f.until - Date.now()) / 60000)} دقيقة، أو اطلب رمز جديد من الإدارة.` };
   const phone = Object.keys(S.creds || {}).find(p => S.creds[p].username === username);
   // Activation code instead of a password: ask the person to set their own.
-  if (phone && S.creds[phone].temp && S.creds[phone].temp === hashPw(password)) {
+  if (phone && S.creds[phone].temp && safeCompare(S.creds[phone].temp, hashPw(password))) {
     if (S.creds[phone].until < Date.now()) return { ok: false, error: 'رمز التفعيل انتهى. اطلب رمز جديد من الإدارة.' };
     if (S.disabled.includes(phone)) return { ok: false, error: 'هذا الحساب موقوف. تواصل مع إدارة المنصة.' };
     delete S.fails[username];
     return { ok: true, needSet: true, username, code: password, name: rolesFor(phone)[0]?.name };
   }
-  if (!phone || !S.creds[phone].hash || S.creds[phone].hash !== hashPw(password)) {
+  if (!phone || !S.creds[phone].hash || !safeCompare(S.creds[phone].hash, hashPw(password))) {
     const n = (f?.n || 0) + 1; S.fails[username] = { n, until: n >= 5 ? Date.now() + 5 * 60000 : 0 }; if (n >= 5) S.fails[username].n = 0; save();
     return { ok: false, error: n >= 5 ? 'خمس محاولات خاطئة. انقفل الدخول 5 دقائق.' : `اليوزر أو الرمز غير صحيح. بقت ${5 - n} محاولات.` };
   }
@@ -2036,7 +2076,7 @@ function saveAccount({ phone, name, admin, teacher, subject, sections: secs, dis
   return { ok: true };
 }
 
-return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, offDay, isHoliday, holidayName, addHoliday, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, eventById, evidenceOf, markManual, addExcuse, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
+return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, offDay, isHoliday, holidayName, addHoliday, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, eventById, evidenceOf, markManual, addExcuse, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
 })();
 
 

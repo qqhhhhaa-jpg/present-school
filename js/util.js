@@ -4,7 +4,21 @@ export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 export function esc(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return String(s ?? '').replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c]));
+}
+
+// URL sanitization: prevents javascript:, data:, and other XSS vectors
+export function safeUrl(url) {
+  if (!url) return '#';
+  const u = String(url).trim();
+  if (/^(?:#|\/|https?:\/\/|blob:|mailto:|tel:)/i.test(u)) return esc(u);
+  return '#';
+}
+
+// Strip null bytes and dangerous control characters
+export function cleanText(s, maxLen = 1000) {
+  if (typeof s !== 'string') return '';
+  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim().slice(0, maxLen);
 }
 
 // Arabic search normalization: أ/إ/آ → ا, ة → ه, ى → ي, strip tashkeel and tatweel.

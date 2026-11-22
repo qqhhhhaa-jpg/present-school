@@ -563,8 +563,31 @@ export function requestCode(phone) {
   if (S.disabled.includes(normalizePhone(phone))) return { ok: false, error: 'هذا الحساب موقوف. تواصل مع إدارة المنصة.' };
   return { ok: true, demoCode: '123456' }; // the server sends a real SMS here
 }
+export function safeCompare(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  }
+  return diff === 0;
+}
+
 export function verifyCode(phone, code) {
-  if (code !== '123456') return { ok: false, error: 'الرمز غير صحيح. تأكد من الرسالة وحاول مرة ثانية.' };
+  phone = normalizePhone(phone);
+  if (!phone) return { ok: false, error: 'رقم الهاتف غير صالح.' };
+  S.smsFails = S.smsFails || {};
+  const f = S.smsFails[phone];
+  if (f && f.until > Date.now()) {
+    return { ok: false, error: `محاولات كثيرة خاطئة. حاول بعد ${Math.ceil((f.until - Date.now()) / 60000)} دقيقة.` };
+  }
+  if (!safeCompare(String(code).trim(), '123456')) {
+    const n = (f?.n || 0) + 1;
+    S.smsFails[phone] = { n, until: n >= 5 ? Date.now() + 5 * 60000 : 0 };
+    save();
+    return { ok: false, error: n >= 5 ? 'خمس محاولات خاطئة. انقفل الدخول 5 دقائق.' : `الرمز غير صحيح. تبقى لديك ${5 - n} محاولات.` };
+  }
+  delete S.smsFails[phone];
+  save();
   return startSession(phone);
 }
 
@@ -632,7 +655,7 @@ export function setOwnPassword(username, code, pw, pw2) {
   const c = phone && S.creds[phone];
   // Either the activation code from the admin, or a reset code sent by SMS ("نسيت الرمز").
   const t = c && (c.temp ? { h: c.temp, until: c.until } : c.reset ? { h: c.reset.h, until: c.reset.until } : null);
-  if (!t || t.h !== hashPw(code)) return { ok: false, error: 'الرمز ما يطابق. اطلب رمز جديد.' };
+  if (!t || !safeCompare(t.h, hashPw(code))) return { ok: false, error: 'الرمز ما يطابق. اطلب رمز جديد.' };
   if (t.until < Date.now()) return { ok: false, error: 'الرمز انتهى. اطلب رمز جديد.' };
   const bad = checkNewPassword(pw, username); if (bad) return { ok: false, field: 'pw', error: bad };
   if (pw !== pw2) return { ok: false, field: 'pw2', error: 'الرمزين مو نفس الشي.' };
@@ -644,7 +667,7 @@ export function setOwnPassword(username, code, pw, pw2) {
 // Signed-in staff changing their own password.
 export function changeOwnPassword(oldPw, pw, pw2) {
   const s = session(); const c = s && (S.creds || {})[s.phone];
-  if (!c || c.hash !== hashPw(oldPw)) return { ok: false, field: 'old', error: 'الرمز الحالي غير صحيح.' };
+  if (!c || !safeCompare(c.hash, hashPw(oldPw))) return { ok: false, field: 'old', error: 'الرمز الحالي غير صحيح.' };
   const bad = checkNewPassword(pw, c.username); if (bad) return { ok: false, field: 'pw', error: bad };
   if (pw !== pw2) return { ok: false, field: 'pw2', error: 'الرمزين مو نفس الشي.' };
   c.hash = hashPw(pw); c.ts = Date.now(); log('تغيير الرمز', c.username); save();
@@ -670,13 +693,13 @@ export function loginWithPassword(username, password) {
   if (f && f.until > Date.now()) return { ok: false, error: `محاولات كثيرة خاطئة. حاول بعد ${Math.ceil((f.until - Date.now()) / 60000)} دقيقة، أو اطلب رمز جديد من الإدارة.` };
   const phone = Object.keys(S.creds || {}).find(p => S.creds[p].username === username);
   // Activation code instead of a password: ask the person to set their own.
-  if (phone && S.creds[phone].temp && S.creds[phone].temp === hashPw(password)) {
+  if (phone && S.creds[phone].temp && safeCompare(S.creds[phone].temp, hashPw(password))) {
     if (S.creds[phone].until < Date.now()) return { ok: false, error: 'رمز التفعيل انتهى. اطلب رمز جديد من الإدارة.' };
     if (S.disabled.includes(phone)) return { ok: false, error: 'هذا الحساب موقوف. تواصل مع إدارة المنصة.' };
     delete S.fails[username];
     return { ok: true, needSet: true, username, code: password, name: rolesFor(phone)[0]?.name };
   }
-  if (!phone || !S.creds[phone].hash || S.creds[phone].hash !== hashPw(password)) {
+  if (!phone || !S.creds[phone].hash || !safeCompare(S.creds[phone].hash, hashPw(password))) {
     const n = (f?.n || 0) + 1; S.fails[username] = { n, until: n >= 5 ? Date.now() + 5 * 60000 : 0 }; if (n >= 5) S.fails[username].n = 0; save();
     return { ok: false, error: n >= 5 ? 'خمس محاولات خاطئة. انقفل الدخول 5 دقائق.' : `اليوزر أو الرمز غير صحيح. بقت ${5 - n} محاولات.` };
   }
