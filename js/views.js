@@ -831,11 +831,11 @@ const devices = {
   update(el) {
     const box = $('#live', el); if (!box) return;
     box.innerHTML = db.devices().map(d => {
-      if (d.pending) return `<div class="tile" style="border-style:dashed"><div style="display:flex;gap:12px;align-items:center"><span class="ti">${icon('device', 22)}</span><div style="flex:1;min-width:0"><b>${esc(d.name)}</b><div class="muted small">${esc(d.model)} · <span class="num">${esc(d.serial)}</span></div></div><span class="pill p-late">بانتظار أول اتصال</span></div>
+      if (d.pending) return `<div class="tile" data-dev-id="${d.id}" style="border-style:dashed"><div style="display:flex;gap:12px;align-items:center"><span class="ti">${icon('device', 22)}</span><div style="flex:1;min-width:0"><b>${esc(d.name)}</b><div class="muted small">${esc(d.model)} · <span class="num">${esc(d.serial)}</span></div></div><span class="pill p-late">بانتظار أول اتصال</span></div>
         <div class="small muted">اكتب إعدادات السيرفر بالجهاز وشغّله على الإنترنت. أول ما يتصل يتحول للأخضر.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm pr" data-cfg="${d.id}">إعدادات الجهاز</button><button class="btn sm" data-hs="${d.id}">محاكاة أول اتصال</button><button class="btn sm" data-ed="${d.id}">${icon('edit', 14)}تعديل</button><button class="btn sm danger" data-del="${d.id}">${icon('trash', 14)}حذف</button></div></div>`;
       const n = db.recentEvents(9999, e => e.deviceId === d.id).length;
-      return `<div class="tile ${d.online ? 'ok' : 'bad'}"><div style="display:flex;gap:12px;align-items:center"><span class="ti">${icon('device', 22)}</span><div style="flex:1;min-width:0"><b>${esc(d.name)}</b><div class="muted small">${esc(d.model)}</div></div><span class="pill ${d.online ? 'p-present' : 'p-absent'}">${d.online ? 'متصل' : 'منقطع'}</span></div>
+      return `<div class="tile ${d.online ? 'ok' : 'bad'}" data-dev-id="${d.id}"><div style="display:flex;gap:12px;align-items:center"><span class="ti">${icon('device', 22)}</span><div style="flex:1;min-width:0"><b>${esc(d.name)}</b><div class="muted small">${esc(d.model)}</div></div><span class="pill ${d.online ? 'p-present' : 'p-absent'}">${d.online ? 'متصل' : 'منقطع'}</span></div>
       <div class="small">${d.methods.map(m => `<span class="pill p-quiet">${esc(m)}</span>`).join(' ')}</div>
       ${d.serial ? `<div class="row" style="padding:4px 0"><span style="flex:1">الربط</span><span class="small">${esc(db.PUSH[d.protocol]?.label || '')} · <span class="num">${esc(d.serial)}</span></span></div>` : ''}
       <div class="row" style="padding:4px 0"><span style="flex:1">بصمات اليوم</span><b class="num">${n}</b></div>

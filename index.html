@@ -95,6 +95,8 @@ h1{font-size:26px}h2{font-size:18px}h3{font-size:16px}
 .field.err .input{border-color:var(--red-ink)} .field.err .help{color:var(--red-ink);font-weight:700}
 .search{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 12px;border:1px solid var(--line-strong);border-radius:var(--r-md);background:var(--surface-200);width:min(380px,100%);position:relative}
 .search input{border:0;background:none;outline:none;flex:1;min-width:0}
+.sbadge{display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--surface-300);color:var(--ink);white-space:nowrap;flex:none;line-height:1.4;margin-inline-end:2px;letter-spacing:-.2px;transition:all .15s ease}
+.sbadge.sbadge-global{background:var(--amber-soft);color:var(--amber-ink);border:1px solid rgba(242,169,59,.45)}
 .kbd{border:1px solid var(--line-strong);border-radius:6px;padding:0 7px;font-size:12px;font-weight:700;color:var(--muted);font-family:var(--font-latin)}
 .seg{display:inline-flex;background:var(--surface-300);border-radius:var(--r-md);padding:4px;gap:4px;flex-wrap:wrap}
 .seg button{border:0;background:none;padding:7px 14px;border-radius:9px;font-weight:700;font-size:13px;color:var(--muted);cursor:pointer}
@@ -2953,11 +2955,11 @@ const devices = {
   update(el) {
     const box = $('#live', el); if (!box) return;
     box.innerHTML = db.devices().map(d => {
-      if (d.pending) return `<div class="tile" style="border-style:dashed"><div style="display:flex;gap:12px;align-items:center"><span class="ti">${icon('device', 22)}</span><div style="flex:1;min-width:0"><b>${esc(d.name)}</b><div class="muted small">${esc(d.model)} · <span class="num">${esc(d.serial)}</span></div></div><span class="pill p-late">بانتظار أول اتصال</span></div>
+      if (d.pending) return `<div class="tile" data-dev-id="${d.id}" style="border-style:dashed"><div style="display:flex;gap:12px;align-items:center"><span class="ti">${icon('device', 22)}</span><div style="flex:1;min-width:0"><b>${esc(d.name)}</b><div class="muted small">${esc(d.model)} · <span class="num">${esc(d.serial)}</span></div></div><span class="pill p-late">بانتظار أول اتصال</span></div>
         <div class="small muted">اكتب إعدادات السيرفر بالجهاز وشغّله على الإنترنت. أول ما يتصل يتحول للأخضر.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm pr" data-cfg="${d.id}">إعدادات الجهاز</button><button class="btn sm" data-hs="${d.id}">محاكاة أول اتصال</button><button class="btn sm" data-ed="${d.id}">${icon('edit', 14)}تعديل</button><button class="btn sm danger" data-del="${d.id}">${icon('trash', 14)}حذف</button></div></div>`;
       const n = db.recentEvents(9999, e => e.deviceId === d.id).length;
-      return `<div class="tile ${d.online ? 'ok' : 'bad'}"><div style="display:flex;gap:12px;align-items:center"><span class="ti">${icon('device', 22)}</span><div style="flex:1;min-width:0"><b>${esc(d.name)}</b><div class="muted small">${esc(d.model)}</div></div><span class="pill ${d.online ? 'p-present' : 'p-absent'}">${d.online ? 'متصل' : 'منقطع'}</span></div>
+      return `<div class="tile ${d.online ? 'ok' : 'bad'}" data-dev-id="${d.id}"><div style="display:flex;gap:12px;align-items:center"><span class="ti">${icon('device', 22)}</span><div style="flex:1;min-width:0"><b>${esc(d.name)}</b><div class="muted small">${esc(d.model)}</div></div><span class="pill ${d.online ? 'p-present' : 'p-absent'}">${d.online ? 'متصل' : 'منقطع'}</span></div>
       <div class="small">${d.methods.map(m => `<span class="pill p-quiet">${esc(m)}</span>`).join(' ')}</div>
       ${d.serial ? `<div class="row" style="padding:4px 0"><span style="flex:1">الربط</span><span class="small">${esc(db.PUSH[d.protocol]?.label || '')} · <span class="num">${esc(d.serial)}</span></span></div>` : ''}
       <div class="row" style="padding:4px 0"><span style="flex:1">بصمات اليوم</span><b class="num">${n}</b></div>
@@ -4456,6 +4458,120 @@ function clockText() {
   const ck = db.clock(); if (ck.mode !== 'real') return fmtTime(ck.now);
   const d = new Date(ck.now); return `${fmtTime(ck.now)}<span style="font-size:.8em;margin-inline-start:3px">${d.getHours() < 12 ? 'ص' : 'م'}</span>`;
 }
+const SECTION_SEARCH_CONFIG = {
+  dashboard: {
+    isGlobal: true,
+    badge: 'بحث عام',
+    placeholder: 'بحث عام: طالب، رقم، شعبة، ولي أمر...',
+    title: 'بحث شامل في المنصة'
+  },
+  teacher: {
+    isGlobal: true,
+    badge: 'بحث عام',
+    placeholder: 'بحث عام: طالب، رقم، شعبة...',
+    title: 'بحث شامل'
+  },
+  students: {
+    isGlobal: false,
+    badge: 'الطلاب',
+    placeholder: 'بحث في قائمة الطلاب: الاسم، الرقم...',
+    title: 'بحث في قسم الطلاب'
+  },
+  student: {
+    isGlobal: false,
+    badge: 'الطالب',
+    placeholder: 'بحث في تفاصيل وسجل الطالب...',
+    title: 'بحث في تفاصيل الطالب'
+  },
+  attendance: {
+    isGlobal: false,
+    badge: 'الحضور',
+    placeholder: 'بحث في حضور وغياب اليوم...',
+    title: 'بحث في الحضور والانصراف'
+  },
+  classes: {
+    isGlobal: false,
+    badge: 'الصفوف والشعب',
+    placeholder: 'بحث في الصفوف والشعب والمربين...',
+    title: 'بحث في الصفوف والشعب'
+  },
+  section: {
+    isGlobal: false,
+    badge: 'الشعبة',
+    placeholder: 'بحث في طلاب هذه الشعبة...',
+    title: 'بحث في طلاب الشعبة'
+  },
+  devices: {
+    isGlobal: false,
+    badge: 'أجهزة البصمة',
+    placeholder: 'بحث في أجهزة البصمة: الاسم، الـ IP...',
+    title: 'بحث في أجهزة البصمة'
+  },
+  posts: {
+    isGlobal: false,
+    badge: 'المنشورات',
+    placeholder: 'بحث في المنشورات والواجبات...',
+    title: 'بحث في الواجبات والمنشورات'
+  },
+  marks: {
+    isGlobal: false,
+    badge: 'الدرجات',
+    placeholder: 'بحث في درجات الطلاب والمواد...',
+    title: 'بحث في درجات الطلاب'
+  },
+  users: {
+    isGlobal: false,
+    badge: 'المستخدمون',
+    placeholder: 'بحث في المستخدمين والصلاحيات...',
+    title: 'بحث في المستخدمين'
+  },
+  audit: {
+    isGlobal: false,
+    badge: 'سجل العمليات',
+    placeholder: 'بحث في سجل العمليات والتدقيق...',
+    title: 'بحث في سجل العمليات'
+  },
+  inbox: {
+    isGlobal: false,
+    badge: 'الرسائل',
+    placeholder: 'بحث في رسائل أولياء الأمور...',
+    title: 'بحث في الرسائل'
+  },
+  reports: {
+    isGlobal: false,
+    badge: 'التقارير',
+    placeholder: 'بحث في تقارير الحضور الشهرية...',
+    title: 'بحث في التقارير'
+  },
+  timetable: {
+    isGlobal: false,
+    badge: 'الجدول',
+    placeholder: 'بحث في جدول الحصص والمواد...',
+    title: 'بحث في الجدول الأسبوعي'
+  },
+  promotion: {
+    isGlobal: false,
+    badge: 'الترحيل',
+    placeholder: 'بحث في ترحيل ونتائج الطلاب...',
+    title: 'بحث في ترحيل الطلبة'
+  },
+  school: {
+    isGlobal: false,
+    badge: 'الإعدادات',
+    placeholder: 'بحث في إعدادات المنصة...',
+    title: 'بحث في الإعدادات'
+  }
+};
+
+function getSectionSearchConfig(name) {
+  return SECTION_SEARCH_CONFIG[name] || {
+    isGlobal: false,
+    badge: 'القسم',
+    placeholder: 'بحث في هذا القسم...',
+    title: 'بحث في هذا القسم'
+  };
+}
+
 function topbar(title, sub, actions = '') {
   const c = ctx();
   const ck = db.clock();
@@ -4464,10 +4580,12 @@ function topbar(title, sub, actions = '') {
   // Back button on every page except the account's home: returns to the previous page inside the platform,
   // or to the natural parent (a section → classes, a student → students, anything else → home).
   const atHome = current ? current.name === HOME[c.role] && !current.arg : true;
+  const secName = current?.name || 'dashboard';
+  const scfg = getSectionSearchConfig(secName);
   return `<div class="top">
     ${atHome ? '' : `<button type="button" class="iconbtn backbtn" data-back aria-label="رجوع" title="رجوع">${icon('back', 20)}</button>`}
     <div class="t"><h1>${esc(title)}</h1><div class="muted small">${sub}</div></div>
-    ${canSearch ? `<label class="search" id="gsearch">${icon('search', 18)}<input id="q" placeholder="ابحث عن طالب: اسم، رقم، هاتف ولي الأمر" autocomplete="off" aria-label="بحث عام"><span class="kbd">/</span><div class="pop" id="qpop" hidden></div></label>` : ''}
+    ${canSearch ? `<label class="search" id="gsearch" data-section="${secName}" title="${scfg.title}">${icon('search', 18)}<span class="sbadge ${scfg.isGlobal ? 'sbadge-global' : ''}">${scfg.badge}</span><input id="q" placeholder="${scfg.placeholder}" autocomplete="off" aria-label="${scfg.title}"><span class="kbd">/</span><div class="pop" id="qpop" hidden></div></label>` : ''}
     <span class="clock" title="${ck.mode === 'real' ? 'الوقت الحقيقي' : 'ساعة العرض التجريبي'}"><span class="dot ${ck.paused && ck.mode !== 'real' ? '' : 'live'}"></span><span class="num" id="clk">${clockText()}</span>
       ${ck.mode === 'real' ? '' : `<button class="btn sm" data-clock="${ck.paused ? 'play' : 'pause'}" aria-label="${ck.paused ? 'تشغيل' : 'إيقاف'} الساعة" style="min-height:28px;padding:0 8px">${icon(ck.paused ? 'play' : 'pause', 14)}</button>`}</span>
     <button type="button" class="iconbtn mobonly" data-install title="ثبّت «حاضر» على شاشتك" aria-label="ثبّت التطبيق على الشاشة" ${matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'hidden' : ''}>${icon('download')}</button>
@@ -4493,38 +4611,337 @@ function logo(size = 32) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 1024 1024" aria-hidden="true" style="display:block;flex:none"><defs><radialGradient id="${id}g" cx="28%" cy="18%" r="100%"><stop offset="0" stop-color="#2E408A"/><stop offset=".55" stop-color="#1E2B5C"/><stop offset="1" stop-color="#111936"/></radialGradient><linearGradient id="${id}l" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F7C873"/><stop offset=".5" stop-color="#F2A93B"/><stop offset="1" stop-color="#C98322"/></linearGradient></defs><rect width="1024" height="1024" rx="230" fill="url(#${id}g)"/><rect x="40" y="40" width="944" height="944" rx="196" fill="none" stroke="url(#${id}l)" stroke-opacity=".45" stroke-width="${size < 48 ? 0 : 5}"/><g transform="translate(512 512) scale(${size < 48 ? 3.4 : 2.85}) translate(-165 -74)">${wmInner('#FFFFFF', '#34C3AE', `url(#${id}l)`)}</g></svg>`;
 }
 
-/* ---------- global search ---------- */
-// Picking a student from the global search: pages that can show that student in place (reports, attendance)
+/* ---------- contextual / section-scoped search ---------- */
+// Picking a student from search: pages that can show that student in place (attendance, reports)
 // do so and keep you where you are; everywhere else opens the student's profile.
-function go(href) {
+function go(it) {
+  if (typeof it === 'object' && it?.onClick) {
+    it.onClick();
+    return;
+  }
+  const href = typeof it === 'string' ? it : it?.href;
+  if (!href) return;
   const m = href.match(/^#\/student\/(.+)$/);
   if (m && current?.view?.pickStudent && current.view.pickStudent(current.el, m[1])) return;
   location.hash = href;
 }
+
 function bindSearch(root) {
   const input = $('#q', root); if (!input) return;
   const pop = $('#qpop', root); let sel = 0, items = [];
+  const secName = current?.name || 'dashboard';
+  const scfg = getSectionSearchConfig(secName);
+
+  const resetInPageFilters = () => {
+    if (secName === 'students') {
+      const sq = $('#sq', current?.el);
+      if (sq && sq.value) { sq.value = ''; sq.dispatchEvent(new Event('input', { bubbles: true })); }
+    } else if (secName === 'attendance') {
+      const aq = $('#aq', current?.el);
+      if (aq && aq.value) { aq.value = ''; aq.dispatchEvent(new Event('input', { bubbles: true })); }
+    } else if (secName === 'reports') {
+      const rq = $('#rq', current?.el);
+      if (rq && rq.value) { rq.value = ''; rq.dispatchEvent(new Event('input', { bubbles: true })); }
+    } else if (secName === 'users') {
+      const uq = $('#uq', current?.el);
+      if (uq && uq.value) { uq.value = ''; uq.dispatchEvent(new Event('input', { bubbles: true })); }
+    } else if (secName === 'audit') {
+      const audq = $('#audq', current?.el);
+      if (audq && audq.value) { audq.value = ''; audq.dispatchEvent(new Event('input', { bubbles: true })); }
+    } else if (secName === 'devices') {
+      $$('#live .tile', current?.el).forEach(el => el.style.display = '');
+    } else if (secName === 'classes') {
+      $$('#live .card, #live .sec, #live [data-addsec]', current?.el).forEach(el => el.style.display = '');
+    } else if (secName === 'posts') {
+      $$('#live .card, #live [data-post]', current?.el).forEach(card => card.style.display = '');
+    } else if (secName === 'marks') {
+      $$('#live .card', current?.el).forEach(card => card.style.display = '');
+    } else if (secName === 'inbox') {
+      $$('#live .ticket', current?.el).forEach(t => t.style.display = '');
+    }
+  };
+
+  const triggerItem = (it) => {
+    if (!it) return;
+    if (it.onClick) {
+      it.onClick();
+    } else if (it.href) {
+      go(it.href);
+    }
+    input.value = '';
+    pop.hidden = true;
+  };
+
   const run = () => {
     const q = input.value.trim();
-    if (!q) { pop.hidden = true; return; }
-    const r = db.search(q, scope());
-    const mark = s => { const n = norm(q); const i = norm(s).indexOf(n); return i < 0 ? esc(s) : esc(s.slice(0, i)) + '<mark>' + esc(s.slice(i, i + q.length)) + '</mark>' + esc(s.slice(i + q.length)); };
-    items = [
-      ...r.students.map(s => { const st = db.statusOf(s.id).status; return { href: `#/student/${s.id}`, html: `${avatar(s.name, st, db.photoOf(s.id))}<div style="flex:1;min-width:0"><b>${mark(s.name)}</b><div class="muted small">${esc(db.sectionShort(s.sectionId))} · رقم <span class="num">${s.no}</span></div></div>${pill(st)}` }; }),
-      ...r.sections.map(s => ({ href: `#/section/${s.id}`, html: `<span class="ti" style="width:40px;height:40px;font-size:13px">${esc(db.grade(s.gradeId).short)}</span><div style="flex:1"><b>${esc(db.sectionLabel(s.id))}</b><div class="muted small">${db.students(s.id).length} طالباً</div></div>` })),
-      ...r.guardians.map(g => { const kids = db.childrenOf(g.id); return { href: `#/student/${kids[0]?.id}`, html: `<span class="av" style="background:var(--surface-300);color:var(--ink)">و</span><div style="flex:1"><b>${mark(g.name)}</b><div class="muted small">ولي أمر ${esc(kids.map(k => db.first(k.name)).join('، '))} · <span class="num" dir="ltr">${maskPhone(g.phone)}</span></div></div>` }; }),
-    ];
+    if (!q) {
+      pop.hidden = true;
+      resetInPageFilters();
+      return;
+    }
+    const nq = norm(q);
+    const mark = s => {
+      if (!s) return '';
+      const str = String(s);
+      const n = norm(str); const i = n.indexOf(nq);
+      return i < 0 ? esc(str) : esc(str.slice(0, i)) + '<mark>' + esc(str.slice(i, i + q.length)) + '</mark>' + esc(str.slice(i + q.length));
+    };
+
+    items = [];
+
+    if (scfg.isGlobal) {
+      // ===== GLOBAL SEARCH (الرئيسية فقط للسهولة) =====
+      const r = db.search(q, scope());
+      items = [
+        ...r.students.map(s => {
+          const st = db.statusOf(s.id).status;
+          return {
+            href: `#/student/${s.id}`,
+            html: `${avatar(s.name, st, db.photoOf(s.id))}<div style="flex:1;min-width:0"><b>${mark(s.name)}</b><div class="muted small">${esc(db.sectionShort(s.sectionId))} · رقم <span class="num">${s.no}</span></div></div>${pill(st)}`
+          };
+        }),
+        ...r.sections.map(s => ({
+          href: `#/section/${s.id}`,
+          html: `<span class="ti" style="width:40px;height:40px;font-size:13px">${esc(db.grade(s.gradeId).short)}</span><div style="flex:1"><b>${esc(db.sectionLabel(s.id))}</b><div class="muted small">${db.students(s.id).length} طالباً</div></div>`
+        })),
+        ...r.guardians.map(g => {
+          const kids = db.childrenOf(g.id);
+          return {
+            href: `#/student/${kids[0]?.id}`,
+            html: `<span class="av" style="background:var(--surface-300);color:var(--ink)">و</span><div style="flex:1"><b>${mark(g.name)}</b><div class="muted small">ولي أمر ${esc(kids.map(k => db.first(k.name)).join('، '))} · <span class="num" dir="ltr">${maskPhone(g.phone)}</span></div></div>`
+          };
+        }),
+      ];
+    } else {
+      // ===== SECTION-SPECIFIC SEARCH (حسب نوع القسم) =====
+      const sc = scope();
+
+      if (secName === 'students') {
+        const r = db.search(q, sc).students;
+        items = r.map(s => {
+          const st = db.statusOf(s.id).status;
+          const g = db.guardian(s.guardianId);
+          return {
+            href: `#/student/${s.id}`,
+            html: `${avatar(s.name, st, db.photoOf(s.id))}<div style="flex:1;min-width:0"><b>${mark(s.name)}</b><div class="muted small">${esc(db.sectionShort(s.sectionId))} · رقم <span class="num">${s.no}</span>${g ? ` · ولي الأمر: ${esc(g.name)}` : ''}</div></div>${pill(st)}`
+          };
+        });
+        const sq = $('#sq', current?.el);
+        if (sq && sq.value !== q) {
+          sq.value = q;
+          sq.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+      } else if (secName === 'attendance') {
+        let list = db.students();
+        if (sc.sections) list = list.filter(s => sc.sections.includes(s.sectionId));
+        const matched = list.filter(s => norm(s.name).includes(nq) || String(s.no).includes(q));
+        const attDay = db.days()[0];
+        items = matched.map(s => {
+          const x = db.statusOf(s.id, attDay);
+          const timeInfo = x.inEv ? fmtTime(x.inEv.ts) : (x.excuse ? x.excuse.reason : 'لم يصل');
+          return {
+            href: `#/student/${s.id}`,
+            onClick: () => {
+              if (current?.view?.pickStudent) current.view.pickStudent(current.el, s.id);
+              else location.hash = `#/student/${s.id}`;
+            },
+            html: `${avatar(s.name, x.status, db.photoOf(s.id))}<div style="flex:1;min-width:0"><b>${mark(s.name)}</b><div class="muted small">${esc(db.sectionShort(s.sectionId))} · ${timeInfo}</div></div>${pill(x.status)}`
+          };
+        });
+        const aq = $('#aq', current?.el);
+        if (aq && aq.value !== q) {
+          aq.value = q;
+          aq.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+      } else if (secName === 'classes') {
+        const secs = sc.sections ? db.sections().filter(s => sc.sections.includes(s.id)) : db.sections();
+        const matched = secs.filter(s => norm(db.sectionLabel(s.id)).includes(nq) || norm(s.homeroom || '').includes(nq) || String(s.room || '').includes(q));
+        items = matched.map(s => ({
+          href: `#/section/${s.id}`,
+          html: `<span class="ti" style="width:40px;height:40px;font-size:13px">${esc(db.grade(s.gradeId).short)}</span><div style="flex:1;min-width:0"><b>${mark(db.sectionLabel(s.id))}</b><div class="muted small">مربي الشعبة: ${esc(s.homeroom || '—')} · ${db.students(s.id).length} طالباً · قاعة <span class="num">${s.room}</span></div></div>`
+        }));
+        $$('#live .card, #live .sec, #live [data-addsec]', current?.el).forEach(el => {
+          const text = el.textContent || '';
+          el.style.display = norm(text).includes(nq) ? '' : 'none';
+        });
+
+      } else if (secName === 'section') {
+        const secId = current?.arg;
+        const list = db.students(secId);
+        const matched = list.filter(s => norm(s.name).includes(nq) || String(s.no).includes(q));
+        items = matched.map(s => {
+          const x = db.statusOf(s.id);
+          return {
+            href: `#/student/${s.id}`,
+            html: `${avatar(s.name, x.status, db.photoOf(s.id))}<div style="flex:1;min-width:0"><b>${mark(s.name)}</b><div class="muted small">رقم <span class="num">${s.no}</span> · شعبة ${esc(db.sectionShort(s.sectionId))}</div></div>${pill(x.status)}`
+          };
+        });
+
+      } else if (secName === 'devices') {
+        const devs = db.devices ? db.devices() : [];
+        const matched = devs.filter(d => norm(d.name).includes(nq) || norm(d.location || '').includes(nq) || (d.ip && d.ip.includes(q)) || (d.serial && d.serial.includes(q)) || (d.model && norm(d.model).includes(nq)));
+        items = matched.map(d => ({
+          href: `#/devices`,
+          onClick: () => {
+            const card = $(`[data-dev-id="${d.id}"]`, current?.el);
+            if (card) {
+              card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              card.style.outline = '2px solid var(--teal)';
+              setTimeout(() => { card.style.outline = ''; }, 2000);
+            }
+          },
+          html: `<span class="ti" style="width:40px;height:40px;font-size:13px;background:var(--surface-300)">${icon(d.type === 'zk' ? 'device' : 'child', 20)}</span><div style="flex:1;min-width:0"><b>${mark(d.name)}</b><div class="muted small">${esc(d.model || '')} · <span class="num" dir="ltr">${esc(d.serial || d.ip || '—')}</span></div></div><span class="pill ${d.online ? 'p-present' : 'p-absent'}">${d.online ? 'متصل' : 'منقطع'}</span>`
+        }));
+        $$('#live .tile', current?.el).forEach(tile => {
+          const text = tile.textContent || '';
+          tile.style.display = norm(text).includes(nq) ? '' : 'none';
+        });
+
+      } else if (secName === 'posts') {
+        const posts = db.posts ? db.posts(scope()) : [];
+        const matched = posts.filter(p => norm(p.title || '').includes(nq) || norm(p.body || '').includes(nq) || norm(p.by || '').includes(nq) || (p.subject && norm(p.subject).includes(nq)));
+        items = matched.map(p => ({
+          href: `#/posts`,
+          onClick: () => {
+            const card = $(`[data-post="${p.id}"]`, current?.el);
+            if (card) card.click();
+            else location.hash = '#/posts';
+          },
+          html: `<span class="ti" style="width:40px;height:40px;font-size:13px;background:var(--surface-300)">${icon(p.type === 'hw' ? 'book' : 'spark', 18)}</span><div style="flex:1;min-width:0"><b>${mark(p.title)}</b><div class="muted small">${esc(p.subject || (p.type === 'hw' ? 'واجب' : 'إعلان'))} · ${esc(p.by || '')}</div></div>`
+        }));
+        $$('#live .card, #live [data-post]', current?.el).forEach(card => {
+          const text = card.textContent || '';
+          card.style.display = norm(text).includes(nq) ? '' : 'none';
+        });
+
+      } else if (secName === 'marks') {
+        const secs = sc.sections ? db.sections().filter(s => sc.sections.includes(s.id)) : db.sections();
+        const allMarks = db.marks ? db.marks({ sections: secs.map(s => s.id) }) : [];
+        const matched = allMarks.filter(m => norm(m.subject || '').includes(nq) || norm(m.exam || '').includes(nq) || norm(m.lesson || '').includes(nq) || norm(m.byName || '').includes(nq));
+        items = matched.map(m => ({
+          href: `#/marks`,
+          onClick: () => {
+            const card = $(`[data-sheet="${m.id}"]`, current?.el);
+            if (card) card.click();
+            else location.hash = '#/marks';
+          },
+          html: `<span class="ti" style="width:40px;height:40px;font-size:13px;background:var(--brand);color:var(--on-brand)">${icon('grade', 20)}</span><div style="flex:1;min-width:0"><b>${mark(m.subject)} · ${mark(m.exam)}</b><div class="muted small">${esc(db.sectionShort(m.sectionId))} · ${esc(m.byName || '')}</div></div>`
+        }));
+        $$('#live .card', current?.el).forEach(card => {
+          const text = card.textContent || '';
+          card.style.display = norm(text).includes(nq) ? '' : 'none';
+        });
+
+      } else if (secName === 'users') {
+        const accounts = db.accounts ? db.accounts() : [];
+        const matched = accounts.filter(a => a.roles.some(r => norm(r.name || '').includes(nq)) || (a.phone && a.phone.includes(q)) || (() => { const cr = db.credOf(a.phone); return cr && norm(cr.username || '').includes(nq); })());
+        items = matched.map(a => {
+          const cr = db.credOf(a.phone);
+          return {
+            href: `#/users`,
+            onClick: () => {
+              const row = $(`[data-edit="${a.phone}"]`, current?.el)?.closest('tr');
+              if (row) { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); row.style.background = 'var(--surface-300)'; setTimeout(() => { row.style.background = ''; }, 2000); }
+            },
+            html: `${avatar(a.roles[0]?.name || '')}<div style="flex:1;min-width:0"><b>${mark(a.roles[0]?.name || '')}</b><div class="muted small">${esc(a.roles.map(r => r.role).join('، '))} · <span class="num" dir="ltr">${esc(cr?.username || maskPhone(a.phone))}</span></div></div>`
+          };
+        });
+        const uq = $('#uq', current?.el);
+        if (uq && uq.value !== q) {
+          uq.value = q;
+          uq.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+      } else if (secName === 'audit') {
+        const logs = db.audit ? db.audit() : [];
+        const matched = logs.filter(a => norm(a.actor || '').includes(nq) || norm(a.action || '').includes(nq) || norm(a.detail || a.details || '').includes(nq));
+        items = matched.slice(0, 40).map(a => ({
+          href: `#/audit`,
+          html: `<div style="flex:1;min-width:0"><b>${mark(a.action || 'عملية')}</b><div class="muted small">${esc(a.actor || a.by || '—')} · ${esc(a.detail || a.details || '')} · <span class="num">${fmtTime(a.ts)}</span></div></div>`
+        }));
+        const audq = $('#audq', current?.el);
+        if (audq && audq.value !== q) {
+          audq.value = q;
+          audq.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+      } else if (secName === 'inbox') {
+        const tickets = db.tickets ? db.tickets(sc) : [];
+        const matched = tickets.filter(t => norm(t.name || '').includes(nq) || norm(t.question || '').includes(nq));
+        items = matched.map(t => ({
+          href: `#/inbox`,
+          onClick: () => {
+            const card = $(`[data-reply="${t.id}"]`, current?.el)?.closest('.ticket');
+            if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.style.outline = '2px solid var(--teal)'; setTimeout(() => { card.style.outline = ''; }, 2000); }
+          },
+          html: `<div style="flex:1;min-width:0"><b>${mark(t.name)}</b><div class="muted small">${esc((t.question || '').slice(0, 60))}</div></div><span class="pill ${t.status === 'open' ? 'p-late' : 'p-present'}">${t.status === 'open' ? 'بانتظار الرد' : 'تم الرد'}</span>`
+        }));
+        $$('#live .ticket', current?.el).forEach(ticket => {
+          const text = ticket.textContent || '';
+          ticket.style.display = norm(text).includes(nq) ? '' : 'none';
+        });
+
+      } else if (secName === 'reports') {
+        const r = db.search(q, sc).students;
+        items = r.map(s => {
+          const st = db.statusOf(s.id).status;
+          return {
+            href: `#/student/${s.id}`,
+            html: `${avatar(s.name, st, db.photoOf(s.id))}<div style="flex:1;min-width:0"><b>${mark(s.name)}</b><div class="muted small">${esc(db.sectionShort(s.sectionId))} · رقم <span class="num">${s.no}</span></div></div>${pill(st)}`
+          };
+        });
+        const rq = $('#rq', current?.el);
+        if (rq && rq.value !== q) {
+          rq.value = q;
+          rq.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+      } else {
+        const r = db.search(q, sc).students;
+        items = r.map(s => {
+          const st = db.statusOf(s.id).status;
+          return {
+            href: `#/student/${s.id}`,
+            html: `${avatar(s.name, st, db.photoOf(s.id))}<div style="flex:1;min-width:0"><b>${mark(s.name)}</b><div class="muted small">${esc(db.sectionShort(s.sectionId))} · رقم <span class="num">${s.no}</span></div></div>${pill(st)}`
+          };
+        });
+      }
+    }
+
     sel = 0;
-    pop.innerHTML = items.length ? items.map((it, i) => `<div class="row ${i === sel ? 'on' : ''}" data-href="${it.href}">${it.html}</div>`).join('') : `<div class="empty">لا نتائج لـ «${esc(q)}»</div>`;
+    pop.innerHTML = items.length
+      ? items.map((it, i) => `<div class="row ${i === sel ? 'on' : ''}" data-idx="${i}" data-href="${it.href || ''}">${it.html}</div>`).join('')
+      : `<div class="empty">لا توجد نتائج في هذا القسم لـ «${esc(q)}»</div>`;
     pop.hidden = false;
   };
+
   input.addEventListener('input', run);
   input.addEventListener('keydown', e => {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; $$('.row', pop).forEach((r, i) => r.classList.toggle('on', i === sel)); }
-    if (e.key === 'Enter' && items[sel]) { go(items[sel].href); input.value = ''; pop.hidden = true; }
-    if (e.key === 'Escape') { input.value = ''; pop.hidden = true; input.blur(); }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      $$('.row', pop).forEach((r, i) => r.classList.toggle('on', i === sel));
+    }
+    if (e.key === 'Enter' && items[sel]) {
+      triggerItem(items[sel]);
+    }
+    if (e.key === 'Escape') {
+      input.value = '';
+      pop.hidden = true;
+      resetInPageFilters();
+      input.blur();
+    }
   });
-  pop.addEventListener('mousedown', e => { const r = e.target.closest('[data-href]'); if (r) { e.preventDefault(); go(r.dataset.href); input.value = ''; pop.hidden = true; } });
+  pop.addEventListener('mousedown', e => {
+    const r = e.target.closest('[data-idx]');
+    if (r) {
+      e.preventDefault();
+      const idx = +r.dataset.idx;
+      if (items[idx]) triggerItem(items[idx]);
+    }
+  });
   input.addEventListener('blur', () => setTimeout(() => { pop.hidden = true; }, 150));
 }
 document.addEventListener('keydown', e => {
