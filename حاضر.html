@@ -1733,9 +1733,9 @@ function seedMarks() {
     sheet('m4', 'اللغة العربية', 'الجملة الاسمية', 'monthly', 'امتحان الشهر الأول', 100, 'g1-ب', 't2', 'أ. سارة عادل', t - 2 * 24 * h, { 1002: 92 }),
   ];
 }
-function marks({ sections: secs, studentId, subject } = {}) {
+function marks({ sections: secs, studentId, subject, includeDrafts = false } = {}) {
   const sec = studentId ? student(studentId)?.sectionId : null;
-  return (S.marks || []).filter(m => (!secs || secs.includes(m.sectionId)) && (!sec || m.sectionId === sec) && (!subject || m.subject === subject)).sort((a, b) => b.ts - a.ts);
+  return (S.marks || []).filter(m => (!secs || secs.includes(m.sectionId)) && (!sec || m.sectionId === sec) && (!subject || m.subject === subject) && (includeDrafts || !m.draft)).sort((a, b) => b.ts - a.ts);
 }
 const markSheet = id => (S.marks || []).find(m => m.id === id);
 function sheetStats(m) {
@@ -1752,7 +1752,7 @@ function readAllMarks(key) {
   readerMarks(key).forEach(m => { const r = S.markReads[m.id] || (S.markReads[m.id] = []); if (!r.includes(key)) { r.push(key); ch = true; } });
   if (ch) emit('read');
 }
-function addMarks({ subject, lesson, examType, exam, max, sectionId, scores }, author) {
+function addMarks({ subject, lesson, examType, exam, max, sectionId, scores, draft = false }, author) {
   const errors = {};
   max = Number(max);
   if (!String(subject || '').trim()) errors.subject = 'اكتب اسم المادة.';
@@ -1766,16 +1766,99 @@ function addMarks({ subject, lesson, examType, exam, max, sectionId, scores }, a
     const n = Number(v); if (isNaN(n) || n < 0 || n > max) bad.push(sid); else clean[sid] = n;
   });
   if (bad.length) errors.scores = `${bad.length} درجة غير صحيحة: لازم تكون بين 0 و ${max || '؟'}.`;
-  else if (!Object.values(clean).some(v => v !== null)) errors.scores = 'اكتب درجة طالب واحد على الأقل.';
+  else if (!draft && !Object.values(clean).some(v => v !== null)) errors.scores = 'اكتب درجة طالب واحد على الأقل للنشر.';
   if (Object.keys(errors).length) return { ok: false, errors, bad };
-  const m = { id: 'm' + Date.now(), subject: subject.trim(), lesson: lesson.trim(), examType, exam: String(exam || '').trim() || EXAM_TYPES[examType], max, sectionId, by: author.id, byName: author.name, byUser: author.username || '', ts: now(), scores: clean, history: [] };
+  const m = {
+    id: 'm' + Date.now(),
+    subject: subject.trim(),
+    lesson: lesson.trim(),
+    examType,
+    exam: String(exam || '').trim() || EXAM_TYPES[examType],
+    max,
+    sectionId,
+    by: author.id,
+    byName: author.name,
+    byUser: author.username || '',
+    ts: now(),
+    scores: clean,
+    history: [],
+    draft: Boolean(draft),
+    publishedAt: draft ? null : now()
+  };
   S.marks.push(m);
-  S.students.filter(s => s.sectionId === sectionId && clean[s.id] != null).forEach(s => {
-    const body = `${m.subject} · ${m.lesson} · ${m.exam}: ${clean[s.id]} من ${max}`;
-    notify(guardian(s.guardianId).phone, { kind: 'mark', title: `درجة جديدة: ${first(s.name)}`, body, ts: m.ts, studentId: s.id });
-    if (s.phone) notify(s.phone, { kind: 'mark', title: 'درجة جديدة', body, ts: m.ts, studentId: s.id });
+  if (!draft) {
+    S.students.filter(s => s.sectionId === sectionId && clean[s.id] != null).forEach(s => {
+      const body = `${m.subject} · ${m.lesson} · ${m.exam}: ${clean[s.id]} من ${max}`;
+      const g = guardian(s.guardianId);
+      if (g) notify(g.phone, { kind: 'mark', title: `درجة جديدة: ${first(s.name)}`, body, ts: m.ts, studentId: s.id });
+      if (s.phone) notify(s.phone, { kind: 'mark', title: 'درجة جديدة', body, ts: m.ts, studentId: s.id });
+    });
+    log('نشر درجات', `${m.subject} · ${m.exam} · ${sectionLabel(sectionId)} · بواسطة ${author.name}`);
+  } else {
+    log('حفظ مسودة درجات', `${m.subject} · ${m.exam} · ${sectionLabel(sectionId)} · بواسطة ${author.name}`);
+  }
+  emit('marks');
+  return { ok: true, mark: m, draft: Boolean(draft) };
+}
+
+function publishMarks(sheetId, author) {
+  const m = markSheet(sheetId);
+  if (!m) return { ok: false, error: 'الامتحان غير موجود.' };
+  if (!canEditSheet(m, author.role, author.teacherId)) return { ok: false, error: 'ما عندك صلاحية لنشر هذا الامتحان.' };
+  m.draft = false;
+  m.publishedAt = now();
+  m.publishedBy = author.name;
+  m.publishedByUser = author.username || '';
+  S.students.filter(s => s.sectionId === m.sectionId && m.scores[s.id] != null).forEach(s => {
+    const body = `${m.subject} · ${m.lesson} · ${m.exam}: ${m.scores[s.id]} من ${m.max}`;
+    const g = guardian(s.guardianId);
+    if (g) notify(g.phone, { kind: 'mark', title: `درجة جديدة: ${first(s.name)}`, body, ts: m.publishedAt, studentId: s.id });
+    if (s.phone) notify(s.phone, { kind: 'mark', title: 'درجة جديدة', body, ts: m.publishedAt, studentId: s.id });
   });
-  log('نشر درجات', `${m.subject} · ${m.exam} · ${sectionLabel(sectionId)}`);
+  log('نشر درجات', `${m.subject} · ${m.exam} · ${sectionLabel(m.sectionId)} · بواسطة ${author.name}${author.username ? ' (' + author.username + ')' : ''}`);
+  emit('marks');
+  return { ok: true, mark: m };
+}
+
+function addStudentScore(sheetId, studentId, value, author) {
+  const m = markSheet(sheetId);
+  if (!m) return { ok: false, error: 'الامتحان غير موجود.' };
+  if (!canEditSheet(m, author.role, author.teacherId)) return { ok: false, error: 'ما عندك صلاحية لتعديل هذا الامتحان.' };
+  const n = Number(value);
+  if (isNaN(n) || n < 0 || n > m.max) return { ok: false, error: `الدرجة لازم تكون بين 0 و ${m.max}.` };
+  const st = student(studentId);
+  if (!st) return { ok: false, error: 'الطالب غير موجود.' };
+  const from = m.scores[studentId] ?? null;
+  m.scores[studentId] = n;
+  m.history = m.history || [];
+  const h = {
+    studentId,
+    from,
+    to: n,
+    action: from === null ? 'add' : 'edit',
+    reason: from === null ? 'إضافة نتيجة طالب' : 'تعديل درجة',
+    by: author.name,
+    byUser: author.username || '',
+    role: author.roleLabel || '',
+    ts: now()
+  };
+  m.history.unshift(h);
+  if (!m.draft) {
+    const body = `${m.subject} · ${m.lesson} · ${m.exam}: ${n} من ${m.max} · بواسطة ${author.name}`;
+    const g = guardian(st.guardianId);
+    if (g) notify(g.phone, { kind: 'mark', title: `درجة: ${first(st.name)}`, body, ts: h.ts, studentId });
+    if (st.phone) notify(st.phone, { kind: 'mark', title: 'درجة جديدة', body, ts: h.ts, studentId });
+  }
+  log('إضافة نتيجة طالب', `${st.name} · ${m.subject} · ${m.exam} · ${n}/${m.max} · ${author.name}`);
+  emit('marks');
+  return { ok: true, mark: m };
+}
+
+function deleteSheet(sheetId, author) {
+  const idx = (S.marks || []).findIndex(m => m.id === sheetId);
+  if (idx < 0) return { ok: false, error: 'الامتحان غير موجود.' };
+  const [m] = S.marks.splice(idx, 1);
+  log('حذف امتحان ودرجات', `${m.subject} · ${m.exam} · ${sectionLabel(m.sectionId)} · بواسطة ${author.name}`);
   emit('marks');
   return { ok: true, mark: m };
 }
@@ -1907,7 +1990,7 @@ function ensureFinals() {
     if ((S.marks || []).some(m => m.sectionId === sec.id && m.subject === sub && m.examType === 'final')) return;
     const t = S.teachers.find(x => x.subject === sub && x.sections.includes(sec.id));
     const scores = {}; S.students.filter(s => s.sectionId === sec.id).forEach(s => { scores[s.id] = Math.max(12, Math.min(100, Math.round(ability[s.id] * 100 + (r() - .5) * 28))); });
-    S.marks.push({ id: `fin-${sec.id}-${k}`, subject: sub, lesson: 'المنهج كامل', examType: 'final', exam: 'الامتحان النهائي (تجريبي)', max: 100, sectionId: sec.id, by: t?.id || 'admin', byName: t?.name || 'الإدارة', byUser: t?.id === 't1' ? 't1001' : '', ts: now() - 2 * 864e5, scores, history: [], demo: true });
+    S.marks.push({ id: `fin-${sec.id}-${k}`, subject: sub, lesson: 'المنهج كامل', examType: 'final', exam: 'الامتحان النهائي (تجريبي)', max: 100, sectionId: sec.id, by: t?.id || 'admin', byName: t?.name || 'الإدارة', byUser: t?.id === 't1' ? 't1001' : '', ts: now() - 2 * 864e5, scores, history: [], demo: true, draft: false, publishedAt: now() - 2 * 864e5 });
   }));
   IDX = null; save();
 }
@@ -1929,13 +2012,54 @@ function promotionOf(sid) {
   const subs = sectionSubjects(s.sectionId).map(x => subjectResult(sid, s.sectionId, x));
   const missing = subs.filter(x => x.missing); const failed = subs.filter(x => !x.missing && !x.pass);
   const anyMakeupDone = subs.some(x => x.makeup !== null);
-  let status = missing.length ? 'incomplete' : !failed.length ? 'pass' : (failed.length <= r.maxMakeup && !anyMakeupDone) ? 'makeup' : 'fail';
-  const ministerial = r.ministerial.includes(sec.gradeId);
-  const next = nextGradeOf(sec.gradeId);
+
+  // Manual override by administration
+  const override = S.promoOverrides?.[sid];
+
+  // Rule: From 1st Intermediate to 5th Preparatory (من الأول متوسط إلى الخامس إعدادي)
+  // According to Iraqi ministry regulations: Students who fail subjects sit Round 2 (الدور الثاني / مكمل)
+  // even if they failed all subjects!
+  const is1mTo5Prep = ['g1', 'g2', 'g3', 'g4', 'g5'].includes(sec?.gradeId) ||
+    /متوسط|أول متوسط|ثاني متوسط|ثالث متوسط|رابع إعدادي|خامس إعدادي|رابع اعدادي|خامس اعدادي/.test(grade(sec?.gradeId)?.name || '');
+
+  let status;
+  if (override && ['pass', 'makeup', 'fail'].includes(override.status)) {
+    status = override.status;
+  } else if (missing.length) {
+    status = 'incomplete';
+  } else if (!failed.length) {
+    status = 'pass';
+  } else if (is1mTo5Prep && !anyMakeupDone) {
+    // دور ثاني ولو راسب بجميع المواد (من الأول متوسط حتى الخامس إعدادي)
+    status = 'makeup';
+  } else if (failed.length <= r.maxMakeup && !anyMakeupDone) {
+    status = 'makeup';
+  } else {
+    status = 'fail';
+  }
+
+  const ministerial = r.ministerial.includes(sec?.gradeId);
+  const next = nextGradeOf(sec?.gradeId);
   const avg = subs.filter(x => !x.missing).length ? Math.round(subs.filter(x => !x.missing).reduce((a, x) => a + Math.max(x.score, x.makeup ?? 0), 0) / subs.filter(x => !x.missing).length) : null;
-  return { student: s, subjects: subs, failed, missing, passedN: subs.filter(x => x.pass).length, total: subs.length, status, ministerial, next, graduate: !next, avg };
+  return { student: s, subjects: subs, failed, missing, passedN: subs.filter(x => x.pass).length, total: subs.length, status, ministerial, next, graduate: !next, avg, overridden: Boolean(override) };
 }
-const PROMO_STATUS = { pass: 'ناجح', makeup: 'مكمل (دور ثاني)', fail: 'راسب', incomplete: 'ناقص درجات' };
+const PROMO_STATUS = { pass: 'ناجح', makeup: 'مكمل (دور ثاني)', fail: 'راسب (معيد)', incomplete: 'ناقص درجات' };
+
+function setStudentPromoStatus(sid, status, by) {
+  S.promoOverrides = S.promoOverrides || {};
+  if (!status || status === 'auto') {
+    delete S.promoOverrides[sid];
+    log('استعادة حالة الترحيل التلقائية', `${student(sid)?.name} · بواسطة ${by}`);
+  } else {
+    S.promoOverrides[sid] = { status, by, ts: now() };
+    log('تعديل حالة الطالب في الترحيل', `${student(sid)?.name} ← ${PROMO_STATUS[status] || status} · بواسطة ${by}`);
+  }
+  emit('student');
+  emit('promo');
+  return { ok: true };
+}
+
+const studentPromoOverride = sid => (S.promoOverrides || {})[sid] || null;
 function promotionBoard(secIds) {
   ensureFinals();
   return S.students.filter(s => !secIds || secIds.includes(s.sectionId)).map(s => promotionOf(s.id));
@@ -2119,7 +2243,7 @@ function saveAccount({ phone, name, admin, teacher, subject, sections: secs, dis
   return { ok: true };
 }
 
-return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, offDay, isHoliday, holidayName, addHoliday, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, eventById, evidenceOf, markManual, addExcuse, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, updateStudent, deleteStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
+return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, offDay, isHoliday, holidayName, addHoliday, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, eventById, evidenceOf, markManual, addExcuse, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, updateStudent, deleteStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, publishMarks, addStudentScore, deleteSheet, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, setStudentPromoStatus, studentPromoOverride, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
 })();
 
 
@@ -3710,34 +3834,67 @@ const marksView = {
   render(el) {
     const c = ctx();
     if (c.role === 'parent' || c.role === 'student') return this.renderReader(el);
-    el.innerHTML = topbar('الدرجات', sub(), can('marks') ? `<button class="btn pr" id="nm">${icon('plus', 18)}نشر درجات</button>` : '') + `
+    const canM = can('marks');
+    el.innerHTML = topbar('الدرجات', sub(), canM ? `
+      <button class="btn" id="btn-add-marks">${icon('plus', 18)}إضافة درجات (مسودة)</button>
+      <button class="btn pr" id="btn-pub-marks">${icon('send', 18)}نشر الدرجات</button>
+    ` : '') + `
       <div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
         <label class="field" style="min-width:200px">الشعبة<select class="input" id="msec"></select></label>
         <label class="field" style="min-width:180px">المادة<select class="input" id="msub"></select></label>
-        <div class="muted small" style="padding-bottom:10px;flex:1">الدرجات المنشورة توصل فوراً للطالب وولي أمره كإشعار.</div></div>
+        <div class="muted small" style="padding-bottom:10px;flex:1">أضف درجات طلابك كمسودة واكملها براحتك، وعندما تجهز اضغط «نشر الدرجات» لإشعار الطلاب وأولياء الأمور.</div></div>
       <div id="live" style="display:flex;flex-direction:column;gap:12px"></div>`;
-    $('#nm', el) && ($('#nm', el).onclick = () => marksModal());
+    $('#btn-add-marks', el)?.addEventListener('click', () => marksModal({ defaultDraft: true }));
+    $('#btn-pub-marks', el)?.addEventListener('click', () => publishModal());
     $('#msec', el).onchange = e => { markState.sec = e.target.value; this.update(el); };
     $('#msub', el).onchange = e => { markState.subj = e.target.value; this.update(el); };
-    el.addEventListener('click', e => { const m = e.target.closest('[data-sheet]'); if (m) sheetModal(db.markSheet(m.dataset.sheet)); });
+    el.addEventListener('click', e => {
+      const qp = e.target.closest('[data-quick-pub]');
+      if (qp) {
+        e.stopPropagation();
+        const r = db.publishMarks(qp.dataset.quickPub, actor());
+        if (r.ok) {
+          toast('تم نشر الدرجات', `${r.mark.subject} · ${r.mark.exam} · تم إشعار أولياء الأمور`);
+          this.update(el);
+        }
+        return;
+      }
+      const m = e.target.closest('[data-sheet]');
+      if (m) sheetModal(db.markSheet(m.dataset.sheet));
+    });
     this.update(el);
   },
   update(el) {
     const c = ctx(); if (c.role === 'parent' || c.role === 'student') return this.updateReader(el);
     const box = $('#live', el); if (!box) return;
     const sc = scope(); const secs = sc.sections ? db.sections().filter(s => sc.sections.includes(s.id)) : db.sections();
-    const all = db.marks({ sections: secs.map(s => s.id) });
+    const all = db.marks({ sections: secs.map(s => s.id), includeDrafts: true });
     const subjects = [...new Set(all.map(m => m.subject))];
     if (markState.sec && !secs.some(s => s.id === markState.sec)) markState.sec = '';
     if (markState.subj && !subjects.includes(markState.subj)) markState.subj = '';
     $('#msec', el).innerHTML = `<option value="">كل الشعب</option>` + secs.map(s => `<option value="${s.id}" ${s.id === markState.sec ? 'selected' : ''}>${esc(db.sectionLabel(s.id))}</option>`).join('');
     $('#msub', el).innerHTML = `<option value="">كل المواد</option>` + subjects.map(s => `<option ${s === markState.subj ? 'selected' : ''}>${esc(s)}</option>`).join('');
     const list = all.filter(m => (!markState.sec || m.sectionId === markState.sec) && (!markState.subj || m.subject === markState.subj));
-    box.innerHTML = list.length ? `<div class="grid g2">${list.map(m => { const st = db.sheetStats(m); const [bg] = markTone(st.avg, m.max); return `<button class="card" data-sheet="${m.id}" style="text-align:right;cursor:pointer;display:flex;flex-direction:column;gap:10px">
-      <div style="display:flex;gap:10px;align-items:center"><span class="ti" style="width:44px;height:44px;background:var(--brand);color:var(--on-brand)">${icon('grade', 22)}</span><div style="flex:1;min-width:0"><b>${esc(m.subject)} · ${esc(m.exam)}</b><div class="muted small">${esc(m.lesson)}</div></div><span class="pill p-quiet">${db.EXAM_TYPES[m.examType]}</span></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="pill p-left">${esc(db.sectionShort(m.sectionId))}</span><span class="small muted">${esc(m.byName)} · ${fmtDay(new Date(m.ts))}</span></div>
-      <div style="display:flex;gap:16px;align-items:center"><div style="flex:1;height:8px;border-radius:9px;background:var(--surface-300);overflow:hidden"><i style="display:block;height:100%;width:${st.pct}%;background:${bg}"></i></div><span class="small"><b class="num">${st.avg}</b> معدّل من ${m.max}</span><span class="small"><b class="num">${st.pass}/${st.count}</b> ناجح</span></div></button>`; }).join('')}</div>`
-      : '<div class="card empty">لا درجات منشورة بعد. اضغط «نشر درجات».</div>';
+    box.innerHTML = list.length ? `<div class="grid g2">${list.map(m => {
+      const st = db.sheetStats(m);
+      const [bg] = markTone(st.avg, m.max);
+      return `<button class="card" data-sheet="${m.id}" style="text-align:right;cursor:pointer;display:flex;flex-direction:column;gap:10px;${m.draft ? 'border:1.5px dashed var(--amber);background:#FFFDF8' : ''}">
+      <div style="display:flex;gap:10px;align-items:center">
+        <span class="ti" style="width:44px;height:44px;background:${m.draft ? 'var(--amber)' : 'var(--brand)'};color:${m.draft ? 'var(--on-amber)' : 'var(--on-brand)'}">${icon(m.draft ? 'bookmark' : 'grade', 22)}</span>
+        <div style="flex:1;min-width:0"><b>${esc(m.subject)} · ${esc(m.exam)}</b><div class="muted small">${esc(m.lesson)}</div></div>
+        ${m.draft ? '<span class="pill p-late" style="font-weight:700">مسودة (غير منشورة)</span>' : '<span class="pill p-present">منشورة ✓</span>'}
+        <span class="pill p-quiet">${db.EXAM_TYPES[m.examType]}</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span class="pill p-left">${esc(db.sectionShort(m.sectionId))}</span>
+        <span class="small muted">${esc(m.byName)} · ${fmtDay(new Date(m.ts))}</span>
+        ${m.draft ? `<span class="pill p-late num" style="margin-inline-start:auto">${st.count} طالباً مسجل</span>` : ''}
+      </div>
+      <div style="display:flex;gap:16px;align-items:center"><div style="flex:1;height:8px;border-radius:9px;background:var(--surface-300);overflow:hidden"><i style="display:block;height:100%;width:${st.pct}%;background:${bg}"></i></div><span class="small"><b class="num">${st.avg}</b> معدّل من ${m.max}</span><span class="small"><b class="num">${st.pass}/${st.count}</b> ناجح</span></div>
+      ${m.draft ? `<div style="display:flex;justify-content:flex-end;margin-top:2px"><span class="btn sm pr" data-quick-pub="${m.id}" style="padding:4px 10px">${icon('send', 13)}نشر الدرجات الآن</span></div>` : ''}
+      </button>`;
+    }).join('')}</div>`
+      : '<div class="card empty">لا توجد درجات مسجلة. اضغط «إضافة درجات (مسودة)» لبدء إدخال درجات الطلاب.</div>';
   },
   renderReader(el) {
     const c = ctx(); const stu = c.role === 'student';
@@ -3771,23 +3928,178 @@ const marksView = {
 function actor() { const c = ctx(); return { role: c.role, teacherId: c.roleInfo.teacherId, name: c.name, username: db.credOf(c.phone)?.username || '', roleLabel: c.roleInfo.label.split(' · ')[0] }; }
 const histLine = (h, withName = true) => { const st = db.student(h.studentId); const what = h.action === 'delete' ? `حذف الدرجة (كانت <b class="num">${h.from}</b>)` : h.action === 'add' ? `أضاف <b class="num">${h.to}</b>` : `عدّل من <b class="num">${h.from}</b> إلى <b class="num">${h.to}</b>`;
   return `<div class="row" style="align-items:flex-start"><span class="pill ${h.action === 'delete' ? 'p-absent' : 'p-late'}">${h.action === 'delete' ? 'حذف' : 'تعديل'}</span><div style="flex:1;min-width:0"><div>${withName ? `<b>${esc(st?.name || '')}</b>: ` : ''}${what}</div><div class="muted small">السبب: ${esc(h.reason)}</div><div class="small" style="margin-top:2px"><b>${esc(h.by)}</b>${h.byUser ? ` · <span class="num" dir="ltr" style="font-weight:700">${esc(h.byUser)}</span>` : ''}${h.role ? ` · ${esc(h.role)}` : ''}</div></div><span class="num small muted" style="white-space:nowrap">${fmtDay(new Date(h.ts))} · ${fmtTime(h.ts)}</span></div>`; };
+
 function sheetModal(m) {
   const me = actor(); const can = db.canEditSheet(m, me.role, me.teacherId);
   const draw = () => {
     const st = db.sheetStats(m); const studs = db.students(m.sectionId); const hist = m.history || [];
-    return `<div class="muted small">${esc(m.lesson)} · ${esc(db.sectionLabel(m.sectionId))} · نشره ${esc(m.byName)}${m.byUser ? ` (<span class="num" dir="ltr">${esc(m.byUser)}</span>)` : ''}</div>
+    return `
+    ${m.draft ? `<div class="card" style="background:var(--amber-soft);border:1px solid var(--amber);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+      <div><span class="pill p-late" style="font-weight:700">مسودة غير منشورة</span> <b>الدرجات غير معلنة للطلاب وأولياء الأمور</b><div class="small muted">أكمل رصد وتعديل درجات الطلاب، ثم اضغط «نشر الامتحان الآن».</div></div>
+      ${can ? `<button type="button" class="btn pr" id="pub-curr-sheet">${icon('send', 16)}نشر الامتحان الآن</button>` : ''}
+    </div>` : `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span class="pill p-present">منشورة معلنة ✓</span><span class="small muted">وصلت الإشعارات للطلاب وأولياء الأمور</span></div>`}
+    <div class="muted small">${esc(m.lesson)} · ${esc(db.sectionLabel(m.sectionId))} · بواسطة ${esc(m.byName)}${m.byUser ? ` (<span class="num" dir="ltr">${esc(m.byUser)}</span>)` : ''}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="pill p-quiet">المعدّل <b class="num">${st.avg}</b> من ${m.max}</span><span class="pill p-present">ناجح ${st.pass}</span><span class="pill p-absent">راسب ${st.count - st.pass}</span><span class="pill p-quiet">أعلى درجة ${st.top}</span>${hist.length ? `<span class="pill p-late">${hist.length} تعديل</span>` : ''}</div>
     ${can ? '' : '<div class="small muted">العرض بس. التعديل للمدرس اللي نشر الامتحان وللإدارة.</div>'}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 4px;padding-bottom:4px;border-bottom:1px solid var(--line)">
+      <b>قائمة درجات الطلاب (${studs.length})</b>
+      ${can ? `<button type="button" class="btn sm pr" id="add-stu-res-btn">${icon('plus', 14)}إضافة طالب / نتيجة</button>` : ''}
+    </div>
     <div style="max-height:40vh;overflow:auto">${studs.map(s => { const edited = hist.some(h => h.studentId === s.id); return `<div class="row">${avatar(s.name, '', db.photoOf(s.id))}<span style="flex:1"><b>${esc(s.name)}</b>${edited ? ' <span class="pill p-late" style="font-size:10px;padding:0 6px">معدّلة</span>' : ''}</span>${scoreChip(m.scores[s.id] ?? null, m.max)}${can ? `<button type="button" class="btn sm" data-edm="${s.id}">تعديل</button>` : ''}</div>`; }).join('')}</div>
-    ${hist.length ? `<div><b>سجل التعديلات</b><div class="small muted" style="margin:2px 0 4px">ينحفظ دائماً ولا يمكن حذفه.</div>${hist.map(h => histLine(h)).join('')}</div>` : ''}`;
+    ${hist.length ? `<div><b>سجل التعديلات</b><div class="small muted" style="margin:2px 0 4px">ينحفظ دائماً ولا يمكن حذفه.</div>${hist.map(h => histLine(h)).join('')}</div>` : ''}
+    ${can ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;border-top:1px solid var(--line);padding-top:8px">
+      ${m.draft ? `<button type="button" class="btn pr" id="pub-curr-sheet-btm">${icon('send', 16)}نشر الامتحان وإشعار أولياء الأمور</button>` : '<span></span>'}
+      <button type="button" class="btn sm danger" id="del-curr-sheet">${icon('trash', 14)}حذف الامتحان</button>
+    </div>` : ''}`;
   };
-  modal(`${m.subject} · ${m.exam}`, `<div id="shbody" style="display:flex;flex-direction:column;gap:12px">${draw()}</div>`, (el) => {
-    el.addEventListener('click', e => { const b = e.target.closest('[data-edm]'); if (b) editMarkModal(m, b.dataset.edm, () => { const box = $('#shbody', el); if (box) box.innerHTML = draw(); }); });
+  modal(`${m.subject} · ${m.exam}`, `<div id="shbody" style="display:flex;flex-direction:column;gap:12px">${draw()}</div>`, (el, close) => {
+    el.addEventListener('click', e => {
+      const b = e.target.closest('[data-edm]');
+      if (b) editMarkModal(m, b.dataset.edm, () => { const box = $('#shbody', el); if (box) box.innerHTML = draw(); });
+      if (e.target.closest('#add-stu-res-btn')) {
+        addStudentScoreModal(m, () => { const box = $('#shbody', el); if (box) box.innerHTML = draw(); });
+      }
+      if (e.target.closest('#pub-curr-sheet') || e.target.closest('#pub-curr-sheet-btm')) {
+        const r = db.publishMarks(m.id, me);
+        if (r.ok) {
+          toast('تم نشر الدرجات', `${m.subject} · ${m.exam} · تم إشعار أولياء الأمور والطلاب`);
+          const box = $('#shbody', el); if (box) box.innerHTML = draw();
+          if (current?.view?.update) current.view.update(current.el);
+        } else toast('تعذر النشر', r.error, 'absent');
+      }
+      if (e.target.closest('#del-curr-sheet')) {
+        if (confirm(`هل أنت متأكد من حذف امتحان «${m.subject} - ${m.exam}» وجميع درجاته؟`)) {
+          const r = db.deleteSheet(m.id, me);
+          if (r.ok) {
+            close();
+            toast('انحذف الامتحان', `${m.subject} · ${m.exam}`);
+            if (current?.view?.update) current.view.update(current.el);
+          }
+        }
+      }
+    });
   });
 }
+
+function addStudentScoreModal(m, done) {
+  const me = actor();
+  const studs = db.students(m.sectionId);
+  const withoutScore = studs.filter(s => m.scores[s.id] == null);
+  const list = withoutScore.length ? withoutScore : studs;
+
+  modal('إضافة طالب / نتيجة: ' + m.subject, `<form id="asf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+    <div class="muted small">${esc(m.subject)} · ${esc(m.exam)} · الشعبة: ${esc(db.sectionLabel(m.sectionId))}</div>
+    <label class="field" data-k="studentId">اختر الطالب
+      <select class="input" name="studentId">
+        ${list.map(s => `<option value="${s.id}">${esc(s.name)} (رقم ${s.no})${m.scores[s.id] != null ? ` - مسجل له حالياً: ${m.scores[s.id]}` : ''}</option>`).join('')}
+      </select>
+      <span class="help"></span>
+    </label>
+    <label class="field" data-k="value">الدرجة (من ${m.max})
+      <input class="input num" name="value" type="number" min="0" max="${m.max}" inputmode="decimal" placeholder="0 - ${m.max}" required>
+      <span class="help">من 0 إلى ${m.max}.</span>
+    </label>
+    ${m.draft ? '<div class="muted small">ملاحظة: الامتحان مسودة، فلن يتم إشعار ولي الأمر إلا عند نشر الامتحان بالكامل.</div>' : '<div class="muted small">ملاحظة: الامتحان منشور، وسيصل إشعار فوري لولي الأمر بهذه النتيجة.</div>'}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+      <button type="button" class="btn" data-close>إلغاء</button>
+      <button class="btn pr" style="min-height:44px">${icon('check', 16)}إضافة النتيجة</button>
+    </div>
+  </form>`, (el, close) => {
+    const f = $('#asf', el);
+    f.onsubmit = e => {
+      e.preventDefault();
+      const sid = f.studentId.value;
+      const val = f.value.value;
+      if (val === '' || isNaN(val) || Number(val) < 0 || Number(val) > m.max) {
+        const x = $('[data-k="value"]', el);
+        x.classList.add('err');
+        $('.help', x).textContent = `الدرجة لازم تكون بين 0 و ${m.max}.`;
+        return;
+      }
+      const r = db.addStudentScore(m.id, sid, Number(val), me);
+      if (!r.ok) {
+        toast('خطأ', r.error, 'absent');
+        return;
+      }
+      close();
+      done();
+      toast('أُضيفت النتيجة', `${db.student(sid)?.name} · ${val} من ${m.max}`);
+    };
+  });
+}
+
+function publishModal() {
+  const sc = scope();
+  const secs = sc.sections ? db.sections().filter(s => sc.sections.includes(s.id)) : db.sections();
+  const drafts = db.marks({ sections: secs.map(s => s.id), includeDrafts: true }).filter(m => m.draft);
+
+  if (!drafts.length) {
+    modal('نشر الدرجات', `<div style="display:flex;flex-direction:column;gap:14px">
+      <div class="card" style="background:var(--teal-soft);border:1px solid var(--teal);padding:14px">
+        <b>جميع الامتحانات منشورة حالياً ✓</b>
+        <div class="small muted" style="margin-top:4px">لا توجد مسودات غير منشورة بانتظار النشر. يمكنك إضافة درجات جديدة أو نشر امتحان جديد الآن.</div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" data-close>إغلاق</button>
+        <button class="btn pr" id="new-pub-btn">${icon('plus', 16)}رصد ونشر امتحان جديد</button>
+      </div>
+    </div>`, (m, close) => {
+      $('#new-pub-btn', m)?.addEventListener('click', () => { close(); marksModal({ defaultDraft: false }); });
+    });
+    return;
+  }
+
+  modal('نشر الدرجات المعلّقة', `<div style="display:flex;flex-direction:column;gap:12px">
+    <div class="muted small">لديك <b>${drafts.length}</b> امتحانات محفوظة كمسودة لم تُنشر بعد للطلاب وأولياء الأمور:</div>
+    <div style="max-height:50vh;overflow:auto;display:flex;flex-direction:column;gap:8px">
+      ${drafts.map(d => {
+        const st = db.sheetStats(d);
+        return `<div class="card" style="padding:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;border:1px solid var(--amber)">
+          <span class="ti" style="width:40px;height:40px;background:var(--amber-soft);color:var(--amber-ink)">${icon('grade', 20)}</span>
+          <div style="flex:1;min-width:180px">
+            <b>${esc(d.subject)} · ${esc(d.exam)}</b>
+            <div class="muted small">${esc(db.sectionLabel(d.sectionId))} · ${st.count} طالباً مرصوداً · أُضيف بواسطة ${esc(d.byName)}</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button type="button" class="btn sm" data-view-draft="${d.id}">عرض وتعديل</button>
+            <button type="button" class="btn sm pr" data-pub-one="${d.id}">${icon('send', 14)}نشر الآن</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-top:6px">
+      <button class="btn" data-close>إغلاق</button>
+      <button class="btn pr" id="pub-all-drafts">${icon('send', 16)}نشر جميع المسودات (${drafts.length})</button>
+    </div>
+  </div>`, (m, close) => {
+    m.addEventListener('click', e => {
+      const v = e.target.closest('[data-view-draft]');
+      if (v) { close(); sheetModal(db.markSheet(v.dataset.viewDraft)); return; }
+      const p = e.target.closest('[data-pub-one]');
+      if (p) {
+        const me = actor();
+        const r = db.publishMarks(p.dataset.pubOne, me);
+        if (r.ok) {
+          toast('تم نشر الدرجات', `${r.mark.subject} · ${r.mark.exam} · تم إشعار أولياء الأمور`);
+          close();
+          if (current?.view?.update) current.view.update(current.el);
+        }
+        return;
+      }
+      if (e.target.closest('#pub-all-drafts')) {
+        const me = actor();
+        let cnt = 0;
+        drafts.forEach(d => { if (db.publishMarks(d.id, me).ok) cnt++; });
+        toast('تم نشر جميع المسودات', `تم نشر ${cnt} امتحانات وإشعار جميع أولياء الأمور بنجاح`);
+        close();
+        if (current?.view?.update) current.view.update(current.el);
+      }
+    });
+  });
+}
+
 function editMarkModal(m, studentId, done) {
   const s = db.student(studentId); const cur = m.scores[studentId] ?? null; const me = actor();
-  const scrimCount = document.querySelectorAll('.scrim').length;
   modal('تعديل درجة: ' + s.name, `<form id="emf" style="display:flex;flex-direction:column;gap:12px" novalidate>
     <div class="muted small">${esc(m.subject)} · ${esc(m.exam)} · الدرجة الحالية: <b class="num">${cur ?? 'لا توجد'}</b> من ${m.max}</div>
     <label class="field" data-k="value">الدرجة الجديدة<input class="input num" name="value" type="number" min="0" max="${m.max}" value="${cur ?? ''}" inputmode="decimal"><span class="help">من 0 إلى ${m.max}.</span></label>
@@ -3805,14 +4117,15 @@ function editMarkModal(m, studentId, done) {
     $('#delm', el)?.addEventListener('click', () => submit(null));
   });
 }
-function marksModal() {
+
+function marksModal({ defaultDraft = true } = {}) {
   const c = ctx(); const sc = scope();
   const secs = sc.sections ? db.sections().filter(s => sc.sections.includes(s.id)) : db.sections();
   const t = c.role === 'teacher' ? db.teacher(c.roleInfo.teacherId) : null;
   const author = { ...(t ? { id: t.id, name: t.name } : { id: c.role, name: c.name }), username: db.credOf(c.phone)?.username || '' };
   let examType = 'daily';
   const defMax = { daily: 10, quiz: 20, monthly: 100, mid: 100, final: 100 };
-  modal('نشر درجات', `<form id="mf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+  modal(defaultDraft ? 'إضافة درجات (مسودة)' : 'رصد ونشر درجات', `<form id="mf" style="display:flex;flex-direction:column;gap:12px" novalidate>
     <div class="grid g2" style="gap:12px">
       <label class="field" data-k="subject">المادة<input class="input" name="subject" value="${esc(t?.subject || '')}" placeholder="مثال: الرياضيات" ${t?.subject ? 'readonly' : ''}><span class="help">${t?.subject ? 'مادتك المسجّلة.' : ''}</span></label>
       <label class="field" data-k="sectionId">الشعبة<select class="input" name="sectionId">${secs.map(s => `<option value="${s.id}">${esc(db.sectionLabel(s.id))}</option>`).join('')}</select><span class="help"></span></label>
@@ -3823,20 +4136,25 @@ function marksModal() {
       <label class="field">اسم الامتحان (اختياري)<input class="input" name="exam" placeholder="مثال: امتحان الشهر الأول"></label>
       <label class="field" data-k="max">الدرجة العظمى<input class="input num" name="max" type="number" min="1" value="${defMax[examType]}"><span class="help"></span></label>
     </div>
-    <div class="field" data-k="scores"><div style="display:flex;align-items:center;gap:8px">الدرجات<span class="muted small" style="flex:1">اترك الحقل فارغ للطالب اللي ما امتحن.</span><button type="button" class="btn sm" id="fillmax">الكل الدرجة العظمى</button></div>
+    <div class="field" data-k="scores"><div style="display:flex;align-items:center;gap:8px">الدرجات<span class="muted small" style="flex:1">اترك الحقل فارغ للطالب اللي ما امتحن. تقدر تكملهم بعدين.</span><button type="button" class="btn sm" id="fillmax">الكل الدرجة العظمى</button></div>
       <div id="slist" style="max-height:38vh;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:0 10px"></div><span class="help"></span></div>
-    <button class="btn pr" style="min-height:48px">نشر وإرسال للطلاب وأولياء الأمور</button></form>`, (m, close) => {
+    <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px">
+      <button type="button" class="btn" data-close>إلغاء</button>
+      <button type="button" class="btn" id="btn-save-draft" style="font-weight:700">${icon('bookmark', 16)}حفظ كمسودة (بدون نشر)</button>
+      <button type="submit" class="btn pr" id="btn-save-pub" style="font-weight:700">${icon('send', 16)}نشر وإرسال للطلاب وأولياء الأمور</button>
+    </div></form>`, (m, close) => {
     const f = $('#mf', m);
     const drawList = () => { const sid = f.sectionId.value; $('#slist', m).innerHTML = db.students(sid).map(s => `<div class="row" style="padding:6px 0"><span style="flex:1"><b>${esc(s.name)}</b></span><input class="input num" data-score="${s.id}" type="number" inputmode="decimal" min="0" style="width:90px;min-height:38px;text-align:center" aria-label="درجة ${esc(s.name)}"></div>`).join(''); };
     drawList(); f.sectionId.onchange = drawList;
     m.addEventListener('click', e => {
       const b = e.target.closest('[data-et]'); if (b) { examType = b.dataset.et; $$('[data-et]', m).forEach(x => x.setAttribute('aria-pressed', x === b)); f.max.value = defMax[examType]; }
       if (e.target.closest('#fillmax')) $$('[data-score]', m).forEach(i => { i.value = f.max.value; });
+      if (e.target.closest('#btn-save-draft')) doSubmit(true);
+      if (e.target.closest('#btn-save-pub')) doSubmit(false);
     });
-    f.onsubmit = e => {
-      e.preventDefault();
+    const doSubmit = (asDraft) => {
       const scores = Object.fromEntries($$('[data-score]', m).map(i => [i.dataset.score, i.value]));
-      const r = db.addMarks({ subject: f.subject.value, lesson: f.lesson.value, examType, exam: f.exam.value, max: f.max.value, sectionId: f.sectionId.value, scores }, author);
+      const r = db.addMarks({ subject: f.subject.value, lesson: f.lesson.value, examType, exam: f.exam.value, max: f.max.value, sectionId: f.sectionId.value, scores, draft: asDraft }, author);
       $$('.field', m).forEach(x => { x.classList.remove('err'); const h = $('.help', x); if (h && x.dataset.k && h.dataset.orig == null) h.dataset.orig = h.textContent; if (h && x.dataset.k) h.textContent = h.dataset.orig || ''; });
       $$('[data-score]', m).forEach(i => i.style.borderColor = '');
       if (!r.ok) {
@@ -3844,8 +4162,15 @@ function marksModal() {
         (r.bad || []).forEach(id => { const i = $(`[data-score="${id}"]`, m); if (i) i.style.borderColor = 'var(--red-ink)'; });
         return;
       }
-      close(); toast('نُشرت الدرجات', `${r.mark.subject} · ${r.mark.exam} · وصل إشعار للطلاب وأولياء الأمور`);
+      close();
+      if (asDraft) {
+        toast('حُفظت المسودة', `${r.mark.subject} · ${r.mark.exam} · الدرجات محفوظة كمسودة وغير معلنة بعد`);
+      } else {
+        toast('نُشرت الدرجات', `${r.mark.subject} · ${r.mark.exam} · وصل إشعار للطلاب وأولياء الأمور`);
+      }
+      if (current?.view?.update) current.view.update(current.el);
     };
+    f.onsubmit = e => { e.preventDefault(); doSubmit(false); };
   });
 }
 
@@ -4133,32 +4458,61 @@ const timetableView = {
 const prm = { f: 'all', sec: '', q: '' };
 const PROMO_PILL = { pass: 'p-present', makeup: 'p-late', fail: 'p-absent', incomplete: 'p-pending' };
 function promoDetail(id) {
-  const p = db.promotionOf(id); const r = db.promoRules(); const s = p.student;
-  modal(`نتيجة ${s.name}`, `<div style="display:flex;flex-direction:column;gap:12px">
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${avatar(s.name, '', db.photoOf(s.id))}<div style="flex:1"><b>${esc(db.sectionLabel(s.sectionId))}</b><div class="muted small">ناجح بـ ${p.passedN} من ${p.total} مواد${p.avg !== null ? ` · المعدل ${p.avg}` : ''}</div></div><span class="pill ${PROMO_PILL[p.status]}">${db.PROMO_STATUS[p.status]}</span></div>
+  const p = db.promotionOf(id); const r = db.promoRules(); const s = p.student; const c = ctx();
+  modal(`نتيجة الطالب: ${s.name}`, `<div style="display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${avatar(s.name, '', db.photoOf(s.id))}<div style="flex:1"><b>${esc(db.sectionLabel(s.sectionId))}</b><div class="muted small">ناجح بـ ${p.passedN} من ${p.total} مواد${p.avg !== null ? ` · المعدل ${p.avg}` : ''}</div></div><span class="pill ${PROMO_PILL[p.status]}">${db.PROMO_STATUS[p.status]}</span>${p.overridden ? ' <span class="pill p-quiet" style="font-size:11px">تعديل يدوي</span>' : ''}</div>
+    <div class="card" style="padding:10px 14px;background:var(--surface-300);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div><b>تعديل قرار الطالب يدوياً:</b><div class="small muted">اضغط لتغيير الحالة مباشرة، أو استعادة الاحتساب التلقائي.</div></div>
+      <div style="display:inline-flex;gap:4px">
+        <button type="button" class="btn sm" data-mpromo="pass" style="${p.status === 'pass' ? 'background:var(--teal);color:#fff;font-weight:700' : ''}">${icon('check', 13)} ناجح</button>
+        <button type="button" class="btn sm" data-mpromo="makeup" style="${p.status === 'makeup' ? 'background:var(--amber);color:#fff;font-weight:700' : ''}">${icon('clock', 13)} مكمل (دور ثاني)</button>
+        <button type="button" class="btn sm" data-mpromo="fail" style="${p.status === 'fail' ? 'background:var(--red);color:#fff;font-weight:700' : ''}">${icon('x', 13)} راسب (معيد)</button>
+        ${p.overridden ? `<button type="button" class="btn sm" data-mpromo="auto">استعادة التلقائي</button>` : ''}
+      </div>
+    </div>
     <div class="tablewrap"><table><thead><tr><th>المادة</th><th>الدرجة</th><th>الدور الثاني</th><th>النتيجة</th></tr></thead><tbody>
       ${p.subjects.map(x => `<tr><td>${esc(x.subject)}</td><td class="num" style="${x.score !== null && x.score < r.pass ? 'color:var(--red-ink);font-weight:700' : ''}">${x.score ?? '—'}</td><td class="num">${x.makeup ?? '—'}</td><td>${x.missing ? '<span class="pill p-pending">ما انرصدت</span>' : x.pass ? `<span class="pill p-present">ناجح${x.viaMakeup ? ' بالدور الثاني' : ''}</span>` : '<span class="pill p-absent">راسب</span>'}</td></tr>`).join('')}
     </tbody></table></div>
-    <div class="muted small">${p.status === 'pass' ? (p.graduate ? 'آخر صف بالمدرسة: يتخرّج.' : p.ministerial ? 'صف وزاري: يدخل الامتحان الوزاري، ويترحّل بعد النتيجة.' : `يترحّل إلى ${esc(p.next.name)}.`) : p.status === 'makeup' ? `يدخل الدور الثاني بـ ${p.failed.length} ${p.failed.length === 1 ? 'مادة' : 'مواد'}. المدرس يرصد درجته من «الدرجات» بنوع «الدور الثاني».` : p.status === 'fail' ? `راسب بـ ${p.failed.length} مواد، ويعيد السنة.` : 'باقي مواد ما انرصدت درجتها النهائية.'}</div>
-    <button class="btn" data-close>تمام</button></div>`);
+    <div class="muted small">${p.status === 'pass' ? (p.graduate ? 'آخر صف بالمدرسة: يتخرّج.' : p.ministerial ? 'صف وزاري: يدخل الامتحان الوزاري، ويترحّل بعد النتيجة.' : `يترحّل إلى ${esc(p.next.name)}.`) : p.status === 'makeup' ? `يدخل الدور الثاني بـ ${p.failed.length} ${p.failed.length === 1 ? 'مادة' : 'مواد'}. (ملاحظة: لصفوف من الأول متوسط إلى الخامس إعدادي يحق للطالب دور ثاني بجميع المواد).` : p.status === 'fail' ? `راسب بـ ${p.failed.length} مواد، ويعيد السنة.` : 'باقي مواد ما انرصدت درجتها النهائية.'}</div>
+    <button class="btn" data-close>تمام</button></div>`, (m, close) => {
+    m.addEventListener('click', e => {
+      const b = e.target.closest('[data-mpromo]');
+      if (b) {
+        db.setStudentPromoStatus(s.id, b.dataset.mpromo, c.name);
+        close();
+        toast('تعدّلت حالة الطالب', `${s.name} ← ${db.PROMO_STATUS[b.dataset.mpromo] || 'التلقائي'}`);
+        if (current?.view?.update) current.view.update(current.el);
+      }
+    });
+  });
 }
 const promotionView = {
   render(el) {
     const c = ctx(); const staffAll = ['owner', 'admin'].includes(c.role); const r = db.promoRules();
     el.innerHTML = topbar('ترحيل الطلبة', 'النتائج تنحسب تلقائياً من قسم الدرجات، والترحيل للصف الجاي بضغطة وحدة') + `
-      ${staffAll ? `<details class="card rules"><summary><b>قواعد الترحيل</b><span class="muted small">النجاح من ${r.pass} · الدور الثاني لحد ${r.maxMakeup} مواد · ${r.method === 'final' ? 'الامتحان النهائي' : 'معدل كل الامتحانات'}${r.auto && r.autoDate ? ` · ترحيل تلقائي يوم ${r.autoDate.split('-').reverse().join('/')}` : ''}</span></summary>
+      ${staffAll ? `<details class="card rules"><summary><b>قواعد الترحيل والقرارات</b><span class="muted small">النجاح من ${r.pass} · الدور الثاني لحد ${r.maxMakeup} مواد (من الأول متوسط للخامس إعدادي دور ثاني بجميع المواد) · ${r.method === 'final' ? 'الامتحان النهائي' : 'معدل كل الامتحانات'}${r.auto && r.autoDate ? ` · ترحيل تلقائي يوم ${r.autoDate.split('-').reverse().join('/')}` : ''}</span></summary>
         <form id="prf" class="grid g4" style="gap:12px;margin-top:12px;align-items:end">
           <label class="field">درجة النجاح (من 100)<input class="input num" type="number" name="pass" min="1" max="100" value="${r.pass}"></label>
           <label class="field">الدور الثاني لحد<select class="input" name="maxMakeup">${[0, 1, 2, 3, 4, 5].map(n => `<option value="${n}" ${n === r.maxMakeup ? 'selected' : ''}>${n === 0 ? 'ماكو دور ثاني' : n + (n === 1 ? ' مادة' : ' مواد')}</option>`).join('')}</select></label>
           <label class="field">طريقة الاحتساب<select class="input" name="method"><option value="final" ${r.method === 'final' ? 'selected' : ''}>درجة الامتحان النهائي</option><option value="avg" ${r.method === 'avg' ? 'selected' : ''}>معدل كل الامتحانات</option></select></label>
           <label class="field">ترحيل تلقائي بتاريخ<input class="input num" type="date" name="autoDate" value="${r.autoDate}"><span class="help">فارغ = الترحيل يدوي بزر</span></label>
-          <div class="small muted" style="grid-column:1/-1">المواد اللي ما تنحسب: ${r.noCount.join('، ')}. الصفوف الوزارية (الثالث متوسط والسادس إعدادي) ما تترحّل هنا، تنتظر نتيجة الوزاري.</div>
+          <div class="small muted" style="grid-column:1/-1">المواد اللي ما تنحسب: ${r.noCount.join('، ')}. بموجب التعليمات الوزارية، طلبة الأول متوسط حتى الخامس إعدادي مؤهلون للدور الثاني حتى لو رسبوا بجميع المواد، ويمكن تعديل حالة أي طالب يدوياً بزر.</div>
           <button class="btn pr" style="grid-column:1/-1;justify-self:start">حفظ القواعد</button></form></details>` : ''}
       <div id="live" style="display:flex;flex-direction:column;gap:14px"></div>`;
     $('#prf', el) && ($('#prf', el).onsubmit = e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); db.setPromoRules({ pass: +f.pass, maxMakeup: +f.maxMakeup, method: f.method, autoDate: f.autoDate, auto: !!f.autoDate }, c.name); toast('انحفظت قواعد الترحيل', 'النتائج انحسبت من جديد'); this.render(el); });
     el.addEventListener('click', e => {
+      const setP = e.target.closest('[data-set-promo]');
+      if (setP) {
+        e.stopPropagation();
+        const sid = setP.dataset.setPromo;
+        const newSt = setP.dataset.st;
+        db.setStudentPromoStatus(sid, newSt, c.name);
+        toast('تعدّلت حالة الطالب', `${db.student(sid)?.name} ← ${db.PROMO_STATUS[newSt]}`);
+        this.update(el, true);
+        return;
+      }
       const f = e.target.closest('[data-pf]'); if (f) { prm.f = f.dataset.pf; this.update(el); }
-      const d = e.target.closest('[data-pd]'); if (d) promoDetail(d.dataset.pd);
+      const d = e.target.closest('[data-pd]'); if (d && !e.target.closest('button')) promoDetail(d.dataset.pd);
       if (e.target.closest('[data-run]')) this.confirmRun(el);
       if (e.target.closest('[data-undo]')) { const r2 = db.undoPromotion(c.name); if (r2.ok) { toast('انلغى آخر ترحيل', `${r2.n} طالب رجعوا لشعبهم`); this.update(el); } }
     });
@@ -4170,7 +4524,7 @@ const promotionView = {
     const board = db.promotionBoard(); const n = k => board.filter(p => p.status === k).length;
     const moving = board.filter(p => p.status === 'pass' && !p.ministerial && p.next).length, grads = board.filter(p => p.status === 'pass' && !p.next).length, mins = board.filter(p => p.status === 'pass' && p.ministerial && p.next).length;
     modal('ترحيل الطلبة', `<div style="display:flex;flex-direction:column;gap:12px">
-      <div class="grid g2" style="gap:8px">${[['يترحّلون للصف الجاي', moving, 'p-present'], ['يتخرّجون', grads, 'p-present'], ['مؤهلين للوزاري', mins, 'p-left'], ['دور ثاني', n('makeup'), 'p-late'], ['راسبين (يعيدون)', n('fail'), 'p-absent'], ['ناقص درجات (ما يتحركون)', n('incomplete'), 'p-pending']].map(([l, v, cl]) => `<div class="row" style="border:1px solid var(--line);border-radius:10px;padding:8px 10px"><span style="flex:1">${l}</span><span class="pill ${cl} num">${v}</span></div>`).join('')}</div>
+      <div class="grid g2" style="gap:8px">${[['يترحّلون للصف الجاي', moving, 'p-present'], ['يتخرّجون', grads, 'p-present'], ['مؤهلين للوزاري', mins, 'p-left'], ['دور ثاني', n('makeup'), 'p-late'], ['راسبين (معيدين)', n('fail'), 'p-absent'], ['ناقص درجات (ما يتحركون)', n('incomplete'), 'p-pending']].map(([l, v, cl]) => `<div class="row" style="border:1px solid var(--line);border-radius:10px;padding:8px 10px"><span style="flex:1">${l}</span><span class="pill ${cl} num">${v}</span></div>`).join('')}</div>
       <div class="muted small">كل طالب ينقل لنفس اسم الشعبة بالصف الجاي (وإذا الشعبة مو موجودة تنسوى). يوصل إشعار لكل ولي أمر بنتيجة ابنه. تكدر تتراجع عن الترحيل بعدين.</div>
       <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-close>إلغاء</button><button class="btn pr" id="okrun">${icon('send', 16)}ترحيل الآن</button></div></div>`, (m, close) => {
       $('#okrun', m).onclick = () => { const r = db.runPromotion(ctx().name); close(); toast('تم الترحيل', `${r.rec.moved.length} ترحّل · ${r.rec.graduated.length} تخرّج · ${r.rec.makeup.length} دور ثاني`); this.update(el); };
@@ -4189,8 +4543,8 @@ const promotionView = {
     const html = `
       <div class="grid g4 kpis">
         ${kpi('check', 't', 'ناجحين', cnt('pass'), `من ${board.length} طالب`)}
-        ${kpi('clock', 'a', 'دور ثاني', cnt('makeup'), `لحد ${db.promoRules().maxMakeup} مواد`)}
-        ${kpi('alert', 'r', 'راسبين', cnt('fail'), 'يعيدون السنة')}
+        ${kpi('clock', 'a', 'دور ثاني', cnt('makeup'), `لحد ${db.promoRules().maxMakeup} مواد (أو كل المواد 1م-5ع)`)}
+        ${kpi('alert', 'r', 'راسبين (معيدين)', cnt('fail'), 'يعيدون السنة')}
         ${kpi('report', 't', 'ناقص درجات', cnt('incomplete'), 'مواد ما انرصدت')}
       </div>
       ${staffAll ? `<div class="card promobar"><div style="flex:1;min-width:220px"><b>${last && !last.undone ? `آخر ترحيل: ${esc(fmtDay(new Date(last.ts)))} · ${esc(last.by)}` : 'الترحيل بعده ما صار هالسنة'}</b><div class="muted small">${last && !last.undone ? `ترحّل ${last.moved.length} · تخرّج ${last.graduated.length} · دور ثاني ${last.makeup.length} · راسب ${last.stayed.length}` : 'اضغط «ترحيل الناجحين» وكل طالب ناجح ينتقل للصف الجاي، أو حدد تاريخ للترحيل التلقائي من القواعد.'}</div></div>
@@ -4204,8 +4558,8 @@ const promotionView = {
           <label class="field" style="min-width:170px">الشعبة<select class="input" id="prs"><option value="">كل الشعب</option>${secs.map(s => `<option value="${s.id}" ${s.id === prm.sec ? 'selected' : ''}>${esc(db.sectionShort(s.id))}</option>`).join('')}</select></label>
           <label class="field" style="min-width:170px">بحث<input class="input" id="prq" value="${esc(prm.q)}" placeholder="اسم الطالب"></label></div>
         <div class="tablewrap" id="prlist"></div></div>`;
-    const rows = `<table><thead><tr><th>الطالب</th><th>الشعبة</th><th>المواد</th><th>الراسب بيها</th><th>المعدل</th><th>النتيجة</th><th>بعد الترحيل</th></tr></thead><tbody>
-      ${list.slice(0, 200).map(p => `<tr class="prrow" data-pd="${p.student.id}"><td><span style="display:flex;gap:8px;align-items:center">${avatar(p.student.name, '', db.photoOf(p.student.id))}<b>${esc(p.student.name)}</b></span></td><td class="muted">${esc(db.sectionShort(p.student.sectionId))}</td><td class="num">${p.passedN}/${p.total}</td><td>${p.failed.length ? p.failed.map(x => `<span class="fsub">${esc(x.subject)} <b class="num">${x.score}</b></span>`).join(' ') : p.missing.length ? `<span class="muted small">ناقص: ${p.missing.map(x => esc(x.subject)).join('، ')}</span>` : '—'}</td><td class="num">${p.avg ?? '—'}</td><td><span class="pill ${PROMO_PILL[p.status]}">${db.PROMO_STATUS[p.status]}</span></td><td class="small">${p.status !== 'pass' ? (p.status === 'fail' ? 'يعيد السنة' : '—') : !p.next ? 'يتخرّج' : p.ministerial ? 'الامتحان الوزاري' : esc(p.next.name)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">ماكو طلاب بهذا الاختيار</td></tr>'}</tbody></table>`;
+    const rows = `<table><thead><tr><th>الطالب</th><th>الشعبة</th><th>المواد</th><th>الراسب بيها</th><th>المعدل</th><th>النتيجة</th><th>تحديد / تعديل الحالة</th><th>بعد الترحيل</th></tr></thead><tbody>
+      ${list.slice(0, 200).map(p => `<tr class="prrow" data-pd="${p.student.id}"><td><span style="display:flex;gap:8px;align-items:center">${avatar(p.student.name, '', db.photoOf(p.student.id))}<b>${esc(p.student.name)}</b></span></td><td class="muted">${esc(db.sectionShort(p.student.sectionId))}</td><td class="num">${p.passedN}/${p.total}</td><td>${p.failed.length ? p.failed.map(x => `<span class="fsub">${esc(x.subject)} <b class="num">${x.score}</b></span>`).join(' ') : p.missing.length ? `<span class="muted small">ناقص: ${p.missing.map(x => esc(x.subject)).join('، ')}</span>` : '—'}</td><td class="num">${p.avg ?? '—'}</td><td><span class="pill ${PROMO_PILL[p.status]}">${db.PROMO_STATUS[p.status]}</span>${p.overridden ? ' <span class="pill p-quiet" style="font-size:10px;padding:0 5px" title="تم تعديلها يدوياً">معدّلة</span>' : ''}</td><td style="white-space:nowrap" onclick="event.stopPropagation()"><div style="display:inline-flex;gap:3px;align-items:center"><button type="button" class="btn sm ${p.status === 'pass' ? 'pr' : ''}" data-set-promo="${p.student.id}" data-st="pass" title="تحديد كناجح" style="${p.status === 'pass' ? 'background:var(--teal);color:#fff;font-weight:700' : 'padding:3px 7px'}">${icon('check', 13)} ناجح</button><button type="button" class="btn sm ${p.status === 'makeup' ? 'pr' : ''}" data-set-promo="${p.student.id}" data-st="makeup" title="تحديد كمكمل (دور ثاني)" style="${p.status === 'makeup' ? 'background:var(--amber);color:#fff;font-weight:700' : 'padding:3px 7px'}">${icon('clock', 13)} مكمل (دور ثاني)</button><button type="button" class="btn sm danger ${p.status === 'fail' ? 'danger-solid' : ''}" data-set-promo="${p.student.id}" data-st="fail" title="تحديد كراسب (معيد)" style="${p.status === 'fail' ? 'background:var(--red);color:#fff;font-weight:700' : 'padding:3px 7px'}">${icon('x', 13)} راسب (معيد)</button></div></td><td class="small">${p.status !== 'pass' ? (p.status === 'fail' ? 'يعيد السنة' : 'دور ثاني') : !p.next ? 'يتخرّج' : p.ministerial ? 'الامتحان الوزاري' : esc(p.next.name)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">ماكو طلاب بهذا الاختيار</td></tr>'}</tbody></table>`;
     if (keepFocus && $('#prlist', el)) { $('#prlist', el).innerHTML = rows; return; }
     box.innerHTML = html; $('#prlist', el).innerHTML = rows;
   },

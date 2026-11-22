@@ -883,9 +883,9 @@ function seedMarks() {
     sheet('m4', 'اللغة العربية', 'الجملة الاسمية', 'monthly', 'امتحان الشهر الأول', 100, 'g1-ب', 't2', 'أ. سارة عادل', t - 2 * 24 * h, { 1002: 92 }),
   ];
 }
-export function marks({ sections: secs, studentId, subject } = {}) {
+export function marks({ sections: secs, studentId, subject, includeDrafts = false } = {}) {
   const sec = studentId ? student(studentId)?.sectionId : null;
-  return (S.marks || []).filter(m => (!secs || secs.includes(m.sectionId)) && (!sec || m.sectionId === sec) && (!subject || m.subject === subject)).sort((a, b) => b.ts - a.ts);
+  return (S.marks || []).filter(m => (!secs || secs.includes(m.sectionId)) && (!sec || m.sectionId === sec) && (!subject || m.subject === subject) && (includeDrafts || !m.draft)).sort((a, b) => b.ts - a.ts);
 }
 export const markSheet = id => (S.marks || []).find(m => m.id === id);
 export function sheetStats(m) {
@@ -902,7 +902,7 @@ export function readAllMarks(key) {
   readerMarks(key).forEach(m => { const r = S.markReads[m.id] || (S.markReads[m.id] = []); if (!r.includes(key)) { r.push(key); ch = true; } });
   if (ch) emit('read');
 }
-export function addMarks({ subject, lesson, examType, exam, max, sectionId, scores }, author) {
+export function addMarks({ subject, lesson, examType, exam, max, sectionId, scores, draft = false }, author) {
   const errors = {};
   max = Number(max);
   if (!String(subject || '').trim()) errors.subject = 'اكتب اسم المادة.';
@@ -916,16 +916,99 @@ export function addMarks({ subject, lesson, examType, exam, max, sectionId, scor
     const n = Number(v); if (isNaN(n) || n < 0 || n > max) bad.push(sid); else clean[sid] = n;
   });
   if (bad.length) errors.scores = `${bad.length} درجة غير صحيحة: لازم تكون بين 0 و ${max || '؟'}.`;
-  else if (!Object.values(clean).some(v => v !== null)) errors.scores = 'اكتب درجة طالب واحد على الأقل.';
+  else if (!draft && !Object.values(clean).some(v => v !== null)) errors.scores = 'اكتب درجة طالب واحد على الأقل للنشر.';
   if (Object.keys(errors).length) return { ok: false, errors, bad };
-  const m = { id: 'm' + Date.now(), subject: subject.trim(), lesson: lesson.trim(), examType, exam: String(exam || '').trim() || EXAM_TYPES[examType], max, sectionId, by: author.id, byName: author.name, byUser: author.username || '', ts: now(), scores: clean, history: [] };
+  const m = {
+    id: 'm' + Date.now(),
+    subject: subject.trim(),
+    lesson: lesson.trim(),
+    examType,
+    exam: String(exam || '').trim() || EXAM_TYPES[examType],
+    max,
+    sectionId,
+    by: author.id,
+    byName: author.name,
+    byUser: author.username || '',
+    ts: now(),
+    scores: clean,
+    history: [],
+    draft: Boolean(draft),
+    publishedAt: draft ? null : now()
+  };
   S.marks.push(m);
-  S.students.filter(s => s.sectionId === sectionId && clean[s.id] != null).forEach(s => {
-    const body = `${m.subject} · ${m.lesson} · ${m.exam}: ${clean[s.id]} من ${max}`;
-    notify(guardian(s.guardianId).phone, { kind: 'mark', title: `درجة جديدة: ${first(s.name)}`, body, ts: m.ts, studentId: s.id });
-    if (s.phone) notify(s.phone, { kind: 'mark', title: 'درجة جديدة', body, ts: m.ts, studentId: s.id });
+  if (!draft) {
+    S.students.filter(s => s.sectionId === sectionId && clean[s.id] != null).forEach(s => {
+      const body = `${m.subject} · ${m.lesson} · ${m.exam}: ${clean[s.id]} من ${max}`;
+      const g = guardian(s.guardianId);
+      if (g) notify(g.phone, { kind: 'mark', title: `درجة جديدة: ${first(s.name)}`, body, ts: m.ts, studentId: s.id });
+      if (s.phone) notify(s.phone, { kind: 'mark', title: 'درجة جديدة', body, ts: m.ts, studentId: s.id });
+    });
+    log('نشر درجات', `${m.subject} · ${m.exam} · ${sectionLabel(sectionId)} · بواسطة ${author.name}`);
+  } else {
+    log('حفظ مسودة درجات', `${m.subject} · ${m.exam} · ${sectionLabel(sectionId)} · بواسطة ${author.name}`);
+  }
+  emit('marks');
+  return { ok: true, mark: m, draft: Boolean(draft) };
+}
+
+export function publishMarks(sheetId, author) {
+  const m = markSheet(sheetId);
+  if (!m) return { ok: false, error: 'الامتحان غير موجود.' };
+  if (!canEditSheet(m, author.role, author.teacherId)) return { ok: false, error: 'ما عندك صلاحية لنشر هذا الامتحان.' };
+  m.draft = false;
+  m.publishedAt = now();
+  m.publishedBy = author.name;
+  m.publishedByUser = author.username || '';
+  S.students.filter(s => s.sectionId === m.sectionId && m.scores[s.id] != null).forEach(s => {
+    const body = `${m.subject} · ${m.lesson} · ${m.exam}: ${m.scores[s.id]} من ${m.max}`;
+    const g = guardian(s.guardianId);
+    if (g) notify(g.phone, { kind: 'mark', title: `درجة جديدة: ${first(s.name)}`, body, ts: m.publishedAt, studentId: s.id });
+    if (s.phone) notify(s.phone, { kind: 'mark', title: 'درجة جديدة', body, ts: m.publishedAt, studentId: s.id });
   });
-  log('نشر درجات', `${m.subject} · ${m.exam} · ${sectionLabel(sectionId)}`);
+  log('نشر درجات', `${m.subject} · ${m.exam} · ${sectionLabel(m.sectionId)} · بواسطة ${author.name}${author.username ? ' (' + author.username + ')' : ''}`);
+  emit('marks');
+  return { ok: true, mark: m };
+}
+
+export function addStudentScore(sheetId, studentId, value, author) {
+  const m = markSheet(sheetId);
+  if (!m) return { ok: false, error: 'الامتحان غير موجود.' };
+  if (!canEditSheet(m, author.role, author.teacherId)) return { ok: false, error: 'ما عندك صلاحية لتعديل هذا الامتحان.' };
+  const n = Number(value);
+  if (isNaN(n) || n < 0 || n > m.max) return { ok: false, error: `الدرجة لازم تكون بين 0 و ${m.max}.` };
+  const st = student(studentId);
+  if (!st) return { ok: false, error: 'الطالب غير موجود.' };
+  const from = m.scores[studentId] ?? null;
+  m.scores[studentId] = n;
+  m.history = m.history || [];
+  const h = {
+    studentId,
+    from,
+    to: n,
+    action: from === null ? 'add' : 'edit',
+    reason: from === null ? 'إضافة نتيجة طالب' : 'تعديل درجة',
+    by: author.name,
+    byUser: author.username || '',
+    role: author.roleLabel || '',
+    ts: now()
+  };
+  m.history.unshift(h);
+  if (!m.draft) {
+    const body = `${m.subject} · ${m.lesson} · ${m.exam}: ${n} من ${m.max} · بواسطة ${author.name}`;
+    const g = guardian(st.guardianId);
+    if (g) notify(g.phone, { kind: 'mark', title: `درجة: ${first(st.name)}`, body, ts: h.ts, studentId });
+    if (st.phone) notify(st.phone, { kind: 'mark', title: 'درجة جديدة', body, ts: h.ts, studentId });
+  }
+  log('إضافة نتيجة طالب', `${st.name} · ${m.subject} · ${m.exam} · ${n}/${m.max} · ${author.name}`);
+  emit('marks');
+  return { ok: true, mark: m };
+}
+
+export function deleteSheet(sheetId, author) {
+  const idx = (S.marks || []).findIndex(m => m.id === sheetId);
+  if (idx < 0) return { ok: false, error: 'الامتحان غير موجود.' };
+  const [m] = S.marks.splice(idx, 1);
+  log('حذف امتحان ودرجات', `${m.subject} · ${m.exam} · ${sectionLabel(m.sectionId)} · بواسطة ${author.name}`);
   emit('marks');
   return { ok: true, mark: m };
 }
@@ -1057,7 +1140,7 @@ function ensureFinals() {
     if ((S.marks || []).some(m => m.sectionId === sec.id && m.subject === sub && m.examType === 'final')) return;
     const t = S.teachers.find(x => x.subject === sub && x.sections.includes(sec.id));
     const scores = {}; S.students.filter(s => s.sectionId === sec.id).forEach(s => { scores[s.id] = Math.max(12, Math.min(100, Math.round(ability[s.id] * 100 + (r() - .5) * 28))); });
-    S.marks.push({ id: `fin-${sec.id}-${k}`, subject: sub, lesson: 'المنهج كامل', examType: 'final', exam: 'الامتحان النهائي (تجريبي)', max: 100, sectionId: sec.id, by: t?.id || 'admin', byName: t?.name || 'الإدارة', byUser: t?.id === 't1' ? 't1001' : '', ts: now() - 2 * 864e5, scores, history: [], demo: true });
+    S.marks.push({ id: `fin-${sec.id}-${k}`, subject: sub, lesson: 'المنهج كامل', examType: 'final', exam: 'الامتحان النهائي (تجريبي)', max: 100, sectionId: sec.id, by: t?.id || 'admin', byName: t?.name || 'الإدارة', byUser: t?.id === 't1' ? 't1001' : '', ts: now() - 2 * 864e5, scores, history: [], demo: true, draft: false, publishedAt: now() - 2 * 864e5 });
   }));
   IDX = null; save();
 }
@@ -1079,13 +1162,54 @@ export function promotionOf(sid) {
   const subs = sectionSubjects(s.sectionId).map(x => subjectResult(sid, s.sectionId, x));
   const missing = subs.filter(x => x.missing); const failed = subs.filter(x => !x.missing && !x.pass);
   const anyMakeupDone = subs.some(x => x.makeup !== null);
-  let status = missing.length ? 'incomplete' : !failed.length ? 'pass' : (failed.length <= r.maxMakeup && !anyMakeupDone) ? 'makeup' : 'fail';
-  const ministerial = r.ministerial.includes(sec.gradeId);
-  const next = nextGradeOf(sec.gradeId);
+
+  // Manual override by administration
+  const override = S.promoOverrides?.[sid];
+
+  // Rule: From 1st Intermediate to 5th Preparatory (من الأول متوسط إلى الخامس إعدادي)
+  // According to Iraqi ministry regulations: Students who fail subjects sit Round 2 (الدور الثاني / مكمل)
+  // even if they failed all subjects!
+  const is1mTo5Prep = ['g1', 'g2', 'g3', 'g4', 'g5'].includes(sec?.gradeId) ||
+    /متوسط|أول متوسط|ثاني متوسط|ثالث متوسط|رابع إعدادي|خامس إعدادي|رابع اعدادي|خامس اعدادي/.test(grade(sec?.gradeId)?.name || '');
+
+  let status;
+  if (override && ['pass', 'makeup', 'fail'].includes(override.status)) {
+    status = override.status;
+  } else if (missing.length) {
+    status = 'incomplete';
+  } else if (!failed.length) {
+    status = 'pass';
+  } else if (is1mTo5Prep && !anyMakeupDone) {
+    // دور ثاني ولو راسب بجميع المواد (من الأول متوسط حتى الخامس إعدادي)
+    status = 'makeup';
+  } else if (failed.length <= r.maxMakeup && !anyMakeupDone) {
+    status = 'makeup';
+  } else {
+    status = 'fail';
+  }
+
+  const ministerial = r.ministerial.includes(sec?.gradeId);
+  const next = nextGradeOf(sec?.gradeId);
   const avg = subs.filter(x => !x.missing).length ? Math.round(subs.filter(x => !x.missing).reduce((a, x) => a + Math.max(x.score, x.makeup ?? 0), 0) / subs.filter(x => !x.missing).length) : null;
-  return { student: s, subjects: subs, failed, missing, passedN: subs.filter(x => x.pass).length, total: subs.length, status, ministerial, next, graduate: !next, avg };
+  return { student: s, subjects: subs, failed, missing, passedN: subs.filter(x => x.pass).length, total: subs.length, status, ministerial, next, graduate: !next, avg, overridden: Boolean(override) };
 }
-export const PROMO_STATUS = { pass: 'ناجح', makeup: 'مكمل (دور ثاني)', fail: 'راسب', incomplete: 'ناقص درجات' };
+export const PROMO_STATUS = { pass: 'ناجح', makeup: 'مكمل (دور ثاني)', fail: 'راسب (معيد)', incomplete: 'ناقص درجات' };
+
+export function setStudentPromoStatus(sid, status, by) {
+  S.promoOverrides = S.promoOverrides || {};
+  if (!status || status === 'auto') {
+    delete S.promoOverrides[sid];
+    log('استعادة حالة الترحيل التلقائية', `${student(sid)?.name} · بواسطة ${by}`);
+  } else {
+    S.promoOverrides[sid] = { status, by, ts: now() };
+    log('تعديل حالة الطالب في الترحيل', `${student(sid)?.name} ← ${PROMO_STATUS[status] || status} · بواسطة ${by}`);
+  }
+  emit('student');
+  emit('promo');
+  return { ok: true };
+}
+
+export const studentPromoOverride = sid => (S.promoOverrides || {})[sid] || null;
 export function promotionBoard(secIds) {
   ensureFinals();
   return S.students.filter(s => !secIds || secIds.includes(s.sectionId)).map(s => promotionOf(s.id));
