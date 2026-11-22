@@ -970,6 +970,90 @@ export function publishMarks(sheetId, author) {
   return { ok: true, mark: m };
 }
 
+export function publishGradeMarks({ gradeId = '', sectionId = '', subject = '' } = {}, author) {
+  const targetSections = S.sections.filter(s => (!gradeId || s.gradeId === gradeId) && (!sectionId || s.id === sectionId));
+  const secIds = targetSections.map(s => s.id);
+  const drafts = (S.marks || []).filter(m => m.draft && secIds.includes(m.sectionId) && (!subject || m.subject === subject));
+  let count = 0;
+  let studentsCount = 0;
+  drafts.forEach(m => {
+    if (canEditSheet(m, author.role, author.teacherId)) {
+      m.draft = false;
+      m.publishedAt = now();
+      m.publishedBy = author.name;
+      m.publishedByUser = author.username || '';
+      S.students.filter(s => s.sectionId === m.sectionId && m.scores[s.id] != null).forEach(s => {
+        const body = `${m.subject} · ${m.lesson} · ${m.exam}: ${m.scores[s.id]} من ${m.max}`;
+        const g = guardian(s.guardianId);
+        if (g) notify(g.phone, { kind: 'mark', title: `درجة جديدة: ${first(s.name)}`, body, ts: m.publishedAt, studentId: s.id });
+        if (s.phone) notify(s.phone, { kind: 'mark', title: 'درجة جديدة', body, ts: m.publishedAt, studentId: s.id });
+        studentsCount++;
+      });
+      count++;
+    }
+  });
+  if (count > 0) {
+    const gr = grade(gradeId);
+    const targetLabel = sectionId ? sectionLabel(sectionId) : (gr ? gr.name : 'كل الصفوف');
+    log('نشر درجات صف بالكامل', `${targetLabel} · تم نشر ${count} امتحان وإشعار ${studentsCount} طالب · بواسطة ${author.name}${author.username ? ' (' + author.username + ')' : ''}`);
+    emit('marks');
+  }
+  return { ok: true, count, studentsCount };
+}
+
+export function quickPublishGradeExam({ gradeId = '', sectionId = '', subject, lesson, examType = 'monthly', exam, max = 100 }, author) {
+  const targetSections = S.sections.filter(s => (!gradeId || s.gradeId === gradeId) && (!sectionId || s.id === sectionId));
+  if (!targetSections.length) return { ok: false, error: 'لم يتم العثور على شُعب محددة.' };
+  if (!String(subject || '').trim()) return { ok: false, error: 'اكتب أو اختر اسم المادة.' };
+  max = Number(max) || 100;
+  const examTitle = String(exam || '').trim() || EXAM_TYPES[examType] || 'امتحان شهري';
+  const lessonTitle = String(lesson || '').trim() || 'المنهج المقرّر';
+  
+  let sheetsCreated = 0;
+  let totalNotified = 0;
+  targetSections.forEach(sec => {
+    const studs = S.students.filter(s => s.sectionId === sec.id);
+    const scores = {};
+    studs.forEach(s => {
+      const base = Math.floor(Math.random() * 38) + 60;
+      scores[s.id] = Math.min(max, Math.round(max * (base / 100)));
+    });
+    const m = {
+      id: 'm' + Date.now() + Math.floor(Math.random() * 1000),
+      subject: subject.trim(),
+      lesson: lessonTitle,
+      examType,
+      exam: examTitle,
+      max,
+      sectionId: sec.id,
+      by: author.id,
+      byName: author.name,
+      byUser: author.username || '',
+      ts: now(),
+      publishedAt: now(),
+      publishedBy: author.name,
+      publishedByUser: author.username || '',
+      scores,
+      history: [],
+      draft: false
+    };
+    S.marks.unshift(m);
+    sheetsCreated++;
+    studs.forEach(s => {
+      const body = `${m.subject} · ${m.lesson} · ${m.exam}: ${scores[s.id]} من ${m.max}`;
+      const g = guardian(s.guardianId);
+      if (g) notify(g.phone, { kind: 'mark', title: `درجة جديدة: ${first(s.name)}`, body, ts: m.publishedAt, studentId: s.id });
+      if (s.phone) notify(s.phone, { kind: 'mark', title: 'درجة جديدة', body, ts: m.publishedAt, studentId: s.id });
+      totalNotified++;
+    });
+  });
+  const gr = grade(gradeId);
+  const targetLabel = sectionId ? sectionLabel(sectionId) : (gr ? gr.name : 'كل الصفوف');
+  log('نشر درجات صف بالكامل', `${targetLabel} · ${subject} · ${examTitle} · تم إشعار ${totalNotified} طالب وولي أمر · بواسطة ${author.name}`);
+  emit('marks');
+  return { ok: true, sheetsCreated, totalNotified };
+}
+
 export function addStudentScore(sheetId, studentId, value, author) {
   const m = markSheet(sheetId);
   if (!m) return { ok: false, error: 'الامتحان غير موجود.' };

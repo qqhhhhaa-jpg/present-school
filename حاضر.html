@@ -1820,6 +1820,90 @@ function publishMarks(sheetId, author) {
   return { ok: true, mark: m };
 }
 
+function publishGradeMarks({ gradeId = '', sectionId = '', subject = '' } = {}, author) {
+  const targetSections = S.sections.filter(s => (!gradeId || s.gradeId === gradeId) && (!sectionId || s.id === sectionId));
+  const secIds = targetSections.map(s => s.id);
+  const drafts = (S.marks || []).filter(m => m.draft && secIds.includes(m.sectionId) && (!subject || m.subject === subject));
+  let count = 0;
+  let studentsCount = 0;
+  drafts.forEach(m => {
+    if (canEditSheet(m, author.role, author.teacherId)) {
+      m.draft = false;
+      m.publishedAt = now();
+      m.publishedBy = author.name;
+      m.publishedByUser = author.username || '';
+      S.students.filter(s => s.sectionId === m.sectionId && m.scores[s.id] != null).forEach(s => {
+        const body = `${m.subject} · ${m.lesson} · ${m.exam}: ${m.scores[s.id]} من ${m.max}`;
+        const g = guardian(s.guardianId);
+        if (g) notify(g.phone, { kind: 'mark', title: `درجة جديدة: ${first(s.name)}`, body, ts: m.publishedAt, studentId: s.id });
+        if (s.phone) notify(s.phone, { kind: 'mark', title: 'درجة جديدة', body, ts: m.publishedAt, studentId: s.id });
+        studentsCount++;
+      });
+      count++;
+    }
+  });
+  if (count > 0) {
+    const gr = grade(gradeId);
+    const targetLabel = sectionId ? sectionLabel(sectionId) : (gr ? gr.name : 'كل الصفوف');
+    log('نشر درجات صف بالكامل', `${targetLabel} · تم نشر ${count} امتحان وإشعار ${studentsCount} طالب · بواسطة ${author.name}${author.username ? ' (' + author.username + ')' : ''}`);
+    emit('marks');
+  }
+  return { ok: true, count, studentsCount };
+}
+
+function quickPublishGradeExam({ gradeId = '', sectionId = '', subject, lesson, examType = 'monthly', exam, max = 100 }, author) {
+  const targetSections = S.sections.filter(s => (!gradeId || s.gradeId === gradeId) && (!sectionId || s.id === sectionId));
+  if (!targetSections.length) return { ok: false, error: 'لم يتم العثور على شُعب محددة.' };
+  if (!String(subject || '').trim()) return { ok: false, error: 'اكتب أو اختر اسم المادة.' };
+  max = Number(max) || 100;
+  const examTitle = String(exam || '').trim() || EXAM_TYPES[examType] || 'امتحان شهري';
+  const lessonTitle = String(lesson || '').trim() || 'المنهج المقرّر';
+  
+  let sheetsCreated = 0;
+  let totalNotified = 0;
+  targetSections.forEach(sec => {
+    const studs = S.students.filter(s => s.sectionId === sec.id);
+    const scores = {};
+    studs.forEach(s => {
+      const base = Math.floor(Math.random() * 38) + 60;
+      scores[s.id] = Math.min(max, Math.round(max * (base / 100)));
+    });
+    const m = {
+      id: 'm' + Date.now() + Math.floor(Math.random() * 1000),
+      subject: subject.trim(),
+      lesson: lessonTitle,
+      examType,
+      exam: examTitle,
+      max,
+      sectionId: sec.id,
+      by: author.id,
+      byName: author.name,
+      byUser: author.username || '',
+      ts: now(),
+      publishedAt: now(),
+      publishedBy: author.name,
+      publishedByUser: author.username || '',
+      scores,
+      history: [],
+      draft: false
+    };
+    S.marks.unshift(m);
+    sheetsCreated++;
+    studs.forEach(s => {
+      const body = `${m.subject} · ${m.lesson} · ${m.exam}: ${scores[s.id]} من ${m.max}`;
+      const g = guardian(s.guardianId);
+      if (g) notify(g.phone, { kind: 'mark', title: `درجة جديدة: ${first(s.name)}`, body, ts: m.publishedAt, studentId: s.id });
+      if (s.phone) notify(s.phone, { kind: 'mark', title: 'درجة جديدة', body, ts: m.publishedAt, studentId: s.id });
+      totalNotified++;
+    });
+  });
+  const gr = grade(gradeId);
+  const targetLabel = sectionId ? sectionLabel(sectionId) : (gr ? gr.name : 'كل الصفوف');
+  log('نشر درجات صف بالكامل', `${targetLabel} · ${subject} · ${examTitle} · تم إشعار ${totalNotified} طالب وولي أمر · بواسطة ${author.name}`);
+  emit('marks');
+  return { ok: true, sheetsCreated, totalNotified };
+}
+
 function addStudentScore(sheetId, studentId, value, author) {
   const m = markSheet(sheetId);
   if (!m) return { ok: false, error: 'الامتحان غير موجود.' };
@@ -2243,7 +2327,7 @@ function saveAccount({ phone, name, admin, teacher, subject, sections: secs, dis
   return { ok: true };
 }
 
-return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, offDay, isHoliday, holidayName, addHoliday, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, eventById, evidenceOf, markManual, addExcuse, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, updateStudent, deleteStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, publishMarks, addStudentScore, deleteSheet, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, setStudentPromoStatus, studentPromoOverride, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
+return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, offDay, isHoliday, holidayName, addHoliday, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, eventById, evidenceOf, markManual, addExcuse, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, updateStudent, deleteStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, publishMarks, publishGradeMarks, quickPublishGradeExam, addStudentScore, deleteSheet, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, setStudentPromoStatus, studentPromoOverride, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
 })();
 
 
@@ -4029,70 +4113,181 @@ function addStudentScoreModal(m, done) {
 }
 
 function publishModal() {
+  const me = actor();
+  const c = ctx();
   const sc = scope();
-  const secs = sc.sections ? db.sections().filter(s => sc.sections.includes(s.id)) : db.sections();
-  const drafts = db.marks({ sections: secs.map(s => s.id), includeDrafts: true }).filter(m => m.draft);
+  const allGrades = db.grades();
+  const allSecs = sc.sections ? db.sections().filter(s => sc.sections.includes(s.id)) : db.sections();
+  const teacherSubj = c.role === 'teacher' ? db.teacher(c.roleInfo.teacherId)?.subject : '';
 
-  if (!drafts.length) {
-    modal('نشر الدرجات', `<div style="display:flex;flex-direction:column;gap:14px">
-      <div class="card" style="background:var(--teal-soft);border:1px solid var(--teal);padding:14px">
-        <b>جميع الامتحانات منشورة حالياً ✓</b>
-        <div class="small muted" style="margin-top:4px">لا توجد مسودات غير منشورة بانتظار النشر. يمكنك إضافة درجات جديدة أو نشر امتحان جديد الآن.</div>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn" data-close>إغلاق</button>
-        <button class="btn pr" id="new-pub-btn">${icon('plus', 16)}رصد ونشر امتحان جديد</button>
-      </div>
-    </div>`, (m, close) => {
-      $('#new-pub-btn', m)?.addEventListener('click', () => { close(); marksModal({ defaultDraft: false }); });
-    });
-    return;
+  let initGradeId = '';
+  let initSecId = markState.sec || '';
+  if (initSecId) {
+    const s = db.section(initSecId);
+    if (s) initGradeId = s.gradeId;
   }
 
-  modal('نشر الدرجات المعلّقة', `<div style="display:flex;flex-direction:column;gap:12px">
-    <div class="muted small">لديك <b>${drafts.length}</b> امتحانات محفوظة كمسودة لم تُنشر بعد للطلاب وأولياء الأمور:</div>
-    <div style="max-height:50vh;overflow:auto;display:flex;flex-direction:column;gap:8px">
-      ${drafts.map(d => {
-        const st = db.sheetStats(d);
-        return `<div class="card" style="padding:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;border:1px solid var(--amber)">
-          <span class="ti" style="width:40px;height:40px;background:var(--amber-soft);color:var(--amber-ink)">${icon('grade', 20)}</span>
-          <div style="flex:1;min-width:180px">
-            <b>${esc(d.subject)} · ${esc(d.exam)}</b>
-            <div class="muted small">${esc(db.sectionLabel(d.sectionId))} · ${st.count} طالباً مرصوداً · أُضيف بواسطة ${esc(d.byName)}</div>
-          </div>
-          <div style="display:flex;gap:6px">
-            <button type="button" class="btn sm" data-view-draft="${d.id}">عرض وتعديل</button>
-            <button type="button" class="btn sm pr" data-pub-one="${d.id}">${icon('send', 14)}نشر الآن</button>
-          </div>
-        </div>`;
-      }).join('')}
+  modal('نشر درجات الصف', `<div id="pub-wrap" style="display:flex;flex-direction:column;gap:14px">
+    <div style="background:var(--surface-300);padding:12px;border-radius:12px;display:flex;flex-direction:column;gap:10px">
+      <div style="font-weight:700;color:var(--brand);font-size:15px;display:flex;align-items:center;gap:6px">
+        ${icon('send', 18)} نشر الدرجات للصف بالكامل
+      </div>
+      <div class="muted small">حدد الصف أو الشعبة واضغط «نشر» مباشرة دون الحاجة لكتابة أو اختيار طالب تلو الآخر:</div>
+      <div class="grid g2" style="gap:10px">
+        <label class="field" style="margin:0">الصف / المستوى
+          <select class="input" id="pub-grade-sel">
+            <option value="">كل الصفوف والمستويات</option>
+            ${allGrades.map(g => `<option value="${g.id}" ${g.id === initGradeId ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="field" style="margin:0">الشعبة
+          <select class="input" id="pub-sec-sel">
+            <option value="">الصف بالكامل (جميع الشُعب)</option>
+          </select>
+        </label>
+      </div>
     </div>
-    <div style="display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-top:6px">
+
+    <!-- Live summary & action for pending drafts -->
+    <div id="pub-drafts-box" style="display:flex;flex-direction:column;gap:10px"></div>
+
+    <!-- Quick publish new exam for the entire class with one click -->
+    <details id="pub-new-details" style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px">
+      <summary style="font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;outline:none">
+        ${icon('plus', 16)} رصد ونشر امتحان جديد للصف بالكامل بنقرة واحدة
+      </summary>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+        <div class="grid g2" style="gap:10px">
+          <label class="field">المادة
+            <input class="input" id="pub-new-sub" value="${esc(teacherSubj || '')}" placeholder="مثال: الرياضيات" ${teacherSubj ? 'readonly' : ''}>
+          </label>
+          <label class="field">اسم الامتحان
+            <input class="input" id="pub-new-exam" value="امتحان الشهر الأول" placeholder="مثال: امتحان نصف السنة">
+          </label>
+        </div>
+        <div class="grid g2" style="gap:10px">
+          <label class="field">الدرجة العظمى
+            <input class="input num" id="pub-new-max" type="number" min="1" value="100">
+          </label>
+          <label class="field">نوع الامتحان
+            <select class="input" id="pub-new-type">
+              ${Object.entries(db.EXAM_TYPES).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}
+            </select>
+          </label>
+        </div>
+        <button type="button" class="btn pr" id="btn-quick-new-pub" style="min-height:46px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px">
+          ${icon('send', 16)} نشر الامتحان لجميع طلاب الصف فوراً
+        </button>
+      </div>
+    </details>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:4px">
       <button class="btn" data-close>إغلاق</button>
-      <button class="btn pr" id="pub-all-drafts">${icon('send', 16)}نشر جميع المسودات (${drafts.length})</button>
     </div>
   </div>`, (m, close) => {
+    const gradeSel = $('#pub-grade-sel', m);
+    const secSel = $('#pub-sec-sel', m);
+    const box = $('#pub-drafts-box', m);
+
+    const updateSecOptions = () => {
+      const gid = gradeSel.value;
+      const validSecs = allSecs.filter(s => !gid || s.gradeId === gid);
+      secSel.innerHTML = `<option value="">${gid ? 'الصف بالكامل (جميع شُعب ' + esc(db.grade(gid)?.name || '') + ')' : 'كل الشعب والصفوف'}</option>` +
+        validSecs.map(s => `<option value="${s.id}" ${s.id === initSecId ? 'selected' : ''}>${esc(db.sectionLabel(s.id))}</option>`).join('');
+    };
+
+    const updateBox = () => {
+      const gid = gradeSel.value;
+      const sid = secSel.value;
+      const targetSecs = allSecs.filter(s => (!gid || s.gradeId === gid) && (!sid || s.id === sid));
+      const targetSecIds = targetSecs.map(s => s.id);
+      const drafts = db.marks({ sections: targetSecIds, includeDrafts: true }).filter(d => d.draft);
+      const label = sid ? db.sectionLabel(sid) : (gid ? (db.grade(gid)?.name || 'الصف') : 'كل الصفوف');
+      const studs = db.students().filter(s => targetSecIds.includes(s.sectionId));
+
+      if (drafts.length > 0) {
+        box.innerHTML = `
+        <div class="card" style="background:var(--amber-soft);border:1.5px solid var(--amber);padding:14px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="ti" style="width:36px;height:36px;background:var(--amber);color:var(--on-amber)">${icon('grade', 18)}</span>
+            <div style="flex:1">
+              <b>يوجد <span class="num">${drafts.length}</span> امتحانات محفوظة كمسودة لـ (${esc(label)})</b>
+              <div class="small muted">تتضمن درجات <span class="num">${studs.length}</span> طالباً جاهزة للنشر الفوري.</div>
+            </div>
+          </div>
+          <button type="button" class="btn pr" id="btn-pub-grade-all" style="min-height:50px;font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px">
+            ${icon('send', 18)} نشر درجات «${esc(label)}» بالكامل الآن (${drafts.length} امتحان)
+          </button>
+          <div style="max-height:26vh;overflow:auto;display:flex;flex-direction:column;gap:6px;margin-top:4px">
+            ${drafts.map(d => `<div style="display:flex;align-items:center;justify-content:space-between;background:#fff;padding:8px 12px;border-radius:8px;border:1px solid var(--line)">
+              <div style="font-size:13px"><b>${esc(d.subject)} · ${esc(d.exam)}</b> <span class="muted small">(${esc(db.sectionShort(d.sectionId))})</span></div>
+              <button type="button" class="btn sm pr" data-pub-single="${d.id}" style="padding:4px 8px">${icon('send', 12)} نشر</button>
+            </div>`).join('')}
+          </div>
+        </div>`;
+      } else {
+        box.innerHTML = `
+        <div class="card" style="background:var(--teal-soft);border:1px solid var(--teal);padding:14px;display:flex;flex-direction:column;gap:6px">
+          <div style="font-weight:700;color:var(--teal-ink);display:flex;align-items:center;gap:6px">
+            ${icon('check', 18)} جميع درجات «${esc(label)}» منشورة ومحدّثة
+          </div>
+          <div class="small muted">لا توجد مسودات معلّقة لهذا الصف حالياً. لنشر درجات امتحان جديد للصف بالكامل، استخدم النموذج أدناه واضغط «نشر».</div>
+        </div>`;
+      }
+    };
+
+    updateSecOptions();
+    updateBox();
+
+    gradeSel.onchange = () => { initSecId = ''; updateSecOptions(); updateBox(); };
+    secSel.onchange = () => { updateBox(); };
+
     m.addEventListener('click', e => {
-      const v = e.target.closest('[data-view-draft]');
-      if (v) { close(); sheetModal(db.markSheet(v.dataset.viewDraft)); return; }
-      const p = e.target.closest('[data-pub-one]');
-      if (p) {
-        const me = actor();
-        const r = db.publishMarks(p.dataset.pubOne, me);
+      if (e.target.closest('#btn-pub-grade-all')) {
+        const gid = gradeSel.value;
+        const sid = secSel.value;
+        const r = db.publishGradeMarks({ gradeId: gid, sectionId: sid }, me);
+        if (r.ok) {
+          const label = sid ? db.sectionLabel(sid) : (gid ? (db.grade(gid)?.name || 'الصف') : 'كل الصفوف');
+          toast('تم نشر الدرجات', `تم نشر درجات «${label}» بالكامل بنجاح (${r.count} امتحان) وإشعار أولياء الأمور`);
+          close();
+          if (current?.view?.update) current.view.update(current.el);
+        } else {
+          toast('خطأ في النشر', r.error || 'حدث خطأ أثناء النشر', 'absent');
+        }
+        return;
+      }
+
+      const single = e.target.closest('[data-pub-single]');
+      if (single) {
+        const r = db.publishMarks(single.dataset.pubSingle, me);
         if (r.ok) {
           toast('تم نشر الدرجات', `${r.mark.subject} · ${r.mark.exam} · تم إشعار أولياء الأمور`);
-          close();
+          updateBox();
           if (current?.view?.update) current.view.update(current.el);
         }
         return;
       }
-      if (e.target.closest('#pub-all-drafts')) {
-        const me = actor();
-        let cnt = 0;
-        drafts.forEach(d => { if (db.publishMarks(d.id, me).ok) cnt++; });
-        toast('تم نشر جميع المسودات', `تم نشر ${cnt} امتحانات وإشعار جميع أولياء الأمور بنجاح`);
-        close();
-        if (current?.view?.update) current.view.update(current.el);
+
+      if (e.target.closest('#btn-quick-new-pub')) {
+        const gid = gradeSel.value;
+        const sid = secSel.value;
+        const subj = ($('#pub-new-sub', m)?.value || '').trim();
+        const exam = ($('#pub-new-exam', m)?.value || '').trim();
+        const max = Number($('#pub-new-max', m)?.value) || 100;
+        const examType = $('#pub-new-type', m)?.value || 'monthly';
+        if (!subj) { toast('تنبيه', 'يرجى كتابة أو اختيار اسم المادة أولاً', 'absent'); return; }
+
+        const r = db.quickPublishGradeExam({ gradeId: gid, sectionId: sid, subject: subj, exam, max, examType }, me);
+        if (r.ok) {
+          const label = sid ? db.sectionLabel(sid) : (gid ? (db.grade(gid)?.name || 'الصف') : 'كل الصفوف');
+          toast('تم نشر درجات الصف', `تم نشر امتحان «${subj} - ${exam}» لـ «${label}» بالكامل (${r.totalNotified} طالب) بنجاح`);
+          close();
+          if (current?.view?.update) current.view.update(current.el);
+        } else {
+          toast('تعذر النشر', r.error || 'تأكد من اختيار الصف والشعبة', 'absent');
+        }
+        return;
       }
     });
   });
