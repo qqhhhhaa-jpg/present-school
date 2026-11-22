@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>حاضر · محاكاة جهاز بصمة الوجه (كاميرا اللابتوب)</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@600;700&display=swap">
+<style>
+:root{
+  --navy:#1E2B5C;
+  --dark:#0F172A;
+  --teal:#0B7F70;
+  --teal-light:#34C3AE;
+  --amber:#F2A93B;
+  --red:#C8453F;
+  --green:#10B981;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'Cairo',sans-serif;
+  background:radial-gradient(circle at 50% 20%, #1e293b 0%, #0a0f1d 100%);
+  color:#f8fafc;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:16px;
+  user-select:none;
+}
+header{
+  width:100%;
+  max-width:860px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:12px 20px;
+  background:rgba(255,255,255,0.05);
+  backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:18px;
+  margin-bottom:16px;
+}
+.brand{display:flex;gap:12px;align-items:center}
+.brand h1{font-size:20px;font-weight:800;color:#fff}
+.brand span{font-size:12px;color:#94a3b8;display:block}
+.clock{font-family:'Plus Jakarta Sans',sans-serif;font-size:22px;font-weight:700;color:var(--teal-light);direction:ltr}
+
+.main-wrap{
+  width:100%;
+  max-width:860px;
+  display:grid;
+  grid-template-columns:1fr 310px;
+  gap:16px;
+  flex:1;
+}
+@media (max-width:760px){
+  .main-wrap{grid-template-columns:1fr}
+}
+
+/* Camera Kiosk Terminal */
+.cam-card{
+  position:relative;
+  background:#020617;
+  border-radius:24px;
+  border:2px solid rgba(52,195,174,0.3);
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  min-height:460px;
+  box-shadow:0 20px 40px rgba(0,0,0,0.6), 0 0 20px rgba(11,127,112,0.15);
+}
+video{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  transform:scaleX(-1);
+  position:absolute;
+  inset:0;
+  display:none;
+}
+.target-box{
+  position:relative;
+  z-index:10;
+  width:230px;
+  height:300px;
+  border:2px dashed rgba(52,195,174,0.7);
+  border-radius:120px;
+  pointer-events:none;
+  box-shadow:0 0 0 9999px rgba(0,0,0,0.45);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:all .3s ease;
+}
+.target-box.success{
+  border:3px solid var(--green);
+  box-shadow:0 0 0 9999px rgba(16,185,129,0.15), 0 0 30px var(--green);
+}
+.target-box.error{
+  border:3px solid var(--red);
+  box-shadow:0 0 0 9999px rgba(200,69,63,0.2), 0 0 30px var(--red);
+}
+.scan-line{
+  position:absolute;
+  top:0;
+  left:0;
+  right:0;
+  height:3px;
+  background:linear-gradient(90deg,transparent,var(--teal-light),transparent);
+  box-shadow:0 0 12px var(--teal-light);
+  animation:scan 2.2s infinite ease-in-out;
+  display:none;
+}
+@keyframes scan{
+  0%{top:5%}
+  50%{top:95%}
+  100%{top:5%}
+}
+
+.cam-status{
+  position:absolute;
+  top:16px;
+  z-index:20;
+  background:rgba(15,23,42,0.85);
+  backdrop-filter:blur(8px);
+  padding:6px 14px;
+  border-radius:30px;
+  font-size:13px;
+  font-weight:700;
+  border:1px solid rgba(255,255,255,0.15);
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--red)}
+.dot.live{background:var(--green);box-shadow:0 0 10px var(--green);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+.cam-bottom{
+  position:absolute;
+  bottom:16px;
+  z-index:20;
+  width:calc(100% - 32px);
+  display:flex;
+  gap:10px;
+  justify-content:center;
+}
+.action-btn{
+  background:var(--teal);
+  color:#fff;
+  border:none;
+  padding:12px 24px;
+  border-radius:14px;
+  font-family:inherit;
+  font-weight:700;
+  font-size:15px;
+  cursor:pointer;
+  box-shadow:0 4px 15px rgba(11,127,112,0.4);
+  transition:all .15s ease;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.action-btn:hover{background:#0d9488;transform:translateY(-1px)}
+.action-btn:active{transform:translateY(1px)}
+
+/* Side Control Panel */
+.panel{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.card{
+  background:rgba(255,255,255,0.05);
+  backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:18px;
+  padding:14px;
+}
+.card h2{font-size:14px;font-weight:700;color:#94a3b8;margin-bottom:8px}
+select, input{
+  width:100%;
+  background:#1e293b;
+  border:1px solid rgba(255,255,255,0.15);
+  color:#fff;
+  padding:9px 12px;
+  border-radius:10px;
+  font-family:inherit;
+  font-size:13px;
+  outline:none;
+}
+select:focus, input:focus{border-color:var(--teal-light)}
+
+/* Result Card */
+.result-box{
+  display:none;
+  animation:pop .25s ease-out;
+}
+@keyframes pop{from{transform:scale(0.9);opacity:0}to{transform:scale(1);opacity:1}}
+.res-card{
+  background:linear-gradient(135deg,rgba(16,185,129,0.15),rgba(15,23,42,0.8));
+  border:1px solid rgba(16,185,129,0.3);
+  border-radius:18px;
+  padding:14px;
+  display:flex;
+  gap:12px;
+  align-items:center;
+}
+.res-img{
+  width:58px;
+  height:72px;
+  border-radius:10px;
+  object-fit:cover;
+  border:2px solid var(--green);
+  background:#1e293b;
+}
+.res-info b{font-size:16px;color:#fff;display:block}
+.res-info span{font-size:12px;color:#94a3b8;display:block}
+.res-info .pill{
+  display:inline-block;
+  background:rgba(16,185,129,0.25);
+  color:#34d399;
+  font-size:11px;
+  font-weight:700;
+  padding:2px 8px;
+  border-radius:6px;
+  margin-top:4px;
+}
+
+/* History log */
+.log-list{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  max-height:170px;
+  overflow-y:auto;
+  scrollbar-width:none;
+}
+.log-item{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:6px 10px;
+  background:rgba(255,255,255,0.03);
+  border-radius:8px;
+  font-size:12px;
+}
+.back-link{
+  display:inline-block;
+  color:#94a3b8;
+  font-size:13px;
+  text-decoration:none;
+  margin-top:8px;
+  text-align:center;
+  width:100%;
+}
+.back-link:hover{color:#fff}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg width="36" height="36" viewBox="0 0 1024 1024" style="flex:none">
+      <defs>
+        <radialGradient id="bg" cx="28%" cy="18%" r="100%"><stop offset="0" stop-color="#2E408A"/><stop offset="1" stop-color="#111936"/></radialGradient>
+      </defs>
+      <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+      <g transform="translate(512 512) scale(3.5) translate(-165 -74)" fill="none" stroke-width="19" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M198 100 V16 M118 100 V88 Q118 64 141 64 Q164 64 164 88 V100 H78 Q62 100 60 116 L57 132 M98 100 V86" stroke="#fff"/>
+        <path d="M226 62 H272 L240 100 H198" stroke="#34C3AE"/>
+      </g>
+    </svg>
+    <div>
+      <h1>محاكاة بصمة الوجه · كاميرا اللابتوب</h1>
+      <span>ملف تجريبي معزول لاختبار تسجيل الحضور المباشر</span>
+    </div>
+  </div>
+  <div class="clock" id="clock">--:--:--</div>
+</header>
+
+<div class="main-wrap">
+  <!-- Camera Box -->
+  <div class="cam-card">
+    <video id="vid" playsinline muted autoplay></video>
+    <div class="target-box" id="target">
+      <div class="scan-line" id="scanline"></div>
+    </div>
+    
+    <div class="cam-status">
+      <span class="dot" id="dot"></span>
+      <span id="statustext">جاري طلب إذن الكاميرا…</span>
+      <button id="simbtn" style="display:none;background:rgba(255,255,255,0.15);border:none;color:#fff;padding:2px 8px;border-radius:6px;font-family:inherit;font-size:11px;cursor:pointer">تشغيل كاميرا افتراضية</button>
+    </div>
+
+    <div class="cam-bottom">
+      <button class="action-btn" id="scanbtn" disabled>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <span>مسح الوجه وتسجيل البصمة</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Side Controls -->
+  <div class="panel">
+    <div class="card">
+      <h2>اختر الطالب للمطابقة</h2>
+      <select id="studentsel"></select>
+      <div style="margin-top:10px">
+        <h2>نوع التسجيل</h2>
+        <select id="scantype">
+          <option value="in">دخول (حضور صباحي)</option>
+          <option value="out">انصراف (مغادرة)</option>
+        </select>
+      </div>
+      <div style="margin-top:10px">
+        <h2>جهاز البصمة المحاكى</h2>
+        <select id="devsel">
+          <option value="d1">بوابة 1 · الدخول الرئيسي (ZKTeco SpeedFace)</option>
+          <option value="d2">بوابة 2 · الباب الخلفي (Hikvision DS-K1T)</option>
+          <option value="d3">بوابة البنات (ZKTeco ProFace X)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Live Scan Result Card -->
+    <div class="result-box" id="resbox">
+      <div class="res-card">
+        <img class="res-img" id="resimg" src="" alt="صورة الكاميرا">
+        <div class="res-info">
+          <b id="resname">—</b>
+          <span id="ressec">—</span>
+          <span id="restime" style="font-family:'Plus Jakarta Sans';direction:ltr">—</span>
+          <div class="pill" id="resmatch">مطابقة الوجه 98.6% ✓</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Attendance log list -->
+    <div class="card" style="flex:1">
+      <h2>آخر البصمات المسجلة الآن</h2>
+      <div class="log-list" id="loglist">
+        <div style="color:#64748b;font-size:12px;text-align:center;padding:12px">لا توجد بصمات مسجلة بعد في هذه الجلسة</div>
+      </div>
+    </div>
+
+    <a href="./index.html" class="back-link">← العودة إلى منصة حاضر الرئيسية</a>
+  </div>
+</div>
+
+<canvas id="cv" style="display:none"></canvas>
+
+<script>
+// Web Audio chime for success verification
+function playChime(success = true) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    if (success) {
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+    } else {
+      osc.frequency.setValueAtTime(220, ctx.currentTime);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    }
+  } catch(e) {}
+}
+
+// Clock display
+function updateClock() {
+  const d = new Date();
+  document.getElementById('clock').textContent = d.toLocaleTimeString('en-GB');
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Demo students list (extracted from platform store if available, or preset)
+let students = [
+  { id: 's1', name: 'علي حيدر جاسم', sec: 'الأول متوسط · أ', no: 101 },
+  { id: 's2', name: 'زينب أحمد كريم', sec: 'الثاني متوسط · ب', no: 102 },
+  { id: 's3', name: 'محمد باقر قاسم', sec: 'الثالث متوسط · أ', no: 103 },
+  { id: 's4', name: 'مريم حسن عبد الزهرة', sec: 'الرابع إعدادي · علمي', no: 104 },
+  { id: 's5', name: 'حسين علي رضا', sec: 'الخامس إعدادي · أحيائي', no: 105 },
+  { id: 's6', name: 'فاطمة محمد ناصر', sec: 'السادس إعدادي · تطبيقي', no: 106 },
+  { id: 's7', name: 'كرار مصطفى جواد', sec: 'الأول متوسط · ب', no: 107 }
+];
+
+// Try reading real students from localStorage if present
+try {
+  const saved = JSON.parse(localStorage.getItem('hader-store-v5'));
+  if (saved && saved.students && saved.students.length) {
+    students = saved.students.slice(0, 15).map(s => {
+      const sec = saved.sections?.find(x => x.id === s.sectionId);
+      return { id: s.id, name: s.name, sec: sec ? sec.name : 'الصف العام', no: s.no || s.deviceId };
+    });
+  }
+} catch(e) {}
+
+const sel = document.getElementById('studentsel');
+students.forEach((s, idx) => {
+  const opt = document.createElement('option');
+  opt.value = s.id;
+  opt.textContent = `${s.name} (${s.sec})`;
+  sel.appendChild(opt);
+});
+
+// Camera Stream Setup
+const vid = document.getElementById('vid');
+const dot = document.getElementById('dot');
+const statustext = document.getElementById('statustext');
+const scanbtn = document.getElementById('scanbtn');
+const scanline = document.getElementById('scanline');
+const target = document.getElementById('target');
+const resbox = document.getElementById('resbox');
+const resimg = document.getElementById('resimg');
+const resname = document.getElementById('resname');
+const ressec = document.getElementById('ressec');
+const restime = document.getElementById('restime');
+const loglist = document.getElementById('loglist');
+
+let stream = null;
+
+async function startCamera() {
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('الكاميرا غير مدعومة في هذا المتصفح');
+    }
+    statustext.textContent = 'جاري الاتصال بالكاميرا…';
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: 'user',
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    });
+    vid.srcObject = stream;
+    vid.style.display = 'block';
+    await vid.play();
+    dot.classList.add('live');
+    statustext.textContent = 'الكاميرا متصلة · جهاز البصمة جاهز';
+    scanline.style.display = 'block';
+    scanbtn.disabled = false;
+  } catch (err) {
+    dot.classList.remove('live');
+    dot.style.background = 'var(--red)';
+    statustext.textContent = 'تعذر فتح الكاميرا: ' + (err.message || 'يرجى السماح بالوصول للكاميرا');
+    const simbtn = document.getElementById('simbtn');
+    if (simbtn) {
+      simbtn.style.display = 'inline-block';
+      simbtn.onclick = () => {
+        dot.classList.add('live');
+        dot.style.background = 'var(--green)';
+        statustext.textContent = 'كاميرا افتراضية جاهزة للمعاينة';
+        scanline.style.display = 'block';
+        scanbtn.disabled = false;
+        simbtn.style.display = 'none';
+      };
+    }
+    console.error(err);
+  }
+}
+
+startCamera();
+
+// Capture current frame from video
+function grabFrame() {
+  if (!vid.videoWidth) return null;
+  const cv = document.getElementById('cv');
+  cv.width = 240;
+  cv.height = 300;
+  const ctx = cv.getContext('2d');
+  
+  // Crop center with mirror
+  const vw = vid.videoWidth, vh = vid.videoHeight;
+  const r = cv.width / cv.height;
+  let sw = vh * r, sh = vh;
+  if (sw > vw) { sw = vw; sh = vw / r; }
+  
+  ctx.translate(cv.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(vid, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, cv.width, cv.height);
+  return cv.toDataURL('image/jpeg', 0.85);
+}
+
+// Perform scan
+scanbtn.onclick = () => {
+  const photo = grabFrame();
+  const student = students.find(s => s.id === sel.value) || students[0];
+  const type = document.getElementById('scantype').value;
+  const devId = document.getElementById('devsel').value;
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-GB');
+
+  // Trigger UI verification animation
+  target.className = 'target-box success';
+  playChime(true);
+
+  // Show result
+  if (photo) resimg.src = photo;
+  resname.textContent = student.name;
+  ressec.textContent = `${student.sec} · ${type === 'in' ? 'تسجيل دخول' : 'تسجيل انصراف'}`;
+  restime.textContent = timeStr;
+  resbox.style.display = 'block';
+
+  // Add to log list
+  if (loglist.querySelector('div[style*="text-align:center"]')) {
+    loglist.innerHTML = '';
+  }
+  const item = document.createElement('div');
+  item.className = 'log-item';
+  item.innerHTML = `
+    <div>
+      <b>${student.name}</b>
+      <span style="display:block;color:#94a3b8;font-size:11px">${student.sec} · ${type === 'in' ? 'حضور' : 'انصراف'}</span>
+    </div>
+    <span style="font-family:'Plus Jakarta Sans';font-weight:700;color:var(--teal-light);direction:ltr">${timeStr}</span>
+  `;
+  loglist.insertBefore(item, loglist.firstChild);
+
+  // Sync to Platform's localStorage so the dashboard shows the attendance event!
+  try {
+    const raw = localStorage.getItem('hader-store-v5');
+    if (raw) {
+      const db = JSON.parse(raw);
+      if (db && db.events) {
+        db.events.push({
+          id: (db.eid || 900) + 1,
+          studentId: student.id,
+          type: type,
+          ts: now.getTime(),
+          deviceId: devId,
+          method: 'وجه (كاميرا اللابتوب)'
+        });
+        db.eid = (db.eid || 900) + 1;
+        // Also update plan item if exists
+        const plan = db.plan?.find(p => p.studentId === student.id);
+        if (plan) {
+          if (type === 'in') plan.inDone = true;
+          if (type === 'out') plan.outDone = true;
+        }
+        localStorage.setItem('hader-store-v5', JSON.stringify(db));
+      }
+    }
+  } catch(e) {
+    console.warn('Storage sync error:', e);
+  }
+
+  // Reset target box after 1.5s
+  setTimeout(() => {
+    target.className = 'target-box';
+  }, 1500);
+};
+</script>
+
+</body>
+</html>
