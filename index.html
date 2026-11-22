@@ -2588,12 +2588,16 @@ const student = {
 function faceModal(s) {
   const c = ctx(); const by = `${c.name}${db.credOf(c.phone)?.username ? ' · ' + db.credOf(c.phone).username : ''}`;
   modal(db.photoOf(s.id) ? 'تحديث صورة الوجه' : 'صورة بصمة الوجه', `
-    <div id="cam" style="height:280px;border-radius:16px;background:#1E2B5C;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
-      <video id="vid" playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:none"></video>
-      <svg width="190" height="230" viewBox="0 0 230 280" aria-hidden="true" style="position:relative"><ellipse cx="115" cy="130" rx="82" ry="108" fill="none" stroke="#34C3AE" stroke-width="4" stroke-dasharray="10 8"/></svg>
-      <span class="pill" id="fq" style="position:absolute;top:12px;right:12px;background:var(--red);color:var(--on-red)">غير واضح</span>
-      <span id="camnote" class="small" style="position:absolute;bottom:10px;inset-inline:10px;text-align:center;color:#DDE3F5">جاري فتح الكاميرا…</span></div>
-    <div><div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px"><span>وضوح الوجه</span><span id="fqt">اقترب من الكاميرا</span></div>
+    <div id="cam" style="height:280px;border-radius:16px;background:#0f172a;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
+      <video id="vid" playsinline muted autoplay style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:none;z-index:1"></video>
+      <svg width="190" height="230" viewBox="0 0 230 280" aria-hidden="true" style="position:relative;z-index:2;pointer-events:none"><ellipse cx="115" cy="130" rx="82" ry="108" fill="none" stroke="#34C3AE" stroke-width="4" stroke-dasharray="10 8"/></svg>
+      <span class="pill" id="fq" style="position:absolute;top:12px;right:12px;background:var(--red);color:var(--on-red);z-index:3">جاري الفتح…</span>
+      <select id="camsel" style="position:absolute;top:12px;left:12px;z-index:3;max-width:140px;background:rgba(15,23,42,0.85);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:11px;padding:3px 6px;display:none"></select>
+      <span id="camnote" class="small" style="position:absolute;bottom:10px;inset-inline:10px;text-align:center;color:#DDE3F5;z-index:3">جاري فتح الكاميرا…</span></div>
+    <div id="blackwarn" class="card small" style="display:none;background:var(--amber-soft);border-color:#F2D29A;padding:8px 12px;margin-top:6px;color:#8A5A0B">
+      <b>الشاشة سوداء؟</b> تأكد من فتح غطاء الكاميرا (الستارة الصغيرة فوق الشاشة)، أو أغلق البرامج الأخرى (مثل Zoom أو Teams) أو اختر الكاميرا الأخرى من القائمة بالأعلى.
+    </div>
+    <div><div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px"><span>وضوح الوجه</span><span id="fqt">جاري ضبط الكاميرا…</span></div>
       <div style="display:flex;gap:4px;height:14px;margin-top:8px" id="meter"><i style="flex:1;border-radius:0 7px 7px 0;background:var(--surface-300)"></i><i style="flex:1;background:var(--surface-300)"></i><i style="flex:1;border-radius:7px 0 0 7px;background:var(--surface-300)"></i></div>
       <div style="display:flex;font-size:12px;font-weight:700;text-align:center;margin-top:4px"><span style="flex:1;color:var(--red-ink)">غير واضح</span><span style="flex:1;color:var(--amber-ink)">اقترب قليلاً</span><span style="flex:1;color:var(--teal-ink)">واضح</span></div></div>
     ${db.photoOf(s.id) ? '<div class="small muted">الصورة الأولى تبقى محفوظة مثل ما هي. هذي تنضاف كتحديث.</div>' : '<div class="small muted">هذي الصورة تصير الصورة المرجعية للطالب، وتظهر للإدارة حتى تقارن بيها.</div>'}
@@ -2602,7 +2606,44 @@ function faceModal(s) {
     const vid = $('#vid', m); let stream = null, lvl = -1, iv = null;
     const stop = () => { clearInterval(iv); stream?.getTracks().forEach(t => t.stop()); };
     const watch = setInterval(() => { if (!document.body.contains(m)) { stop(); clearInterval(watch); } }, 500);
-    const step = () => { lvl = Math.min(2, lvl + 1); bars.forEach((b, i) => b.style.background = i === lvl ? colors[i] : 'var(--surface-300)'); $('#fqt', m).textContent = txt[lvl]; const fq = $('#fq', m); fq.textContent = ['غير واضح', 'مقبول', 'واضح ✓'][lvl]; fq.style.background = colors[lvl]; if (lvl === 2) { clearInterval(iv); $('#cap', m).disabled = false; } };
+    
+    const checkBrightness = () => {
+      if (!stream || !vid.videoWidth) return 0;
+      try {
+        const cv = document.createElement('canvas'); cv.width = 32; cv.height = 32;
+        const ctx = cv.getContext('2d');
+        ctx.drawImage(vid, 0, 0, 32, 32);
+        const data = ctx.getImageData(0, 0, 32, 32).data;
+        let sum = 0;
+        for (let i = 0; i < data.length; i += 4) sum += data[i] + data[i+1] + data[i+2];
+        return sum / (32 * 32 * 3);
+      } catch { return 50; }
+    };
+
+    const step = () => {
+      const b = checkBrightness();
+      const warn = $('#blackwarn', m);
+      if (b < 8 && vid.videoWidth > 0) {
+        if (warn) warn.style.display = 'block';
+        $('#fqt', m).textContent = 'الكاميرا مغطاة أو معتمة';
+        const fq = $('#fq', m); fq.textContent = 'شاشة سوداء'; fq.style.background = 'var(--red)';
+        bars.forEach(bar => bar.style.background = 'var(--surface-300)');
+        $('#cap', m).disabled = true;
+        return;
+      }
+      if (warn) warn.style.display = 'none';
+      lvl = Math.min(2, lvl + 1);
+      bars.forEach((bar, i) => bar.style.background = i <= lvl ? colors[i] : 'var(--surface-300)');
+      $('#fqt', m).textContent = txt[lvl];
+      const fq = $('#fq', m);
+      fq.textContent = ['غير واضح', 'مقبول', 'واضح ✓'][lvl];
+      fq.style.background = colors[lvl];
+      if (lvl === 2) {
+        clearInterval(iv);
+        $('#cap', m).disabled = false;
+      }
+    };
+
     const grab = () => {
       if (!stream || !vid.videoWidth) return null;
       const W = 240, H = 300, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
@@ -2610,16 +2651,43 @@ function faceModal(s) {
       g.translate(W, 0); g.scale(-1, 1); g.drawImage(vid, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, W, H);
       return cv.toDataURL('image/jpeg', 0.82);
     };
+
     const save = () => { const data = grab(); stop(); db.captureFace(s.id, data, by); close(); toast(data ? 'انحفظت صورة الوجه' : 'سُجّلت بصمة الوجه', data ? 'تُرسل للأجهزة، وتظهر بملف الطالب' : 'الكاميرا ما اشتغلت، فما انحفظت صورة'); };
-    (async () => {
+
+    const startCam = async (chosenDevId) => {
+      stop();
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error('no camera');
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 } }, audio: false });
+        const constraints = chosenDevId ? { video: { deviceId: { exact: chosenDevId } }, audio: false } : { video: { width: { ideal: 1280 } }, audio: false };
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
         if (!document.body.contains(m)) { stop(); return; }
-        vid.srcObject = stream; vid.style.display = 'block'; await vid.play(); $('#camnote', m).textContent = 'خلي الوجه بالنص، بدون نظارة شمسية أو كمامة';
-      } catch { $('#camnote', m).textContent = 'الكاميرا مو متاحة هنا. افتح المنصة بالمتصفح واسمح للكاميرا.'; }
-      iv = setInterval(step, 900); step();
-    })();
+        vid.srcObject = stream;
+        vid.style.display = 'block';
+        vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
+        await vid.play().catch(() => {});
+        $('#camnote', m).textContent = 'خلي الوجه بالنص، بدون نظارة شمسية أو كمامة';
+
+        // Enumerate video devices
+        const devs = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+        const videoDevs = devs.filter(d => d.kind === 'videoinput');
+        const sel = $('#camsel', m);
+        if (videoDevs.length > 1 && sel) {
+          sel.innerHTML = videoDevs.map((d, i) => `<option value="${d.deviceId}" ${stream?.getVideoTracks()[0]?.getSettings()?.deviceId === d.deviceId ? 'selected' : ''}>${d.label || ('كاميرا ' + (i + 1))}</option>`).join('');
+          sel.style.display = 'block';
+          sel.onchange = () => startCam(sel.value);
+        }
+        iv = setInterval(step, 800);
+        step();
+      } catch (err) {
+        $('#camnote', m).textContent = 'الكاميرا مو متاحة. افتح المنصة بالمتصفح واسمح للكاميرا.';
+      }
+    };
+
+    startCam();
     $('#cap', m).onclick = save;
   });
 }
