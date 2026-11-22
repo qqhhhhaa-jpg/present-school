@@ -549,18 +549,19 @@ details.perms summary{cursor:pointer}
 /* Page scrollbar hidden; scrolling still works */
 html,body{scrollbar-width:none;-ms-overflow-style:none}
 html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;width:0;height:0}
-/* Sidebar account box: compact and tidy */
-.me{gap:6px;padding:8px;border-radius:14px;font-size:12px;line-height:1.35}
-.me .who{gap:8px}
-.me .who .av{width:32px;height:32px;font-size:13px}
-.me .who b{font-size:12.5px}
-.me .who .ell+.ell,.me .who span.ell{font-size:11px}
-.mebtn{width:28px;height:28px;border-radius:8px}
-.mebtn svg{width:15px;height:15px}
-.sidebtn{min-height:30px;padding:0 6px;border-radius:9px;font-size:11px;gap:5px;white-space:nowrap}
-.sidebtn svg{width:13px;height:13px;flex:none}
-.logout{min-height:34px;border-radius:9px;font-size:13px;gap:6px}
-.logout svg{width:16px;height:16px}
+/* Sidebar account box: compact and tidy, sits at the very bottom */
+.side{padding-bottom:6px}
+.me{margin-top:6px;gap:5px;padding:6px;border-radius:12px;font-size:11.5px;line-height:1.3}
+.me .who{gap:7px}
+.me .who .av{width:28px;height:28px;font-size:12px}
+.me .who b{font-size:12px}
+.me .who .ell+.ell,.me .who span.ell{font-size:10.5px}
+.mebtn{width:24px;height:24px;border-radius:7px}
+.mebtn svg{width:13px;height:13px}
+.sidebtn{min-height:26px;padding:0 6px;border-radius:8px;font-size:10.5px;gap:4px;white-space:nowrap}
+.sidebtn svg{width:12px;height:12px;flex:none}
+.logout{min-height:30px;border-radius:8px;font-size:12px;gap:5px}
+.logout svg{width:14px;height:14px}
 </style>
 </head>
 <body>
