@@ -823,6 +823,12 @@ const devices = {
       const hs = e.target.closest('[data-hs]'); if (hs) { db.firstHandshake(hs.dataset.hs); toast('وصل أول اتصال من الجهاز', 'صار الجهاز يرسل البصمات للمنصة مباشرة'); }
       const t = e.target.closest('[data-toggle]'); if (t) { const d = db.device(t.dataset.toggle); db.setDeviceOnline(d.id, !d.online); toast(d.online ? 'رجع الاتصال' : 'انقطع الجهاز', d.name); }
       const s = e.target.closest('[data-scan]'); if (s) { const st = db.simulateScan(s.dataset.scan); if (!st) toast('كل الطلاب سجّلوا حضورهم', ''); else if (!db.device(s.dataset.scan).online) toast('خُزّنت البصمة في الجهاز', `${st.name} · تُرسل عند رجوع الاتصال`, 'late'); }
+      const ts = e.target.closest('[data-t-scan]');
+      if (ts) {
+        const r = db.simulateTeacherScan(ts.dataset.tScan);
+        if (r) toast('سُجّلت بصمة المدرس', `${r.teacher.name} · ${r.type === 'in' ? 'دخول' : 'انصراف'}`);
+        this.update(el);
+      }
       const ed = e.target.closest('[data-ed]'); if (ed) editDeviceModal(db.device(ed.dataset.ed));
       const del = e.target.closest('[data-del]'); if (del) deleteDeviceModal(db.device(del.dataset.del));
     });
@@ -842,7 +848,8 @@ const devices = {
       <div class="row" style="padding:4px 0"><span style="flex:1">آخر اتصال</span><span class="num">${d.lastSeen ? fmtTime(d.lastSeen) : '—'}</span></div>
       ${d.buffer.length ? `<div class="row" style="padding:4px 0"><span style="flex:1">مخزّنة بانتظار الإرسال</span><b class="num">${d.buffer.length}</b></div>` : ''}
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn sm" data-scan="${d.id}">محاكاة بصمة</button>
+        <button class="btn sm" data-scan="${d.id}">محاكاة بصمة طالب</button>
+        <button class="btn sm" data-t-scan="${d.id}">${icon('users', 14)} بصمة مدرس</button>
         <button class="btn sm ${d.online ? 'dg' : 'pr'}" data-toggle="${d.id}">${d.online ? 'قطع الاتصال' : 'إعادة الاتصال'}</button>
         <button class="btn sm" data-cfg="${d.id}">إعدادات</button>
         <button class="btn sm" data-ed="${d.id}">${icon('edit', 14)}تعديل</button>
@@ -1018,7 +1025,38 @@ const teacher = {
     const box = $('#live', el); if (!box) return;
     const t = db.teacher(ctx().roleInfo.teacherId);
     const exc = db.notes(ctx().inbox).filter(n => n.kind === 'excuse').slice(0, 3);
-    box.innerHTML = teacherTasksCard(t) + `<div class="grid g2">${t.sections.map(id => { const list = db.students(id); const x = db.summary(list); const missing = list.filter(s => ['pending', 'absent'].includes(db.statusOf(s.id).status));
+    const mySt = db.teacherStatusOf(t.id);
+    const inTime = mySt.inEv ? fmtTime(mySt.inEv.ts) : 'لم تسجّل بعد';
+    const inDev = mySt.inEv ? (mySt.inEv.deviceId ? db.device(mySt.inEv.deviceId)?.name.split(' · ')[0] : 'يدوي') : '';
+    const outTime = mySt.outEv ? fmtTime(mySt.outEv.ts) : '—';
+    const myTone = { present: 'var(--teal-soft)', late: 'var(--amber-soft)', left: 'var(--surface-200)', excused: 'var(--amber-soft)', pending: 'var(--surface-200)', absent: 'var(--red-soft)', holiday: 'var(--surface-200)' }[mySt.status];
+    const myPill = mySt.status === 'present' ? '<span class="pill p-present">حاضر بالموعد ✓</span>'
+      : mySt.status === 'late' ? '<span class="pill p-late">متأخر ⏱</span>'
+      : mySt.status === 'left' ? '<span class="pill p-left">انصرفت ⏏</span>'
+      : mySt.status === 'excused' ? `<span class="pill p-excused">إجازة: ${esc(mySt.excuse?.reason || 'عذر')}</span>`
+      : mySt.status === 'pending' ? '<span class="pill p-quiet">بانتظار البصمة ⌛</span>'
+      : '<span class="pill p-absent">غائب</span>';
+
+    const myAttCard = `
+    <div class="card" style="background:${myTone};display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h2 style="display:flex;align-items:center;gap:6px">${icon('device', 18)} بصمتي وحضوري اليوم</h2>
+        ${myPill}
+      </div>
+      <div class="grid g2" style="gap:10px">
+        <div class="row" style="background:rgba(255,255,255,.6);border-radius:8px;padding:8px 12px">
+          <span style="flex:1">بصمة الدخول الصباحية</span>
+          <b class="num" style="font-size:15px">${inTime}</b>
+          ${inDev ? `<span class="small muted" style="margin-inline-start:6px">(${esc(inDev)})</span>` : ''}
+        </div>
+        <div class="row" style="background:rgba(255,255,255,.6);border-radius:8px;padding:8px 12px">
+          <span style="flex:1">بصمة الانصراف</span>
+          <b class="num" style="font-size:15px">${outTime}</b>
+        </div>
+      </div>
+    </div>`;
+
+    box.innerHTML = myAttCard + teacherTasksCard(t) + `<div class="grid g2">${t.sections.map(id => { const list = db.students(id); const x = db.summary(list); const missing = list.filter(s => ['pending', 'absent'].includes(db.statusOf(s.id).status));
       return `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><a href="#/section/${id}" style="color:inherit"><h2>${esc(db.sectionLabel(id))}</h2></a><b class="num" style="font-size:22px">${x.came} / ${x.total}</b></div>
         <div class="bar" style="margin:10px 0"><i style="width:${x.rate}%"></i></div>
         <div class="small muted" style="margin-bottom:4px">${missing.length ? 'لم يصلوا بعد / غائبون:' : 'كل الطلاب حاضرون'}</div>
@@ -2536,7 +2574,505 @@ function teacherTasksCard(t) {
     <div><div class="msec" style="margin:0 0 6px">يحتاج انتباهك</div>${tasks.length ? tasks.map(x => `<a class="row al" href="${x.href}"><span class="ki ${x.tone}">${icon(x.ic, 15)}</span><span style="flex:1">${esc(x.text)}</span><span class="btn sm">${x.btn}</span></a>`).join('') : '<div class="muted small">ماكو شي معلّق. يوم موفق 🌱</div>'}</div></div></div>`;
 }
 
-export const views = { promotion: promotionView, timetable: timetableView, ask: askView, inbox: inboxView, login, me, myatt, users, audit: auditView, dashboard, attendance, reports, posts: postsView, marks: marksView, students, student, classes, section, devices, school: settings, teacher, parent, notes };
+/* ============ TEACHER / STAFF ATTENDANCE (حضور الكادر التدريسي) ============ */
+const staffAttState = { day: null, q: '', f: 'all' };
+
+const staffAtt = {
+  render(el) {
+    staffAttState.day = staffAttState.day || db.days()[0];
+    const canManage = can('att') || ctx().role === 'owner' || ctx().role === 'admin';
+    el.innerHTML = topbar('حضور وبصمة الكادر التدريسي', 'متابعة حية لبصمات دخول وانصراف المدرسين وأجهزة البصمة', canManage ? `
+      <button class="btn pr" id="btn-quick-t-scan">${icon('device', 18)} محاكاة بصمة مدرس</button>
+      <button class="btn" id="btn-manual-t-att">${icon('plus', 16)} تسجيل يدوي</button>
+      <button class="btn" id="btn-t-excuse">${icon('plus', 16)} إجازة / عذر</button>
+      <button class="btn" id="btn-t-month-rep">${icon('report', 16)} تقرير الدوام الشهري</button>
+    ` : `
+      <button class="btn" id="btn-t-month-rep">${icon('report', 16)} تقرير الدوام الشهري</button>
+    `) + `
+    <div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+      <label class="field" style="min-width:180px">اليوم
+        <select class="input" id="t-day">
+          ${db.days().map((d, i) => `<option value="${d}" ${d === staffAttState.day ? 'selected' : ''}>${i === 0 ? 'اليوم · ' : ''}${fmtDay(new Date(d))}</option>`).join('')}
+        </select>
+      </label>
+      <label class="field" style="flex:1;min-width:200px">بحث بالاسم أو المادة
+        <input class="input" id="t-q" value="${esc(staffAttState.q)}" placeholder="اكتب اسم المدرس أو المادة...">
+      </label>
+      <div class="small muted" style="padding-bottom:10px">
+        بداية الدوام: <b class="num">${db.settings().start || '07:45'}</b> · الحد الأقصى للتأخير: <b class="num">${db.settings().late || '07:55'}</b> · الانصراف: <b class="num">${db.settings().end || '13:30'}</b>
+      </div>
+    </div>
+    <div id="t-stats-box"></div>
+    <div class="seg" id="t-fseg" role="group" aria-label="تصفية حالة الكادر"></div>
+    <div class="card tablewrap" id="t-tbl"></div>
+    <div class="card" id="t-live-feed" style="display:flex;flex-direction:column;gap:10px"></div>
+    `;
+
+    $('#t-day', el).onchange = e => { staffAttState.day = +e.target.value; this.update(el); };
+    $('#t-q', el).oninput = e => { staffAttState.q = e.target.value; this.update(el); };
+
+    el.addEventListener('click', e => {
+      const f = e.target.closest('[data-tf]');
+      if (f) { staffAttState.f = f.dataset.tf; this.update(el); return; }
+
+      if (e.target.closest('#btn-quick-t-scan')) {
+        simulateTeacherScanModal(() => this.update(el));
+        return;
+      }
+      if (e.target.closest('#btn-manual-t-att')) {
+        manualTeacherAttModal(() => this.update(el));
+        return;
+      }
+      if (e.target.closest('#btn-t-excuse')) {
+        teacherExcuseModal(null, () => this.update(el));
+        return;
+      }
+      if (e.target.closest('#btn-t-month-rep')) {
+        teacherMonthReportModal();
+        return;
+      }
+
+      const min = e.target.closest('[data-t-mark-in]');
+      if (min) {
+        const tid = min.dataset.tMarkIn;
+        db.teacherMarkManual(tid, 'in', ctx().name);
+        toast('سُجّلت بصمة الدخول', db.teacher(tid)?.name);
+        this.update(el);
+        return;
+      }
+
+      const mout = e.target.closest('[data-t-mark-out]');
+      if (mout) {
+        const tid = mout.dataset.tMarkOut;
+        db.teacherMarkManual(tid, 'out', ctx().name);
+        toast('سُجّلت بصمة الانصراف', db.teacher(tid)?.name);
+        this.update(el);
+        return;
+      }
+
+      const excBtn = e.target.closest('[data-t-exc]');
+      if (excBtn) {
+        teacherExcuseModal(excBtn.dataset.tExc, () => this.update(el));
+        return;
+      }
+
+      const histBtn = e.target.closest('[data-t-hist]');
+      if (histBtn) {
+        teacherHistoryModal(histBtn.dataset.tHist);
+        return;
+      }
+    });
+
+    this.update(el);
+  },
+
+  update(el) {
+    const list = db.teachers();
+    const day = staffAttState.day || db.days()[0];
+    const isToday = day === db.days()[0];
+    const summ = db.teacherSummary(day);
+
+    const statsBox = $('#t-stats-box', el);
+    if (statsBox) {
+      statsBox.innerHTML = `
+      <div class="grid g4" style="gap:10px">
+        <div class="card stat" style="border-right:4px solid var(--brand)">
+          <span class="pill p-quiet">الكادر الكلي</span>
+          <div class="n num">${summ.total}</div>
+          <div class="small muted">مدرس ومعلم</div>
+        </div>
+        <div class="card stat" style="border-right:4px solid var(--teal)">
+          <span class="pill p-present">حاضر في الموعد</span>
+          <div class="n num" style="color:var(--teal)">${summ.present}</div>
+          <div class="small muted">التزام تام بالموعد</div>
+        </div>
+        <div class="card stat" style="border-right:4px solid var(--amber)">
+          <span class="pill p-late">تأخير / بعد 7:55</span>
+          <div class="n num" style="color:var(--amber)">${summ.late}</div>
+          <div class="small muted">${summ.left ? summ.left + ' انصرفوا' : 'حضروا متأخرين'}</div>
+        </div>
+        <div class="card stat" style="border-right:4px solid var(--red)">
+          <span class="pill p-absent">غياب / إجازة</span>
+          <div class="n num" style="color:var(--red)">${summ.absent + summ.excused}</div>
+          <div class="small muted">${summ.excused} بإجازة رسمية · نسبة الالتزام <b class="num">${summ.rate}%</b></div>
+        </div>
+      </div>`;
+    }
+
+    const fseg = $('#t-fseg', el);
+    if (fseg) {
+      const F = [
+        ['all', `الكل (${summ.total})`],
+        ['present', `حاضر (${summ.present})`],
+        ['late', `متأخر (${summ.late})`],
+        ['left', `انصرف (${summ.left})`],
+        ['excused', `إجازة / عذر (${summ.excused})`],
+        ['absent', `غائب (${summ.absent})`],
+        ...(isToday ? [['pending', `لم يبصم بعد (${summ.pending})`]] : [])
+      ];
+      fseg.innerHTML = F.map(([k, label]) => `<button type="button" data-tf="${k}" aria-pressed="${staffAttState.f === k}">${label}</button>`).join('');
+    }
+
+    let rows = list.map(t => ({ t, st: db.teacherStatusOf(t.id, day) }));
+    if (staffAttState.q) {
+      const q = norm(staffAttState.q);
+      rows = rows.filter(r => norm(r.t.name).includes(q) || norm(r.t.subject || '').includes(q) || (r.t.phone && r.t.phone.includes(q)));
+    }
+    if (staffAttState.f !== 'all') {
+      rows = rows.filter(r => r.st.status === staffAttState.f || (staffAttState.f === 'late' && r.st.late));
+    }
+
+    const tbl = $('#t-tbl', el);
+    if (tbl) {
+      const canManage = can('att') || ctx().role === 'owner' || ctx().role === 'admin';
+      tbl.innerHTML = rows.length ? `
+      <table>
+        <thead>
+          <tr>
+            <th>المدرس</th>
+            <th>المادة والشعب</th>
+            <th>بصمة الدخول الصباحية</th>
+            <th>بصمة الانصراف</th>
+            <th>الحالة</th>
+            ${canManage ? '<th>الإجراءات</th>' : ''}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(({ t, st }) => {
+            const inTime = st.inEv ? fmtTime(st.inEv.ts) : '—';
+            const inDev = st.inEv ? (st.inEv.deviceId ? db.device(st.inEv.deviceId)?.name.split(' · ')[0] : 'يدوي') : '';
+            const inMethod = st.inEv?.method || '';
+            const outTime = st.outEv ? fmtTime(st.outEv.ts) : '—';
+            const outDev = st.outEv ? (st.outEv.deviceId ? db.device(st.outEv.deviceId)?.name.split(' · ')[0] : 'يدوي') : '';
+
+            let pillHtml = '';
+            if (st.status === 'present') pillHtml = '<span class="pill p-present">حاضر في الموعد ✓</span>';
+            else if (st.status === 'late') pillHtml = '<span class="pill p-late">متأخر ⏱</span>';
+            else if (st.status === 'left') pillHtml = '<span class="pill p-left">انصرف ⏏</span>';
+            else if (st.status === 'excused') pillHtml = `<span class="pill p-excused" title="${esc(st.excuse?.note || '')}">إجازة: ${esc(st.excuse?.reason || 'عذر')}</span>`;
+            else if (st.status === 'pending') pillHtml = '<span class="pill p-quiet">لم يبصم بعد ⌛</span>';
+            else if (st.status === 'holiday') pillHtml = '<span class="pill p-quiet">عطلة رسمية</span>';
+            else pillHtml = '<span class="pill p-absent">غائب ✕</span>';
+
+            return `<tr>
+              <td>
+                <div style="display:flex;gap:10px;align-items:center">
+                  ${avatar(t.name)}
+                  <div>
+                    <b>${esc(t.name)}</b>
+                    <div class="muted small num" dir="ltr">${esc(t.phone)}</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div><b>${esc(t.subject || 'عام')}</b></div>
+                <div class="muted small">${t.sections?.length ? t.sections.map(s => esc(db.sectionShort(s))).join('، ') : 'كل المدرسة'}</div>
+              </td>
+              <td>
+                <b class="num" style="font-size:15px">${inTime}</b>
+                ${st.inEv ? `<div class="muted small">${esc(inMethod)} · ${esc(inDev)}</div>` : ''}
+              </td>
+              <td>
+                <b class="num" style="font-size:15px">${outTime}</b>
+                ${st.outEv ? `<div class="muted small">${esc(outDev)}</div>` : ''}
+              </td>
+              <td>${pillHtml}</td>
+              ${canManage ? `
+              <td>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  ${!st.inEv ? `<button type="button" class="btn sm pr" data-t-mark-in="${t.id}" title="تسجيل حضور الآن">${icon('check', 13)} دخول</button>` : ''}
+                  ${st.inEv && !st.outEv ? `<button type="button" class="btn sm" data-t-mark-out="${t.id}" title="تسجيل انصراف">${icon('logout', 13)} انصراف</button>` : ''}
+                  <button type="button" class="btn sm" data-t-exc="${t.id}" title="تسجيل إجازة أو عذر">${icon('plus', 13)} إجازة</button>
+                  <button type="button" class="btn sm" data-t-hist="${t.id}" title="سجل بصمات المدرس">${icon('eye', 13)} السجل</button>
+                </div>
+              </td>` : ''}
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>` : '<div class="empty">لا توجد سجلات مطابقة للبحث أو التصفية الحالية.</div>';
+    }
+
+    const feed = $('#t-live-feed', el);
+    if (feed) {
+      const recents = db.recentTeacherEvents(8);
+      feed.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2 style="display:flex;align-items:center;gap:6px;font-size:16px">
+          ${icon('device', 18)} سجل حركات البصمة الحية للكادر اليوم (${recents.length})
+        </h2>
+        <span class="muted small">محدّث لحظياً مع أجهزة ZKTeco و Hikvision</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${recents.length ? recents.map(e => {
+          const t = db.teacher(e.teacherId);
+          const dev = e.deviceId ? db.device(e.deviceId) : null;
+          const isIn = e.type === 'in';
+          return `<div class="row" style="background:var(--surface-200);border-radius:10px;padding:8px 12px">
+            <span class="ti" style="width:34px;height:34px;background:${isIn ? 'var(--teal-soft)' : 'var(--brand-soft)'};color:${isIn ? 'var(--teal)' : 'var(--brand)'}">
+              ${icon(isIn ? 'check' : 'logout', 16)}
+            </span>
+            <div style="flex:1">
+              <b>${esc(t?.name || 'مدرس')}</b>
+              <div class="muted small">${isIn ? 'بصمة دخول صباحي' : 'بصمة انصراف'} · ${esc(e.method || 'بصمة')} · ${esc(dev?.name || 'تسجيل يدوي')}</div>
+            </div>
+            <div style="text-align:left">
+              <b class="num" style="font-size:15px">${fmtTime(e.ts)}</b>
+              <div class="muted small">${ago(e.ts, db.now())}</div>
+            </div>
+          </div>`;
+        }).join('') : '<div class="small muted">لا توجد حركات بصمة مسجلة للكادر حتى الآن اليوم.</div>'}
+      </div>`;
+    }
+  }
+};
+
+function simulateTeacherScanModal(onDone) {
+  const tList = db.teachers();
+  const dList = db.devices();
+  modal('محاكاة بصمة مدرس حية', `<form id="stsf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+    <div class="muted small">اختر المدرس وجهاز البصمة لاختبار تسجيل الحضور أو الانصراف عبر الأجهزة:</div>
+    <label class="field">المدرس
+      <select class="input" name="teacherId">
+        ${tList.map(t => {
+          const st = db.teacherStatusOf(t.id);
+          const nextAction = st.inEv && !st.outEv ? 'انصراف' : 'دخول';
+          return `<option value="${t.id}">${esc(t.name)} (${esc(t.subject || 'عام')}) - البصمة التالية: ${nextAction}</option>`;
+        }).join('')}
+      </select>
+    </label>
+    <div class="grid g2" style="gap:10px">
+      <label class="field">جهاز البصمة
+        <select class="input" name="deviceId">
+          ${dList.map(d => `<option value="${d.id}">${esc(d.name)} (${esc(d.model)})</option>`).join('')}
+        </select>
+      </label>
+      <label class="field">طريقة البصمة
+        <select class="input" name="method">
+          <option value="بصمة إصبع">بصمة إصبع (Fingerprint)</option>
+          <option value="بصمة وجه">بصمة وجه (Face ID)</option>
+          <option value="بطاقة ممغنطة">بطاقة ذكية (RFID Card)</option>
+          <option value="بصمة كف">بصمة كف (Palm)</option>
+        </select>
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+      <button type="button" class="btn" data-close>إلغاء</button>
+      <button class="btn pr" style="min-height:44px">${icon('device', 16)} تسجيل البصمة الآن</button>
+    </div>
+  </form>`, (m, close) => {
+    $('#stsf', m).onsubmit = e => {
+      e.preventDefault();
+      const tid = e.target.teacherId.value;
+      const did = e.target.deviceId.value;
+      const method = e.target.method.value;
+      const dev = db.device(did);
+      const t = db.teacher(tid);
+      const curSt = db.teacherStatusOf(tid);
+      const type = (curSt.inEv && !curSt.outEv) ? 'out' : 'in';
+      const ev = { id: Date.now(), teacherId: tid, type, ts: db.now(), deviceId: did, method };
+      (db.teacherEvents()).push(ev);
+      toast(type === 'in' ? 'تم تسجيل بصمة الدخول' : 'تم تسجيل بصمة الانصراف', `${t.name} · ${dev.name} · ${method}`);
+      close();
+      onDone();
+    };
+  });
+}
+
+function manualTeacherAttModal(onDone) {
+  const tList = db.teachers();
+  modal('تسجيل حضور / انصراف يدوي للمدرس', `<form id="mtf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+    <label class="field">اختر المدرس
+      <select class="input" name="teacherId">
+        ${tList.map(t => `<option value="${t.id}">${esc(t.name)} (${esc(t.subject || 'عام')})</option>`).join('')}
+      </select>
+    </label>
+    <div class="grid g2" style="gap:10px">
+      <label class="field">نوع التسجيل
+        <select class="input" name="type">
+          <option value="in">تسجيل حضور صباحي (دخول)</option>
+          <option value="out">تسجيل انصراف نهاية الدوام (خروج)</option>
+        </select>
+      </label>
+      <label class="field">المسؤول
+        <input class="input" value="${esc(ctx().name)}" readonly>
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+      <button type="button" class="btn" data-close>إلغاء</button>
+      <button class="btn pr" style="min-height:44px">${icon('check', 16)} تثبيت السجل</button>
+    </div>
+  </form>`, (m, close) => {
+    $('#mtf', m).onsubmit = e => {
+      e.preventDefault();
+      const tid = e.target.teacherId.value;
+      const type = e.target.type.value;
+      const r = db.teacherMarkManual(tid, type, ctx().name);
+      if (r.ok) {
+        toast('تم تسجيل الحضور اليدوي', db.teacher(tid)?.name);
+        close();
+        onDone();
+      }
+    };
+  });
+}
+
+function teacherExcuseModal(presetId, onDone) {
+  const tList = db.teachers();
+  modal('تسجيل إجازة / عذر رسمي لمدرس', `<form id="tef" style="display:flex;flex-direction:column;gap:12px" novalidate>
+    <label class="field">المدرس
+      <select class="input" name="teacherId">
+        ${tList.map(t => `<option value="${t.id}" ${t.id === presetId ? 'selected' : ''}>${esc(t.name)} (${esc(t.subject || 'عام')})</option>`).join('')}
+      </select>
+    </label>
+    <div class="grid g2" style="gap:10px">
+      <label class="field">اليوم
+        <select class="input" name="day">
+          ${db.days().map(d => `<option value="${d}">${fmtDay(new Date(d))}</option>`).join('')}
+        </select>
+      </label>
+      <label class="field">نوع الإجازة / العذر
+        <select class="input" name="reason">
+          <option value="إجازة اعتيادية">إجازة اعتيادية</option>
+          <option value="إجازة مرضية">إجازة مرضية</option>
+          <option value="إيفاد رسمي أو وزاري">إيفاد رسمي أو وزاري</option>
+          <option value="مأذونية ساعية خاصة">مأذونية ساعية خاصة</option>
+          <option value="ظرف عائلي طارئ">ظرف عائلي طارئ</option>
+        </select>
+      </label>
+    </div>
+    <label class="field">ملاحظات الإدارة
+      <input class="input" name="note" placeholder="مثال: بموافقة السيد المدير / إجازة رسمية مدفوعة">
+    </label>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+      <button type="button" class="btn" data-close>إلغاء</button>
+      <button class="btn pr" style="min-height:44px">${icon('check', 16)} حفظ الإجازة</button>
+    </div>
+  </form>`, (m, close) => {
+    $('#tef', m).onsubmit = e => {
+      e.preventDefault();
+      const tid = e.target.teacherId.value;
+      const day = +e.target.day.value;
+      const reason = e.target.reason.value;
+      const note = e.target.note.value;
+      const r = db.teacherAddExcuse(tid, { day, reason, note }, ctx().name);
+      if (r.ok) {
+        toast('تم تسجيل الإجازة للمدرس', `${db.teacher(tid)?.name} · ${reason}`);
+        close();
+        onDone();
+      }
+    };
+  });
+}
+
+function teacherHistoryModal(teacherId) {
+  const t = db.teacher(teacherId);
+  if (!t) return;
+  const ds = db.days();
+  modal(`سجل دوام وبصمات: ${t.name}`, `<div style="display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface-200);padding:10px 14px;border-radius:10px">
+      <div><b>${esc(t.name)}</b> <span class="muted">(${esc(t.subject || 'عام')})</span></div>
+      <div class="muted small num" dir="ltr">${esc(t.phone)}</div>
+    </div>
+    <div class="tablewrap" style="max-height:55vh;overflow:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>اليوم والتاريخ</th>
+            <th>بصمة الدخول</th>
+            <th>بصمة الانصراف</th>
+            <th>الحالة</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${ds.map(d => {
+            const st = db.teacherStatusOf(t.id, d);
+            const inTime = st.inEv ? fmtTime(st.inEv.ts) : '—';
+            const inDev = st.inEv ? (st.inEv.deviceId ? db.device(st.inEv.deviceId)?.name.split(' · ')[0] : 'يدوي') : '';
+            const outTime = st.outEv ? fmtTime(st.outEv.ts) : '—';
+            let pillHtml = '';
+            if (st.status === 'present') pillHtml = '<span class="pill p-present">حاضر ✓</span>';
+            else if (st.status === 'late') pillHtml = '<span class="pill p-late">متأخر ⏱</span>';
+            else if (st.status === 'left') pillHtml = '<span class="pill p-left">انصرف ⏏</span>';
+            else if (st.status === 'excused') pillHtml = `<span class="pill p-excused">إجازة: ${esc(st.excuse?.reason || '')}</span>`;
+            else if (st.status === 'holiday') pillHtml = '<span class="pill p-quiet">عطلة</span>';
+            else if (st.status === 'pending') pillHtml = '<span class="pill p-quiet">لم يبصم</span>';
+            else pillHtml = '<span class="pill p-absent">غائب</span>';
+
+            return `<tr>
+              <td><b>${fmtDay(new Date(d))}</b></td>
+              <td>${inTime} ${inDev ? `<small class="muted">(${inDev})</small>` : ''}</td>
+              <td>${outTime}</td>
+              <td>${pillHtml}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn" data-close>إغلاق</button>
+    </div>
+  </div>`);
+}
+
+function teacherMonthReportModal() {
+  const rep = db.teacherMonthReport();
+  const inFrame = window.top !== window;
+  modal('تقرير دوام وحضور الكادر الشهري', `<div style="display:flex;flex-direction:column;gap:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div><b>التقرير التراكمي لالتزام الكادر التدريسي</b><div class="muted small">يشمل جميع أيام الدوام، الحضور، والتأخيرات، ونسبة الالتزام.</div></div>
+      <div style="display:flex;gap:6px">
+        <button type="button" class="btn sm" id="t-csv-btn">${icon('report', 14)} تصدير Excel (CSV)</button>
+        ${inFrame ? '' : `<button type="button" class="btn sm" id="t-prn-btn">${icon('eye', 14)} طباعة / PDF</button>`}
+      </div>
+    </div>
+    <div class="tablewrap" style="max-height:60vh;overflow:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>المدرس</th>
+            <th>المادة</th>
+            <th>حضور بالموعد</th>
+            <th>تأخير</th>
+            <th>غياب</th>
+            <th>إجازة</th>
+            <th>نسبة الالتزام</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rep.rows.map(r => `
+            <tr>
+              <td><b>${esc(r.t.name)}</b></td>
+              <td>${esc(r.t.subject || 'عام')}</td>
+              <td class="num"><b style="color:var(--teal)">${r.c.present}</b></td>
+              <td class="num"><b style="color:var(--amber)">${r.c.late}</b></td>
+              <td class="num"><b style="color:var(--red)">${r.c.absent}</b></td>
+              <td class="num">${r.c.excused}</td>
+              <td>
+                <span class="pill ${r.rate >= 90 ? 'p-present' : r.rate >= 75 ? 'p-late' : 'p-absent'} num" style="font-weight:700">
+                  ${r.rate}%
+                </span>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn" data-close>إغلاق</button>
+    </div>
+  </div>`, (m, close) => {
+    $('#t-prn-btn', m)?.addEventListener('click', () => window.print());
+    $('#t-csv-btn', m)?.addEventListener('click', () => {
+      const head = ['المدرس', 'المادة', 'حضور', 'تأخير', 'غياب', 'إجازة', 'نسبة الالتزام'];
+      const lines = [head, ...rep.rows.map(r => [r.t.name, r.t.subject || '', r.c.present, r.c.late, r.c.absent, r.c.excused, r.rate + '%'])];
+      const csv = '\uFEFF' + lines.map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `تقرير_دوام_الكادر_${dayKey(new Date())}.csv`; a.click();
+    });
+  });
+}
+
+export const views = { staffAtt, promotion: promotionView, timetable: timetableView, ask: askView, inbox: inboxView, login, me, myatt, users, audit: auditView, dashboard, attendance, reports, posts: postsView, marks: marksView, students, student, classes, section, devices, school: settings, teacher, parent, notes };
 
 // Full screen for protected videos keeps the watermark: the wrapper goes full screen, not the bare video.
 document.addEventListener('click', e => { const b = e.target.closest('.vfs'); if (!b) return; const w = b.closest('.vwrap'); if (document.fullscreenElement) document.exitFullscreen(); else w.requestFullscreen?.().catch(() => {}); });

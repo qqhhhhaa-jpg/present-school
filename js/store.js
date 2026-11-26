@@ -138,6 +138,19 @@ function seed(mode = 'real') {
     events.push({ id: eid++, studentId: s.id, type: 'out', ts: o.getTime(), deviceId: dev, method: pick(devObj.methods) });
   }));
 
+  // Past school days teacher attendance history
+  const teacherEvents = [];
+  past.forEach(day => teachers.forEach((t, idx) => {
+    const x = r();
+    if (idx === 1 && dayKey(day) === dayKey(past[1])) return; // leave
+    const dev = devices[idx % devices.length];
+    const inMin = x < 0.12 ? minutesOf('07:58') + Math.floor(r() * 10) : minutesOf('07:22') + Math.floor(r() * 22);
+    const dt = new Date(day); dt.setMinutes(inMin);
+    teacherEvents.push({ id: eid++, teacherId: t.id, type: 'in', ts: dt.getTime(), deviceId: dev.id, method: dev.methods[0] });
+    const ot = new Date(day); ot.setMinutes(minutesOf('13:30') + Math.floor(r() * 15));
+    teacherEvents.push({ id: eid++, teacherId: t.id, type: 'out', ts: ot.getTime(), deviceId: dev.id, method: dev.methods[0] });
+  }));
+
   // Real time on a Friday/Saturday: no school today, nobody scans and no absence alerts.
   const holiday = mode === 'real' && !isSchoolDay(today);
   // Today's plan: when each student will scan in (and out).
@@ -154,10 +167,18 @@ function seed(mode = 'real') {
     return { studentId: s.id, deviceId: dev, method: pick(devObj.methods), inMin, outMin: inMin == null ? null : minutesOf('13:30') + Math.floor(r() * 12), inDone: false, outDone: false };
   });
 
+  const teacherPlan = teachers.map((t, idx) => {
+    const dev = devices[idx % devices.length];
+    let inMin = minutesOf('07:32') + idx * 8; // t1: 07:32, t2: 07:40, t3: 07:48
+    if (holiday) inMin = null;
+    return { teacherId: t.id, deviceId: dev.id, method: dev.methods[0], inMin, outMin: inMin == null ? null : minutesOf('13:30') + Math.floor(r() * 10), inDone: false, outDone: false };
+  });
+
   const start = atTime(today, '07:50').getTime();
   return {
     v: 5, day: dayKey(today), holiday, today: today.getTime(), past: past.map(p => p.getTime()),
     grades, sections, students, guardians, teachers, devices, settings, events, eid, plan,
+    teacherEvents, teacherPlan, teacherExcuses: [],
     excuses: [], notes: [], flags: {}, posts: seedPosts(today), reads: {},
     admins: [{ phone: '07700000001', name: 'أ. سعاد كريم' }], disabled: [],
     audit: [{ ts: atTime(today, '07:30').getTime(), by: 'مالك المنصة', action: 'تفعيل الأجهزة', detail: 'بدء الدوام وتشغيل 3 أجهزة بصمة' }],
@@ -186,6 +207,8 @@ export function init() {
   S.chats = S.chats || {}; S.tickets = S.tickets || [];
   if (!S.marks) { S.marks = seedMarks(); S.markReads = {}; }
   if (!S.creds) S.creds = saved?.creds || seedCreds(); // generated logins survive a new demo day
+  if (!S.teacherEvents) S.teacherEvents = [];
+  if (!S.teacherExcuses) S.teacherExcuses = [];
   S.clock.real = Date.now(); // resume from where the page was closed
   tick(true);
   clearInterval(tickTimer);
@@ -210,7 +233,7 @@ function addEvent(ev, quiet) {
 }
 
 function tick(quiet) {
-  if (S.clock.mode === 'real' && dayKey(new Date()) !== S.day) { const keep = { students: S.students, guardians: S.guardians, teachers: S.teachers, admins: S.admins, disabled: S.disabled, posts: S.posts, reads: S.reads, settings: S.settings, audit: S.audit, notes: S.notes, excuses: S.excuses, events: S.events, eid: S.eid, seen: S.seen, marks: S.marks, markReads: S.markReads, creds: S.creds, holidays: S.holidays, chats: S.chats, tickets: S.tickets, tt: S.tt, ttSeen: S.ttSeen, promotions: S.promotions, graduates: S.graduates, graduatedStore: S.graduatedStore, finalsSeeded: S.finalsSeeded };
+  if (S.clock.mode === 'real' && dayKey(new Date()) !== S.day) { const keep = { students: S.students, guardians: S.guardians, teachers: S.teachers, admins: S.admins, disabled: S.disabled, posts: S.posts, reads: S.reads, settings: S.settings, audit: S.audit, notes: S.notes, excuses: S.excuses, events: S.events, eid: S.eid, seen: S.seen, marks: S.marks, markReads: S.markReads, creds: S.creds, holidays: S.holidays, chats: S.chats, tickets: S.tickets, tt: S.tt, ttSeen: S.ttSeen, promotions: S.promotions, graduates: S.graduates, graduatedStore: S.graduatedStore, finalsSeeded: S.finalsSeeded, teacherEvents: S.teacherEvents, teacherExcuses: S.teacherExcuses };
     S = Object.assign(seed('real'), keep); IDX = null; emit('reset'); return; }
   const t = now();
   const base = S.today;
@@ -226,6 +249,19 @@ function tick(quiet) {
       p.outDone = true; changed = true;
       const ev = { studentId: p.studentId, type: 'out', ts: base + p.outMin * 60000 + (parseInt(String(p.studentId).replace(/\D/g, '')) * 104729 % 59) * 1000, deviceId: p.deviceId, method: p.method };
       if (dev.online) addEvent(ev, quiet); else dev.buffer.push(ev);
+    }
+  }
+  for (const p of (S.teacherPlan || [])) {
+    const dev = device(p.deviceId);
+    if (p.inMin != null && !p.inDone && base + p.inMin * 60000 <= t) {
+      p.inDone = true; changed = true;
+      const ev = { id: S.eid++, teacherId: p.teacherId, type: 'in', ts: base + p.inMin * 60000, deviceId: p.deviceId, method: p.method };
+      (S.teacherEvents = S.teacherEvents || []).push(ev);
+    }
+    if (p.outMin != null && p.inDone && !p.outDone && base + p.outMin * 60000 <= t) {
+      p.outDone = true; changed = true;
+      const ev = { id: S.eid++, teacherId: p.teacherId, type: 'out', ts: base + p.outMin * 60000, deviceId: p.deviceId, method: p.method };
+      (S.teacherEvents = S.teacherEvents || []).push(ev);
     }
   }
   S.devices.forEach(d => { if (d.online) d.lastSeen = t; });
@@ -381,6 +417,109 @@ export function addExcuse(studentId, reason, note, by) {
   if (t) notify(t.phone, { kind: 'excuse', title: `تبرير غياب: ${st.name}`, body: `${reason}${note ? ' · ' + note : ''} · من ولي الأمر`, ts: now(), studentId });
   notifyStaff({ kind: 'excuse', title: `تبرير غياب: ${st.name}`, body: `${sectionShort(st.sectionId)} · ${reason}`, ts: now(), studentId });
   emit('excuse');
+}
+
+/* ---------------- teacher attendance & biometrics ---------------- */
+export const teacherEvents = () => S.teacherEvents || [];
+export const teacherExcuses = () => S.teacherExcuses || [];
+
+export function teacherStatusOf(teacherId, day = S.today) {
+  if ((S.holiday && day === S.today) || offDay(day)) return { status: 'holiday' };
+  const k = dayKey(new Date(day));
+  const evs = (S.teacherEvents || []).filter(e => e.teacherId === teacherId && dayKey(new Date(e.ts)) === k).sort((a, b) => a.ts - b.ts);
+  const inEv = evs.find(e => e.type === 'in');
+  const outEv = [...evs].reverse().find(e => e.type === 'out');
+  const excuse = (S.teacherExcuses || []).find(x => x.teacherId === teacherId && x.day === k);
+  if (!inEv) {
+    if (excuse) return { status: 'excused', excuse };
+    const isToday = day === S.today;
+    if (isToday && now() < atTime(day, S.settings.late || '07:55').getTime()) return { status: 'pending' };
+    return { status: 'absent' };
+  }
+  const lateMin = minutesOf(S.settings.late || '07:55');
+  const d = new Date(inEv.ts);
+  const late = d.getHours() * 60 + d.getMinutes() > lateMin;
+  if (outEv && outEv.ts > inEv.ts) return { status: 'left', inEv, outEv, late };
+  return { status: late ? 'late' : 'present', inEv, late };
+}
+
+export function teacherSummary(day = S.today) {
+  const list = S.teachers || [];
+  const c = { present: 0, late: 0, absent: 0, excused: 0, left: 0, pending: 0, total: list.length, came: 0, rate: 0 };
+  list.forEach(t => {
+    const st = teacherStatusOf(t.id, day).status;
+    if (c[st] !== undefined) c[st]++;
+  });
+  c.came = c.present + c.late + c.left;
+  c.rate = c.total ? Math.round(c.came / c.total * 100) : 0;
+  return c;
+}
+
+export function teacherMarkManual(teacherId, type = 'in', by = 'الإدارة') {
+  const t = teacher(teacherId);
+  if (!t) return { ok: false, error: 'المدرس غير موجود.' };
+  const ev = { id: S.eid++, teacherId, type, ts: now(), deviceId: null, method: `يدوي · ${by}` };
+  (S.teacherEvents = S.teacherEvents || []).push(ev);
+  const p = (S.teacherPlan || []).find(x => x.teacherId === teacherId);
+  if (p) { if (type === 'in') p.inDone = true; if (type === 'out') p.outDone = true; }
+  log(type === 'in' ? 'حضور مدرس يدوي' : 'انصراف مدرس يدوي', `${t.name} · بواسطة ${by}`);
+  emit('teacher-att');
+  return { ok: true, event: ev };
+}
+
+export function teacherAddExcuse(teacherId, { day = S.today, reason, note = '' }, by = 'الإدارة') {
+  const t = teacher(teacherId);
+  if (!t) return { ok: false, error: 'المدرس غير موجود.' };
+  if (!String(reason || '').trim()) return { ok: false, error: 'اختر أو اكتب سبب الإجازة أو العذر.' };
+  const k = dayKey(new Date(day));
+  S.teacherExcuses = S.teacherExcuses || [];
+  S.teacherExcuses = S.teacherExcuses.filter(x => !(x.teacherId === teacherId && x.day === k));
+  const exc = { id: 'te' + Date.now(), teacherId, day: k, reason: reason.trim(), note: String(note || '').trim(), by };
+  S.teacherExcuses.push(exc);
+  log('تسجيل إجازة/عذر لمدرس', `${t.name} · ${reason} · ${k}`);
+  emit('teacher-att');
+  return { ok: true, excuse: exc };
+}
+
+export function simulateTeacherScan(deviceId, teacherId = null) {
+  const dev = device(deviceId) || S.devices[0];
+  if (!dev) return null;
+  let targetId = teacherId;
+  if (!targetId) {
+    const waiting = (S.teachers || []).filter(t => teacherStatusOf(t.id).status === 'pending' || teacherStatusOf(t.id).status === 'absent');
+    targetId = waiting.length ? waiting[0].id : (S.teachers[0] ? S.teachers[0].id : null);
+  }
+  if (!targetId) return null;
+  const t = teacher(targetId);
+  const curSt = teacherStatusOf(targetId);
+  const type = (curSt.inEv && !curSt.outEv) ? 'out' : 'in';
+  const method = dev.methods ? dev.methods[Math.floor(Math.random() * dev.methods.length)] : 'بصمة إصبع';
+  const ev = { id: S.eid++, teacherId: targetId, type, ts: now(), deviceId: dev.id, method };
+  (S.teacherEvents = S.teacherEvents || []).push(ev);
+  const p = (S.teacherPlan || []).find(x => x.teacherId === targetId);
+  if (p) { if (type === 'in') p.inDone = true; else p.outDone = true; }
+  log(type === 'in' ? 'بصمة حضور مدرس' : 'بصمة انصراف مدرس', `${t.name} · ${dev.name} · ${method}`);
+  emit('teacher-att');
+  return { teacher: t, event: ev, type };
+}
+
+export function teacherMonthReport() {
+  const ds = days();
+  const rows = (S.teachers || []).map(t => {
+    const cells = ds.map(d => teacherStatusOf(t.id, d));
+    const c = { present: 0, late: 0, absent: 0, excused: 0, left: 0 };
+    cells.forEach(x => { if (c[x.status] !== undefined) c[x.status]++; if (x.late) c.late++; });
+    const workDays = ds.filter(d => !offDay(d)).length;
+    const attended = c.present + c.late + c.left;
+    const rate = workDays ? Math.min(100, Math.round(attended / workDays * 100)) : 100;
+    return { t, cells, c, attended, workDays, rate };
+  });
+  return { days: ds, rows };
+}
+
+export function recentTeacherEvents(n = 20) {
+  const k = S.day;
+  return (S.teacherEvents || []).filter(e => dayKey(new Date(e.ts)) === k).sort((a, b) => b.ts - a.ts || b.id - a.id).slice(0, n);
 }
 
 /* ---------------- devices ---------------- */

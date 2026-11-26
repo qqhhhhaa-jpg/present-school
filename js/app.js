@@ -35,9 +35,9 @@ export function modal(title, html, onMount) {
 
 /* ---------- navigation per role ---------- */
 const NAV = {
-  owner: [['dashboard', 'الرئيسية', 'home'], ['users', 'المستخدمون', 'users'], ['attendance', 'الحضور', 'check'], ['reports', 'التقارير', 'report'], ['students', 'الطلاب', 'child'], ['classes', 'الصفوف والشعب', 'grid'], ['posts', 'الواجبات والنشر', 'book'], ['marks', 'الدرجات', 'grade'], ['promotion', 'ترحيل الطلبة', 'up'], ['timetable', 'الجدول', 'calendar'], ['inbox', 'رسائل أولياء الأمور', 'chat'], ['devices', 'أجهزة البصمة', 'device'], ['audit', 'سجل العمليات', 'report'], ['school', 'الإعدادات', 'gear']],
+  owner: [['dashboard', 'الرئيسية', 'home'], ['users', 'المستخدمون', 'users'], ['attendance', 'حضور الطلاب', 'check'], ['staffAtt', 'حضور الكادر', 'users'], ['reports', 'التقارير', 'report'], ['students', 'الطلاب', 'child'], ['classes', 'الصفوف والشعب', 'grid'], ['posts', 'الواجبات والنشر', 'book'], ['marks', 'الدرجات', 'grade'], ['promotion', 'ترحيل الطلبة', 'up'], ['timetable', 'الجدول', 'calendar'], ['inbox', 'رسائل أولياء الأمور', 'chat'], ['devices', 'أجهزة البصمة', 'device'], ['audit', 'سجل العمليات', 'report'], ['school', 'الإعدادات', 'gear']],
   admin: null, // same level as the platform admin: one runs the system, the other runs the school
-  teacher: [['teacher', 'اليوم', 'home'], ['attendance', 'الحضور', 'check'], ['posts', 'الواجبات والنشر', 'book'], ['marks', 'الدرجات', 'grade'], ['promotion', 'النتائج والترحيل', 'up'], ['timetable', 'الجدول', 'calendar'], ['reports', 'التقارير', 'report'], ['students', 'طلابي', 'users'], ['inbox', 'الرسائل', 'chat'], ['notes', 'الإشعارات', 'bell']],
+  teacher: [['teacher', 'اليوم', 'home'], ['staffAtt', 'بصمتي وحضوري', 'check'], ['attendance', 'حضور الطلاب', 'check'], ['posts', 'الواجبات والنشر', 'book'], ['marks', 'الدرجات', 'grade'], ['promotion', 'النتائج والترحيل', 'up'], ['timetable', 'الجدول', 'calendar'], ['reports', 'التقارير', 'report'], ['students', 'طلابي', 'users'], ['inbox', 'الرسائل', 'chat'], ['notes', 'الإشعارات', 'bell']],
   parent: [['parent', 'أولادي', 'child'], ['posts', 'المنشورات', 'book'], ['timetable', 'الجدول', 'calendar'], ['marks', 'الدرجات', 'grade'], ['ask', 'اسأل المدرسة', 'chat'], ['notes', 'الإشعارات', 'bell']],
   student: [['me', 'اليوم', 'home'], ['timetable', 'جدولي', 'calendar'], ['posts', 'واجباتي', 'book'], ['marks', 'درجاتي', 'grade'], ['ask', 'اسأل المدرسة', 'chat'], ['myatt', 'حضوري', 'check'], ['notes', 'الإشعارات', 'bell']],
 };
@@ -47,7 +47,7 @@ const NAV_PERM = { inbox: 'inbox', reports: 'reports', promotion: 'reports' };
 function navFor(c) { const items = NAV[c.role]; if (c.role !== 'teacher') return items; const tid = c.roleInfo.teacherId; return items.filter(([id]) => !NAV_PERM[id] || db.teacherCan(tid, NAV_PERM[id])); }
 const SIDE_GROUPS = [
   ['', ['dashboard', 'teacher', 'parent', 'me']],
-  ['الحضور والطلاب', ['attendance', 'reports', 'students', 'classes', 'devices', 'myatt']],
+  ['الحضور والطلاب', ['attendance', 'staffAtt', 'reports', 'students', 'classes', 'devices', 'myatt']],
   ['التعليم', ['timetable', 'posts', 'marks', 'promotion']],
   ['التواصل', ['inbox', 'ask']],
   ['النظام', ['users', 'audit', 'school']],
@@ -55,7 +55,7 @@ const SIDE_GROUPS = [
 ];
 // Phone: four main sections in the bottom bar, everything else in «المزيد» (a sheet that slides up).
 const PRIMARY = { owner: ['dashboard', 'attendance', 'posts', 'inbox'], admin: ['dashboard', 'attendance', 'posts', 'inbox'], teacher: ['teacher', 'attendance', 'posts', 'marks'], parent: ['parent', 'posts', 'marks', 'ask'], student: ['me', 'timetable', 'posts', 'marks'] };
-const TILE = { promotion: '#7A5BB0', dashboard: '#1E2B5C', users: '#5B6478', attendance: '#0B7F70', reports: '#2B5797', students: '#0B7F70', classes: '#7A5BB0', posts: '#B9770E', marks: '#C8453F', timetable: '#2B5797', inbox: '#0B7F70', ask: '#0B7F70', devices: '#5B6478', audit: '#5B6478', school: '#5B6478', teacher: '#1E2B5C', parent: '#1E2B5C', me: '#1E2B5C', myatt: '#0B7F70', notes: '#B9770E' };
+const TILE = { staffAtt: '#0B7F70', promotion: '#7A5BB0', dashboard: '#1E2B5C', users: '#5B6478', attendance: '#0B7F70', reports: '#2B5797', students: '#0B7F70', classes: '#7A5BB0', posts: '#B9770E', marks: '#C8453F', timetable: '#2B5797', inbox: '#0B7F70', ask: '#0B7F70', devices: '#5B6478', audit: '#5B6478', school: '#5B6478', teacher: '#1E2B5C', parent: '#1E2B5C', me: '#1E2B5C', myatt: '#0B7F70', notes: '#B9770E' };
 function mobileNav(c, name, items, groups, other, cred, link) {
   const prim = PRIMARY[c.role].map(id => items.find(it => it[0] === id)).filter(Boolean);
   const rest = items.filter(it => !prim.includes(it));
@@ -63,7 +63,7 @@ function mobileNav(c, name, items, groups, other, cred, link) {
   const moreOn = !prim.some(it => it[0] === name);
   const tile = ([id, label, ic]) => { const n = badgeFor(c, id); return `<a href="#/${id}" class="mtile ${id === name ? 'on' : ''}" data-mt="${id}"><span class="mti" style="--tc:${TILE[id] || '#1E2B5C'}">${icon(ic, 20)}</span><span class="mtl">${label}</span>${n ? `<span class="cnt">${n}</span>` : ''}</a>`; };
   const sheetGroups = groups.map(([label, its]) => `${label ? `<div class="msec">${label}</div>` : ''}<div class="mgrid">${its.map(tile).join('')}</div>`).join('');
-  const SHORT = { inbox: 'الرسائل', posts: c.role === 'student' ? 'واجباتي' : c.role === 'parent' ? 'المنشورات' : 'النشر', ask: 'اسأل', attendance: 'الحضور', dashboard: 'الرئيسية' };
+  const SHORT = { staffAtt: 'دوام الكادر', inbox: 'الرسائل', posts: c.role === 'student' ? 'واجباتي' : c.role === 'parent' ? 'المنشورات' : 'النشر', ask: 'اسأل', attendance: 'الحضور', dashboard: 'الرئيسية' };
   const blink = ([id, label, ic]) => { const n = badgeFor(c, id); return `<a href="#/${id}" class="${id === name ? 'on' : ''}" ${id === name ? 'aria-current="page"' : ''}><i class="ni">${icon(ic, 18)}</i><span>${SHORT[id] || label}</span>${n ? `<span class="cnt">${n}</span>` : ''}</a>`; };
   return `<nav class="bnav" aria-label="التنقل">${prim.map(blink).join('')}<button type="button" class="bmore ${moreOn ? 'on' : ''}" data-more aria-expanded="false" aria-controls="msheet"><i class="ni">${icon('grid', 18)}</i><span>المزيد</span>${moreN ? `<span class="cnt">${moreN}</span>` : ''}</button></nav>
   <div class="msheet" id="msheet" hidden><div class="mback" data-more-close></div>
