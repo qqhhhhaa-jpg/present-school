@@ -1,5 +1,5 @@
 import * as db from './store.js';
-import { $, $$, esc, icon, fmtTime, fmtDay, dayName, ago, maskPhone, fmtPhone, normalizePhone, atTime, norm, readTable, files, fmtSize, fileKind, saveBlob, docxText, openPdf, sampleHandout, pdfPage, jpegsToPdf } from './util.js';
+import { $, $$, esc, icon, fmtTime, fmtDay, dayKey, dayName, ago, maskPhone, fmtPhone, normalizePhone, atTime, norm, readTable, files, fmtSize, fileKind, saveBlob, docxText, openPdf, sampleHandout, pdfPage, jpegsToPdf } from './util.js';
 import { pill, avatar, topbar, toast, modal, ctx, scope, logo, wordmark, protectedViewer, watermarkText, watermarkTile } from './app.js';
 // Staff permission check: the administration can do everything; a teacher only what the school allowed.
 const can = perm => { const c = ctx(); return !c ? false : c.role !== 'teacher' ? ['owner', 'admin'].includes(c.role) : db.teacherCan(c.roleInfo.teacherId, perm); };
@@ -366,6 +366,10 @@ const attendance = {
     $('#aq', el).oninput = e => { att.q = e.target.value; this.update(el); };
     $('#att-hol-btn', el)?.addEventListener('click', () => officialHolidayModal(att.day, () => this.update(el)));
     el.addEventListener('click', e => {
+      if (e.target.closest('#att-hol-btn')) {
+        officialHolidayModal(att.day, () => this.update(el));
+        return;
+      }
       const f = e.target.closest('[data-f]'); if (f) { att.f = f.dataset.f; this.update(el); }
       const m = e.target.closest('[data-mark]'); if (m) { db.markManual(m.dataset.mark, ctx().name); toast('سُجّل الحضور يدوياً', db.student(m.dataset.mark).name); }
       const x = e.target.closest('[data-excuse]'); if (x) excuseModal(db.student(x.dataset.excuse));
@@ -459,7 +463,7 @@ const attendance = {
 };
 
 function officialHolidayModal(defaultDay, onDone) {
-  const dStr = typeof defaultDay === 'string' ? defaultDay : (defaultDay ? db.dayKey(new Date(defaultDay)) : db.dayKey(new Date(db.now())));
+  const dStr = typeof defaultDay === 'string' ? defaultDay : (defaultDay ? dayKey(new Date(defaultDay)) : dayKey(new Date(db.now())));
   const allHols = db.holidays();
 
   modal('إعلان عطلة رسمية / طارئة (إعفاء الكل من البصمة)', `

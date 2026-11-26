@@ -854,6 +854,8 @@ const db = (() => {
 // functions call the server (Supabase) and the screens do not change.
 
 
+{ dayKey };
+
 const KEY = 'hader-demo-v5';
 // Which device holds each account. On the server this is the session table; in the demo every
 // browser tab counts as its own device, so open a second tab to watch the first one get signed out.
@@ -917,8 +919,12 @@ function addHoliday(day, name, by, extra = {}) {
 }
 function addHolidayRange({ startDate, endDate, name, category, orderNo, notes }, by) {
   if (!startDate) return { ok: false, error: 'يرجى تحديد تاريخ البدء.' };
-  const d1 = new Date(startDate);
-  const d2 = endDate ? new Date(endDate) : new Date(startDate);
+  const parseLocal = s => {
+    const p = (s || '').split('-').map(Number);
+    return (p.length === 3 && p.every(n => !isNaN(n))) ? new Date(p[0], p[1] - 1, p[2]) : new Date(NaN);
+  };
+  const d1 = parseLocal(startDate);
+  const d2 = endDate ? parseLocal(endDate) : parseLocal(startDate);
   if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return { ok: false, error: 'التاريخ غير صحيح.' };
   if (d2 < d1) return { ok: false, error: 'تاريخ الانتهاء يجب أن يكون بعد تاريخ البدء.' };
 
@@ -3007,6 +3013,10 @@ const attendance = {
     $('#aq', el).oninput = e => { att.q = e.target.value; this.update(el); };
     $('#att-hol-btn', el)?.addEventListener('click', () => officialHolidayModal(att.day, () => this.update(el)));
     el.addEventListener('click', e => {
+      if (e.target.closest('#att-hol-btn')) {
+        officialHolidayModal(att.day, () => this.update(el));
+        return;
+      }
       const f = e.target.closest('[data-f]'); if (f) { att.f = f.dataset.f; this.update(el); }
       const m = e.target.closest('[data-mark]'); if (m) { db.markManual(m.dataset.mark, ctx().name); toast('سُجّل الحضور يدوياً', db.student(m.dataset.mark).name); }
       const x = e.target.closest('[data-excuse]'); if (x) excuseModal(db.student(x.dataset.excuse));
@@ -3100,7 +3110,7 @@ const attendance = {
 };
 
 function officialHolidayModal(defaultDay, onDone) {
-  const dStr = typeof defaultDay === 'string' ? defaultDay : (defaultDay ? db.dayKey(new Date(defaultDay)) : db.dayKey(new Date(db.now())));
+  const dStr = typeof defaultDay === 'string' ? defaultDay : (defaultDay ? dayKey(new Date(defaultDay)) : dayKey(new Date(db.now())));
   const allHols = db.holidays();
 
   modal('إعلان عطلة رسمية / طارئة (إعفاء الكل من البصمة)', `

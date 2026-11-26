@@ -3,6 +3,7 @@
 // functions call the server (Supabase) and the screens do not change.
 
 import { rng, dayKey, atTime, minutesOf, norm, normalizePhone, validPhone, storage, fmtTime } from './util.js';
+export { dayKey };
 
 const KEY = 'hader-demo-v5';
 // Which device holds each account. On the server this is the session table; in the demo every
@@ -67,8 +68,12 @@ export function addHoliday(day, name, by, extra = {}) {
 }
 export function addHolidayRange({ startDate, endDate, name, category, orderNo, notes }, by) {
   if (!startDate) return { ok: false, error: 'يرجى تحديد تاريخ البدء.' };
-  const d1 = new Date(startDate);
-  const d2 = endDate ? new Date(endDate) : new Date(startDate);
+  const parseLocal = s => {
+    const p = (s || '').split('-').map(Number);
+    return (p.length === 3 && p.every(n => !isNaN(n))) ? new Date(p[0], p[1] - 1, p[2]) : new Date(NaN);
+  };
+  const d1 = parseLocal(startDate);
+  const d2 = endDate ? parseLocal(endDate) : parseLocal(startDate);
   if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return { ok: false, error: 'التاريخ غير صحيح.' };
   if (d2 < d1) return { ok: false, error: 'تاريخ الانتهاء يجب أن يكون بعد تاريخ البدء.' };
 
