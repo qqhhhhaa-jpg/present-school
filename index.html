@@ -6300,9 +6300,39 @@ function modal(title, html, onMount) {
 
 /* ---------- navigation per role ---------- */
 const NAV = {
-  owner: [['dashboard', 'الرئيسية', 'home'], ['users', 'المستخدمون', 'users'], ['attendance', 'حضور الطلاب', 'check'], ['staffAtt', 'حضور الكادر', 'users'], ['exemptions', 'استثناءات البصمة', 'shield'], ['reports', 'التقارير', 'report'], ['students', 'الطلاب', 'child'], ['classes', 'الصفوف والشعب', 'grid'], ['posts', 'الواجبات والنشر', 'book'], ['marks', 'الدرجات', 'grade'], ['promotion', 'ترحيل الطلبة', 'up'], ['timetable', 'الجدول', 'calendar'], ['inbox', 'رسائل أولياء الأمور', 'chat'], ['devices', 'أجهزة البصمة', 'device'], ['audit', 'سجل العمليات', 'report'], ['school', 'الإعدادات', 'gear']],
+  owner: [
+    ['dashboard', 'الرئيسية', 'home'],
+    ['attendance', 'حضور الطلاب', 'check'],
+    ['students', 'الطلاب', 'child'],
+    ['classes', 'الصفوف والشعب', 'grid'],
+    ['reports', 'التقارير', 'report'],
+    ['staffAtt', 'حضور الكادر', 'users'],
+    ['exemptions', 'استثناءات البصمة', 'shield'],
+    ['devices', 'أجهزة البصمة', 'device'],
+    ['timetable', 'الجدول', 'calendar'],
+    ['posts', 'الواجبات والنشر', 'book'],
+    ['marks', 'الدرجات', 'grade'],
+    ['promotion', 'ترحيل الطلبة', 'up'],
+    ['inbox', 'رسائل أولياء الأمور', 'chat'],
+    ['users', 'المستخدمون', 'users'],
+    ['audit', 'سجل العمليات', 'report'],
+    ['school', 'الإعدادات', 'gear']
+  ],
   admin: null, // same level as the platform admin: one runs the system, the other runs the school
-  teacher: [['teacher', 'اليوم', 'home'], ['staffAtt', 'بصمتي وحضوري', 'check'], ['attendance', 'حضور الطلاب', 'check'], ['exemptions', 'استثناءات البصمة', 'shield'], ['posts', 'الواجبات والنشر', 'book'], ['marks', 'الدرجات', 'grade'], ['promotion', 'النتائج والترحيل', 'up'], ['timetable', 'الجدول', 'calendar'], ['reports', 'التقارير', 'report'], ['students', 'طلابي', 'users'], ['inbox', 'الرسائل', 'chat'], ['notes', 'الإشعارات', 'bell']],
+  teacher: [
+    ['teacher', 'اليوم', 'home'],
+    ['attendance', 'حضور الطلاب', 'check'],
+    ['students', 'طلابي', 'users'],
+    ['reports', 'التقارير', 'report'],
+    ['staffAtt', 'بصمتي وحضوري', 'check'],
+    ['exemptions', 'استثناءات البصمة', 'shield'],
+    ['timetable', 'الجدول', 'calendar'],
+    ['posts', 'الواجبات والنشر', 'book'],
+    ['marks', 'الدرجات', 'grade'],
+    ['promotion', 'النتائج والترحيل', 'up'],
+    ['inbox', 'الرسائل', 'chat'],
+    ['notes', 'الإشعارات', 'bell']
+  ],
   parent: [['parent', 'أولادي', 'child'], ['posts', 'المنشورات', 'book'], ['timetable', 'الجدول', 'calendar'], ['marks', 'الدرجات', 'grade'], ['ask', 'اسأل المدرسة', 'chat'], ['notes', 'الإشعارات', 'bell']],
   student: [['me', 'اليوم', 'home'], ['timetable', 'جدولي', 'calendar'], ['posts', 'واجباتي', 'book'], ['marks', 'درجاتي', 'grade'], ['ask', 'اسأل المدرسة', 'chat'], ['myatt', 'حضوري', 'check'], ['notes', 'الإشعارات', 'bell']],
 };
@@ -6312,7 +6342,9 @@ const NAV_PERM = { inbox: 'inbox', reports: 'reports', promotion: 'reports', exe
 function navFor(c) { const items = NAV[c.role]; if (c.role !== 'teacher') return items; const tid = c.roleInfo.teacherId; return items.filter(([id]) => !NAV_PERM[id] || db.teacherCan(tid, NAV_PERM[id])); }
 const SIDE_GROUPS = [
   ['', ['dashboard', 'teacher', 'parent', 'me']],
-  ['الحضور والطلاب', ['attendance', 'staffAtt', 'exemptions', 'reports', 'students', 'classes', 'devices', 'myatt']],
+  ['حضور الطلاب', ['attendance', 'students', 'classes', 'reports', 'myatt']],
+  ['دوام الكادر', ['staffAtt']],
+  ['أجهزة واستثناءات البصمة', ['exemptions', 'devices']],
   ['التعليم', ['timetable', 'posts', 'marks', 'promotion']],
   ['التواصل', ['inbox', 'ask']],
   ['النظام', ['users', 'audit', 'school']],
