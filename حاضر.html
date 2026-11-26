@@ -2826,8 +2826,13 @@ async function dailyReportPdf() {
   return { blob: jpegsToPdf(pages), name: `تقرير-الحضور-${dt.getDate()}-${dt.getMonth() + 1}-${dt.getFullYear()}.pdf` };
 }
 async function openDailyReport(btn) {
-  const old = btn?.innerHTML; if (btn) { btn.disabled = true; btn.textContent = 'جاري تجهيز التقرير…'; }
-  try { const r = await dailyReportPdf(); fileViewer({ id: 'report', _blob: r.blob, file: { name: r.name, type: 'application/pdf', size: r.blob.size } }); }
+  const old = btn?.innerHTML; if (btn) { btn.disabled = true; btn.textContent = 'جاري تصدير PDF…'; }
+  try {
+    const r = await dailyReportPdf();
+    await saveBlob(r.blob, r.name);
+    toast('تم تصدير تقرير PDF بنجاح', r.name);
+    fileViewer({ id: 'report', _blob: r.blob, file: { name: r.name, type: 'application/pdf', size: r.blob.size } });
+  }
   catch (e) { console.error(e); toast('ما كدرنا نسوي التقرير', 'حاول مرة ثانية', 'absent'); }
   finally { if (btn) { btn.disabled = false; btn.innerHTML = old; } }
 }
@@ -3766,6 +3771,162 @@ function notesList(list, fresh) {
 /* ============ REPORTS ============ */
 const rep = { sec: '', q: '', focus: '' };
 const CELL = { holiday: ['var(--surface-300)', 'ع'], present: ['var(--teal)', '✓'], left: ['var(--teal)', '✓'], late: ['var(--amber)', 'ت'], absent: ['var(--red)', 'غ'], excused: ['var(--amber-soft)', 'ع'], pending: ['var(--surface-300)', ''], none: ['transparent', ''] };
+
+async function monthReportPdf(sectionId) {
+  const st = db.settings();
+  const r = db.monthReport(sectionId);
+  const secName = db.sectionLabel(sectionId);
+  const dt = new Date(db.now());
+  const F = (w, z) => `${w} ${z}px Cairo, "Noto Naskh Arabic", "Segoe UI", Tahoma, sans-serif`;
+  const W = 1240, M = 80;
+  const NAVY = '#1E2B5C', TEAL = '#0B7F70', AMBER = '#F2A93B', RED = '#C8453F', MUTED = '#5B6478', LINE = '#E3E8EF';
+  const pages = [];
+  let pageNo = 0;
+
+  const tot = r.rows.reduce((a, x) => ({
+    p: a.p + x.c.present,
+    l: a.l + x.c.late,
+    ab: a.ab + x.c.absent,
+    e: a.e + x.c.excused
+  }), { p: 0, l: 0, ab: 0, e: 0 });
+  const allCount = tot.p + tot.l + tot.ab + tot.e;
+  const overallRate = allCount ? Math.round((tot.p + tot.l) / allCount * 100) : 0;
+
+  const header = (g, sub) => {
+    pageNo++;
+    g.fillStyle = NAVY;
+    g.fillRect(0, 0, W, 170);
+    g.fillStyle = '#fff';
+    g.font = F(700, 44);
+    g.fillText('تقرير الحضور الشهري والتراكمي', W - M, 90);
+    g.font = F(400, 24);
+    g.fillStyle = '#C9D6F0';
+    g.fillText(`${st.schoolName} · ${secName} · ${r.days.length} يوم دراسي${sub ? ' · ' + sub : ''}`, W - M, 138);
+    g.textAlign = 'left';
+    g.font = F(700, 36);
+    g.fillStyle = '#fff';
+    g.fillText('منصة حاضر', M, 100);
+    g.textAlign = 'right';
+    g.fillStyle = AMBER;
+    g.fillRect(0, 170, W, 8);
+  };
+
+  const footer = g => {
+    g.fillStyle = MUTED;
+    g.font = F(400, 20);
+    g.textAlign = 'center';
+    g.fillText(`صفحة ${pageNo} · تقرير رسمي مستخرج بتاريخ ${fmtDay(dt)} · نظام حاضر المدرسي الذكي`, W / 2, 1715);
+    g.textAlign = 'right';
+  };
+
+  const table = (g, y, cols, data, rowH = 48) => {
+    let x = W - M;
+    g.fillStyle = '#F5F7FA';
+    g.fillRect(M, y, W - 2 * M, rowH);
+    g.fillStyle = NAVY;
+    g.font = F(700, 21);
+    cols.forEach(([l, w]) => {
+      g.fillText(l, x - 12, y + rowH * .64);
+      x -= w;
+    });
+    y += rowH;
+    g.font = F(400, 21);
+    data.forEach((row, i) => {
+      x = W - M;
+      if (i % 2) {
+        g.fillStyle = '#FBFCFD';
+        g.fillRect(M, y, W - 2 * M, rowH);
+      }
+      row.forEach((v, j) => {
+        g.fillStyle = typeof v === 'object' ? v.c : NAVY;
+        g.fillText(String(typeof v === 'object' ? v.t : v), x - 12, y + rowH * .64);
+        x -= cols[j][1];
+      });
+      g.strokeStyle = LINE;
+      g.lineWidth = 1.2;
+      g.beginPath();
+      g.moveTo(M, y + rowH);
+      g.lineTo(W - M, y + rowH);
+      g.stroke();
+      y += rowH;
+    });
+    return y;
+  };
+
+  const studentData = r.rows.map((x, idx) => [
+    idx + 1,
+    x.s.name,
+    x.s.no || '—',
+    x.c.present,
+    x.c.late,
+    x.c.absent ? { t: x.c.absent, c: RED } : 0,
+    x.c.excused,
+    { t: x.rate + '%', c: x.rate >= 90 ? TEAL : x.rate >= 75 ? AMBER : RED }
+  ]);
+
+  const cols = [
+    ['#', 60],
+    ['اسم الطالب', 380],
+    ['الرقم', 120],
+    ['حضور', 110],
+    ['تأخير', 110],
+    ['غياب', 110],
+    ['بعذر', 100],
+    ['الالتزام', 90]
+  ];
+
+  const PER_FIRST = 20;
+  const PER_SUB = 26;
+
+  const firstChunk = studentData.slice(0, PER_FIRST);
+  pages.push(await pdfPage(g => {
+    header(g, '');
+    const cards = [
+      ['إجمالي الطلاب', r.rows.length, NAVY],
+      ['نسبة الحضور', overallRate + '%', TEAL],
+      ['مرات التأخير', tot.l, AMBER],
+      ['الغياب التراكمي', tot.ab, RED],
+      ['غياب مبرر', tot.e, '#7A5BB0']
+    ];
+    const bw = (W - 2 * M - 4 * 16) / 5;
+    cards.forEach(([l, v, col], i) => {
+      const x = W - M - (i + 1) * bw - i * 16;
+      g.fillStyle = '#F5F7FA';
+      g.fillRect(x, 210, bw, 130);
+      g.fillStyle = col;
+      g.fillRect(x + bw - 8, 210, 8, 130);
+      g.fillStyle = MUTED;
+      g.font = F(600, 20);
+      g.fillText(l, x + bw - 20, 250);
+      g.fillStyle = col;
+      g.font = F(700, 46);
+      g.fillText(String(v), x + bw - 20, 314);
+    });
+
+    g.fillStyle = NAVY;
+    g.font = F(700, 28);
+    g.fillText(`قائمة الطلاب وسجل الالتزام (${r.rows.length} طالب)`, W - M, 390);
+
+    table(g, 420, cols, firstChunk, 48);
+    footer(g);
+  }));
+
+  for (let i = PER_FIRST; i < studentData.length; i += PER_SUB) {
+    const chunk = studentData.slice(i, i + PER_SUB);
+    pages.push(await pdfPage(g => {
+      header(g, 'تابع قائمة الطلاب');
+      table(g, 220, cols, chunk, 50);
+      footer(g);
+    }));
+  }
+
+  const cleanSec = db.sectionShort(sectionId).replace(/[\/\s]/g, '-');
+  return {
+    blob: jpegsToPdf(pages),
+    name: `تقرير-الحضور-الشهري-${cleanSec}-${dt.getFullYear()}-${dt.getMonth() + 1}.pdf`
+  };
+}
+
 const reports = {
   // Global search on this page keeps you in the report: jump to the student's section and highlight the row.
   pickStudent(el, id) {
@@ -3777,8 +3938,7 @@ const reports = {
   render(el) {
     const sc = scope(); const secs = sc.sections ? db.sections().filter(s => sc.sections.includes(s.id)) : db.sections();
     if (!secs.some(s => s.id === rep.sec)) rep.sec = secs[0].id;
-    const inFrame = window.top !== window;
-    el.innerHTML = topbar('تقرير الحضور الشهري', sub(), `<button class="btn" id="csv">تصدير Excel (CSV)</button>${inFrame ? '' : '<button class="btn" id="prn">طباعة / PDF</button>'}`) + `
+    el.innerHTML = topbar('تقرير الحضور الشهري', sub(), `<button class="btn" id="csv">${icon('report', 16)}تصدير Excel (CSV)</button><button class="btn pr" id="prn">${icon('download', 16)}تصدير تقرير PDF مباشر</button>`) + `
     <div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
       <label class="field" style="flex:1;min-width:180px">بحث بالاسم داخل التقرير<input class="input" id="rq" value="${esc(rep.q)}" placeholder="اكتب جزءاً من الاسم"></label>
       <label class="field" style="min-width:220px">الشعبة<select class="input" id="rs">${secs.map(s => `<option value="${s.id}" ${s.id === rep.sec ? 'selected' : ''}>${esc(db.sectionLabel(s.id))}</option>`).join('')}</select></label>
@@ -3786,7 +3946,24 @@ const reports = {
     </div><div id="live" style="display:flex;flex-direction:column;gap:16px"></div>`;
     $('#rs', el).onchange = e => { rep.sec = e.target.value; rep.focus = ''; this.update(el); };
     $('#rq', el).oninput = e => { rep.q = e.target.value; rep.focus = ''; this.update(el); };
-    $('#prn', el)?.addEventListener('click', () => window.print());
+    $('#prn', el)?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const old = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `${icon('download', 16)}جاري تصدير PDF…`;
+      try {
+        const r = await monthReportPdf(rep.sec);
+        await saveBlob(r.blob, r.name);
+        toast('تم تصدير تقرير PDF بنجاح', r.name);
+        fileViewer({ id: 'report-m', _blob: r.blob, file: { name: r.name, type: 'application/pdf', size: r.blob.size } });
+      } catch (err) {
+        console.error(err);
+        toast('حدث خطأ أثناء تصدير التقرير', '', 'absent');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = old;
+      }
+    });
     $('#csv', el).onclick = async () => {
       const r = db.monthReport(rep.sec);
       const head = ['الطالب', 'رقم', ...r.days.map(d => new Date(d).toLocaleDateString('en-GB')), 'حضور', 'تأخير', 'غياب', 'بعذر', 'النسبة'];
@@ -5643,15 +5820,164 @@ function teacherHistoryModal(teacherId) {
   </div>`);
 }
 
+async function staffReportPdf() {
+  const st = db.settings();
+  const rep = db.teacherMonthReport();
+  const dt = new Date(db.now());
+  const F = (w, z) => `${w} ${z}px Cairo, "Noto Naskh Arabic", "Segoe UI", Tahoma, sans-serif`;
+  const W = 1240, M = 80;
+  const NAVY = '#1E2B5C', TEAL = '#0B7F70', AMBER = '#F2A93B', RED = '#C8453F', MUTED = '#5B6478', LINE = '#E3E8EF';
+  const pages = [];
+  let pageNo = 0;
+
+  const totalTeachers = rep.rows.length;
+  const avgRate = totalTeachers ? Math.round(rep.rows.reduce((a, r) => a + r.rate, 0) / totalTeachers) : 100;
+  const totLate = rep.rows.reduce((a, r) => a + r.c.late, 0);
+  const totAbsent = rep.rows.reduce((a, r) => a + r.c.absent, 0);
+  const totExc = rep.rows.reduce((a, r) => a + r.c.excused, 0);
+
+  const header = (g, sub) => {
+    pageNo++;
+    g.fillStyle = NAVY;
+    g.fillRect(0, 0, W, 170);
+    g.fillStyle = '#fff';
+    g.font = F(700, 44);
+    g.fillText('تقرير دوام وحضور الكادر التعليمي', W - M, 90);
+    g.font = F(400, 24);
+    g.fillStyle = '#C9D6F0';
+    g.fillText(`${st.schoolName} · السجل التراكمي لالتزام المدرسين${sub ? ' · ' + sub : ''}`, W - M, 138);
+    g.textAlign = 'left';
+    g.font = F(700, 36);
+    g.fillStyle = '#fff';
+    g.fillText('منصة حاضر', M, 100);
+    g.textAlign = 'right';
+    g.fillStyle = AMBER;
+    g.fillRect(0, 170, W, 8);
+  };
+
+  const footer = g => {
+    g.fillStyle = MUTED;
+    g.font = F(400, 20);
+    g.textAlign = 'center';
+    g.fillText(`صفحة ${pageNo} · استخرج بتاريخ ${fmtDay(dt)} · نظام حاضر للبصمة البيومترية`, W / 2, 1715);
+    g.textAlign = 'right';
+  };
+
+  const table = (g, y, cols, data, rowH = 50) => {
+    let x = W - M;
+    g.fillStyle = '#F5F7FA';
+    g.fillRect(M, y, W - 2 * M, rowH);
+    g.fillStyle = NAVY;
+    g.font = F(700, 21);
+    cols.forEach(([l, w]) => {
+      g.fillText(l, x - 12, y + rowH * .64);
+      x -= w;
+    });
+    y += rowH;
+    g.font = F(400, 21);
+    data.forEach((row, i) => {
+      x = W - M;
+      if (i % 2) {
+        g.fillStyle = '#FBFCFD';
+        g.fillRect(M, y, W - 2 * M, rowH);
+      }
+      row.forEach((v, j) => {
+        g.fillStyle = typeof v === 'object' ? v.c : NAVY;
+        g.fillText(String(typeof v === 'object' ? v.t : v), x - 12, y + rowH * .64);
+        x -= cols[j][1];
+      });
+      g.strokeStyle = LINE;
+      g.lineWidth = 1.2;
+      g.beginPath();
+      g.moveTo(M, y + rowH);
+      g.lineTo(W - M, y + rowH);
+      g.stroke();
+      y += rowH;
+    });
+    return y;
+  };
+
+  const teacherData = rep.rows.map((r, idx) => [
+    idx + 1,
+    r.t.name,
+    r.t.subject || 'عام',
+    r.c.present,
+    r.c.late,
+    r.c.absent ? { t: r.c.absent, c: RED } : 0,
+    r.c.excused,
+    { t: r.rate + '%', c: r.rate >= 90 ? TEAL : r.rate >= 75 ? AMBER : RED }
+  ]);
+
+  const cols = [
+    ['#', 60],
+    ['اسم المدرس', 360],
+    ['المادة', 160],
+    ['حضور بالموعد', 130],
+    ['تأخير', 110],
+    ['غياب', 110],
+    ['إجازة', 90],
+    ['الالتزام', 90]
+  ];
+
+  const PER_FIRST = 20;
+  const PER_SUB = 26;
+
+  const firstChunk = teacherData.slice(0, PER_FIRST);
+  pages.push(await pdfPage(g => {
+    header(g, '');
+    const cards = [
+      ['الكادر الكلي', totalTeachers, NAVY],
+      ['معدل الالتزام', avgRate + '%', TEAL],
+      ['إجمالي التأخيرات', totLate, AMBER],
+      ['إجمالي الغيابات', totAbsent, RED],
+      ['إجازات رسمية', totExc, '#7A5BB0']
+    ];
+    const bw = (W - 2 * M - 4 * 16) / 5;
+    cards.forEach(([l, v, col], i) => {
+      const x = W - M - (i + 1) * bw - i * 16;
+      g.fillStyle = '#F5F7FA';
+      g.fillRect(x, 210, bw, 130);
+      g.fillStyle = col;
+      g.fillRect(x + bw - 8, 210, 8, 130);
+      g.fillStyle = MUTED;
+      g.font = F(600, 20);
+      g.fillText(l, x + bw - 20, 250);
+      g.fillStyle = col;
+      g.font = F(700, 46);
+      g.fillText(String(v), x + bw - 20, 314);
+    });
+
+    g.fillStyle = NAVY;
+    g.font = F(700, 28);
+    g.fillText(`سجل التزام المدرسين والمعلمين (${totalTeachers} مدرس)`, W - M, 390);
+
+    table(g, 420, cols, firstChunk, 50);
+    footer(g);
+  }));
+
+  for (let i = PER_FIRST; i < teacherData.length; i += PER_SUB) {
+    const chunk = teacherData.slice(i, i + PER_SUB);
+    pages.push(await pdfPage(g => {
+      header(g, 'تابع سجل الكادر');
+      table(g, 220, cols, chunk, 50);
+      footer(g);
+    }));
+  }
+
+  return {
+    blob: jpegsToPdf(pages),
+    name: `تقرير-دوام-الكادر-${dt.getFullYear()}-${dt.getMonth() + 1}.pdf`
+  };
+}
+
 function teacherMonthReportModal() {
   const rep = db.teacherMonthReport();
-  const inFrame = window.top !== window;
   modal('تقرير دوام وحضور الكادر الشهري', `<div style="display:flex;flex-direction:column;gap:14px">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div><b>التقرير التراكمي لالتزام الكادر التدريسي</b><div class="muted small">يشمل جميع أيام الدوام، الحضور، والتأخيرات، ونسبة الالتزام.</div></div>
       <div style="display:flex;gap:6px">
         <button type="button" class="btn sm" id="t-csv-btn">${icon('report', 14)} تصدير Excel (CSV)</button>
-        ${inFrame ? '' : `<button type="button" class="btn sm" id="t-prn-btn">${icon('eye', 14)} طباعة / PDF</button>`}
+        <button type="button" class="btn sm pr" id="t-prn-btn">${icon('download', 14)} تصدير تقرير PDF مباشر</button>
       </div>
     </div>
     <div class="tablewrap" style="max-height:60vh;overflow:auto">
@@ -5690,7 +6016,24 @@ function teacherMonthReportModal() {
       <button class="btn" data-close>إغلاق</button>
     </div>
   </div>`, (m, close) => {
-    $('#t-prn-btn', m)?.addEventListener('click', () => window.print());
+    $('#t-prn-btn', m)?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const old = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `${icon('download', 14)} جاري تصدير PDF…`;
+      try {
+        const r = await staffReportPdf();
+        await saveBlob(r.blob, r.name);
+        toast('تم تصدير ملف PDF بنجاح', r.name);
+        fileViewer({ id: 'report-staff', _blob: r.blob, file: { name: r.name, type: 'application/pdf', size: r.blob.size } });
+      } catch (err) {
+        console.error(err);
+        toast('حدث خطأ أثناء تصدير التقرير', '', 'absent');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = old;
+      }
+    });
     $('#t-csv-btn', m)?.addEventListener('click', () => {
       const head = ['المدرس', 'المادة', 'حضور', 'تأخير', 'غياب', 'إجازة', 'نسبة الالتزام'];
       const lines = [head, ...rep.rows.map(r => [r.t.name, r.t.subject || '', r.c.present, r.c.late, r.c.absent, r.c.excused, r.rate + '%'])];
