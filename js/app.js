@@ -683,13 +683,74 @@ function checkDevice() {
   return true;
 }
 window.addEventListener('storage', e => { if (e.key === db.ACTIVE_EVENT_KEY) checkDevice(); });
+let activeRoleKey = null;
+let sideNavScroll = 0;
+
+document.addEventListener('scroll', e => {
+  if (e.target && e.target.classList && e.target.classList.contains('nav') && e.target.closest?.('.side')) {
+    sideNavScroll = e.target.scrollTop;
+  }
+}, true);
+
+function updateNav(c, activeName) {
+  $$('.side .nav a').forEach(a => {
+    const id = a.getAttribute('href')?.replace(/^#\/?/, '');
+    const match = id === activeName;
+    a.classList.toggle('on', match);
+    if (match) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
+    const cnt = a.querySelector('.cnt');
+    const n = id ? badgeFor(c, id) : 0;
+    if (n) {
+      if (cnt) cnt.textContent = n;
+      else a.insertAdjacentHTML('beforeend', `<span class="cnt">${n}</span>`);
+    } else if (cnt) {
+      cnt.remove();
+    }
+  });
+
+  const prim = PRIMARY[c.role] || [];
+  const moreOn = !prim.includes(activeName);
+  const moreBtn = $('[data-more]');
+  if (moreBtn) moreBtn.classList.toggle('on', moreOn);
+
+  $$('.bnav a').forEach(a => {
+    const id = a.getAttribute('href')?.replace(/^#\/?/, '');
+    const match = id === activeName;
+    a.classList.toggle('on', match);
+    if (match) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
+    const cnt = a.querySelector('.cnt');
+    const n = id ? badgeFor(c, id) : 0;
+    if (n) {
+      if (cnt) cnt.textContent = n;
+      else a.insertAdjacentHTML('beforeend', `<span class="cnt">${n}</span>`);
+    } else if (cnt) {
+      cnt.remove();
+    }
+  });
+
+  $$('.mtile').forEach(a => {
+    const id = a.dataset.mt;
+    a.classList.toggle('on', id === activeName);
+    const cnt = a.querySelector('.cnt');
+    const n = id ? badgeFor(c, id) : 0;
+    if (n) {
+      if (cnt) cnt.textContent = n;
+      else a.insertAdjacentHTML('beforeend', `<span class="cnt">${n}</span>`);
+    } else if (cnt) {
+      cnt.remove();
+    }
+  });
+}
+
 function route() {
   if (db.session() && !db.sessionValid()) db.kickOut();
   const c = ctx();
   const [rawName = '', rawArg] = location.hash.replace(/^#\/?/, '').split('/');
   const name = rawName.split('?')[0]; let arg = rawArg && rawArg.split('?')[0];
   try { if (arg) arg = decodeURIComponent(arg); } catch { } // Arabic section ids arrive URL-encoded
-  if (!c) { current = null; app.innerHTML = ''; views.login.render(app); return; }
+  if (!c) { activeRoleKey = null; current = null; app.innerHTML = ''; views.login.render(app); return; }
   { const u = db.credOf(c.phone); db.setActor(`${c.name}${u && !u.pending ? ' · ' + u.username : ''} (${c.roleInfo.label.split(' · ')[0]})`); }
   const allowed = [...navFor(c).map(n => n[0]), 'notes', ...(['owner', 'admin', 'teacher'].includes(c.role) ? ['student', 'section'] : [])];
   const target = allowed.includes(name) && views[name] ? name : HOME[c.role];
@@ -697,13 +758,28 @@ function route() {
   // Remember where we came from so the back button returns there (not out of the platform).
   const here = `#/${name}${arg ? '/' + arg : ''}`;
   if (navStack[navStack.length - 1] !== here) { if (navStack[navStack.length - 2] === here) navStack.pop(); else navStack.push(here); if (navStack.length > 30) navStack.shift(); }
-  app.innerHTML = shell(c, name);
+
+  const curRoleKey = `${c.phone}_${c.rid || c.role}`;
+  const shellNeeded = !$('.app') || !$('#main') || !$('.side .nav') || activeRoleKey !== curRoleKey;
+
+  if (shellNeeded) {
+    activeRoleKey = curRoleKey;
+    app.innerHTML = shell(c, name);
+    const sn = $('.side .nav');
+    if (sn && sideNavScroll) sn.scrollTop = sideNavScroll;
+  } else {
+    updateNav(c, name);
+  }
+
   const main = $('#main');
   current = { name, arg, view: views[name], el: main };
   views[name].render(main, arg);
   bindChrome();
   applyProtection();
   window.scrollTo(0, 0);
+
+  const activeLink = document.querySelector(`.side .nav a[href="#/${name}"]`);
+  activeLink?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
 function bindChrome() { bindSearch(app); }
@@ -729,8 +805,8 @@ function onChromeClick(e) {
   if (e.target.closest('[data-bell]')) { toggleBell(); return; }
   if (e.target.closest('#npop a')) { closeBell(); return; }
   const b = e.target.closest('[data-logout],[data-role],[data-clock]'); if (!b) return;
-  if (b.dataset.logout !== undefined) { db.logout(); location.hash = ''; route(); }
-  else if (b.dataset.role) { db.setActiveRole(b.dataset.role); location.hash = ''; route(); }
+  if (b.dataset.logout !== undefined) { activeRoleKey = null; db.logout(); location.hash = ''; route(); }
+  else if (b.dataset.role) { activeRoleKey = null; db.setActiveRole(b.dataset.role); location.hash = ''; route(); }
   else if (b.dataset.clock) { db.setPaused(b.dataset.clock === 'pause'); }
 }
 
