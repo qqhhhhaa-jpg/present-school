@@ -174,11 +174,49 @@ function seed(mode = 'real') {
     return { teacherId: t.id, deviceId: dev.id, method: dev.methods[0], inMin, outMin: inMin == null ? null : minutesOf('13:30') + Math.floor(r() * 10), inDone: false, outDone: false };
   });
 
+  const exemptions = [
+    {
+      id: 'ex1',
+      targetType: 'student',
+      targetId: 's1002',
+      targetName: 'سارة ثامر خضير',
+      reason: 'حالة جلدية في بصمات الأصابع (أكزيما مزمنة)',
+      category: 'skin_finger',
+      mode: 'permanent',
+      startDate: dayKey(past[past.length - 1]),
+      endDate: null,
+      attPolicy: 'auto_present',
+      orderNo: 'تقرير طبي 2024/118',
+      notes: 'معفاة من بصمة اليد بقرار الإدارة بعد الاطلاع على التقرير الطبي المستشفى',
+      createdBy: 'أ. سعاد كريم (المدير)',
+      createdAt: past[past.length - 1].getTime(),
+      active: true
+    },
+    {
+      id: 'ex2',
+      targetType: 'teacher',
+      targetId: 't3',
+      targetName: 'أ. نادية كريم',
+      reason: 'ظرف رعاية عائلية استثنائي معتمد',
+      category: 'special',
+      mode: 'temporary',
+      startDate: dayKey(today),
+      endDate: dayKey(new Date(today.getTime() + 14 * 86400000)),
+      attPolicy: 'auto_present',
+      orderNo: 'أمر إداري 45/إ',
+      notes: 'موافقة المدير على الدوام المرن والحضور المباشر للحصص',
+      createdBy: 'الأدمن (admin)',
+      createdAt: today.getTime() - 86400000,
+      active: true
+    }
+  ];
+
   const start = atTime(today, '07:50').getTime();
   return {
     v: 5, day: dayKey(today), holiday, today: today.getTime(), past: past.map(p => p.getTime()),
     grades, sections, students, guardians, teachers, devices, settings, events, eid, plan,
     teacherEvents, teacherPlan, teacherExcuses: [],
+    exemptions,
     excuses: [], notes: [], flags: {}, posts: seedPosts(today), reads: {},
     admins: [{ phone: '07700000001', name: 'أ. سعاد كريم' }], disabled: [],
     audit: [{ ts: atTime(today, '07:30').getTime(), by: 'مالك المنصة', action: 'تفعيل الأجهزة', detail: 'بدء الدوام وتشغيل 3 أجهزة بصمة' }],
@@ -209,6 +247,7 @@ export function init() {
   if (!S.creds) S.creds = saved?.creds || seedCreds(); // generated logins survive a new demo day
   if (!S.teacherEvents) S.teacherEvents = [];
   if (!S.teacherExcuses) S.teacherExcuses = [];
+  if (!S.exemptions) S.exemptions = [];
   S.clock.real = Date.now(); // resume from where the page was closed
   tick(true);
   clearInterval(tickTimer);
@@ -233,7 +272,7 @@ function addEvent(ev, quiet) {
 }
 
 function tick(quiet) {
-  if (S.clock.mode === 'real' && dayKey(new Date()) !== S.day) { const keep = { students: S.students, guardians: S.guardians, teachers: S.teachers, admins: S.admins, disabled: S.disabled, posts: S.posts, reads: S.reads, settings: S.settings, audit: S.audit, notes: S.notes, excuses: S.excuses, events: S.events, eid: S.eid, seen: S.seen, marks: S.marks, markReads: S.markReads, creds: S.creds, holidays: S.holidays, chats: S.chats, tickets: S.tickets, tt: S.tt, ttSeen: S.ttSeen, promotions: S.promotions, graduates: S.graduates, graduatedStore: S.graduatedStore, finalsSeeded: S.finalsSeeded, teacherEvents: S.teacherEvents, teacherExcuses: S.teacherExcuses };
+  if (S.clock.mode === 'real' && dayKey(new Date()) !== S.day) { const keep = { students: S.students, guardians: S.guardians, teachers: S.teachers, admins: S.admins, disabled: S.disabled, posts: S.posts, reads: S.reads, settings: S.settings, audit: S.audit, notes: S.notes, excuses: S.excuses, events: S.events, eid: S.eid, seen: S.seen, marks: S.marks, markReads: S.markReads, creds: S.creds, holidays: S.holidays, chats: S.chats, tickets: S.tickets, tt: S.tt, ttSeen: S.ttSeen, promotions: S.promotions, graduates: S.graduates, graduatedStore: S.graduatedStore, finalsSeeded: S.finalsSeeded, teacherEvents: S.teacherEvents, teacherExcuses: S.teacherExcuses, exemptions: S.exemptions };
     S = Object.assign(seed('real'), keep); IDX = null; emit('reset'); return; }
   const t = now();
   const base = S.today;
@@ -340,7 +379,7 @@ function indexed() {
   IDX.forEach(a => a.sort((x, y) => x.ts - y.ts)); IDXN = S.events.length; return IDX;
 }
 export const STATUS = {
-  present: 'حاضر', late: 'متأخر', absent: 'غائب', excused: 'غائب بعذر', left: 'انصرف', pending: 'لم يصل بعد', none: 'لم يكن مسجّلاً', holiday: 'عطلة',
+  present: 'حاضر', late: 'متأخر', absent: 'غائب', excused: 'غائب بعذر', left: 'انصرف', pending: 'لم يصل بعد', exempt: 'مستثنى (حالة خاصة)', none: 'لم يكن مسجّلاً', holiday: 'عطلة',
 };
 export function statusOf(studentId, day = S.today) {
   const stu = student(studentId);
@@ -351,6 +390,16 @@ export function statusOf(studentId, day = S.today) {
   const inEv = evs.find(e => e.type === 'in');
   const outEv = [...evs].reverse().find(e => e.type === 'out');
   const excuse = S.excuses.find(x => x.studentId === studentId && x.day === k);
+  const ex = getExemption('student', studentId, day);
+  if (inEv) {
+    const lateMin = minutesOf(S.settings.late);
+    const d = new Date(inEv.ts); const late = d.getHours() * 60 + d.getMinutes() > lateMin;
+    if (outEv && outEv.ts > inEv.ts) return { status: 'left', inEv, outEv, late, exempt: ex };
+    return { status: late ? 'late' : 'present', inEv, late, exempt: ex };
+  }
+  if (ex) {
+    return { status: ex.attPolicy === 'auto_present' ? 'present' : 'exempt', exempt: ex, isExempt: true };
+  }
   if (!inEv) {
     if (excuse) return { status: 'excused', excuse };
     const isToday = day === S.today;
@@ -364,9 +413,9 @@ export function statusOf(studentId, day = S.today) {
 }
 
 export function summary(list = S.students, day = S.today) {
-  const c = { present: 0, late: 0, absent: 0, excused: 0, left: 0, pending: 0, none: 0, holiday: 0, total: 0 };
+  const c = { present: 0, late: 0, absent: 0, excused: 0, left: 0, pending: 0, exempt: 0, none: 0, holiday: 0, total: 0 };
   list.forEach(s => { const st = statusOf(s.id, day).status; c[st]++; if (st !== 'none' && st !== 'holiday') c.total++; });
-  c.came = c.present + c.late + c.left;
+  c.came = c.present + c.late + c.left + (c.exempt || 0);
   c.rate = c.total ? Math.round(c.came / c.total * 100) : 0;
   return c;
 }
@@ -430,6 +479,17 @@ export function teacherStatusOf(teacherId, day = S.today) {
   const inEv = evs.find(e => e.type === 'in');
   const outEv = [...evs].reverse().find(e => e.type === 'out');
   const excuse = (S.teacherExcuses || []).find(x => x.teacherId === teacherId && x.day === k);
+  const ex = getExemption('teacher', teacherId, day);
+  if (inEv) {
+    const lateMin = minutesOf(S.settings.late || '07:55');
+    const d = new Date(inEv.ts);
+    const late = d.getHours() * 60 + d.getMinutes() > lateMin;
+    if (outEv && outEv.ts > inEv.ts) return { status: 'left', inEv, outEv, late, exempt: ex };
+    return { status: late ? 'late' : 'present', inEv, late, exempt: ex };
+  }
+  if (ex) {
+    return { status: ex.attPolicy === 'auto_present' ? 'present' : 'exempt', exempt: ex, isExempt: true };
+  }
   if (!inEv) {
     if (excuse) return { status: 'excused', excuse };
     const isToday = day === S.today;
@@ -445,14 +505,91 @@ export function teacherStatusOf(teacherId, day = S.today) {
 
 export function teacherSummary(day = S.today) {
   const list = S.teachers || [];
-  const c = { present: 0, late: 0, absent: 0, excused: 0, left: 0, pending: 0, total: list.length, came: 0, rate: 0 };
+  const c = { present: 0, late: 0, absent: 0, excused: 0, left: 0, pending: 0, exempt: 0, total: list.length, came: 0, rate: 0 };
   list.forEach(t => {
     const st = teacherStatusOf(t.id, day).status;
     if (c[st] !== undefined) c[st]++;
   });
-  c.came = c.present + c.late + c.left;
+  c.came = c.present + c.late + c.left + (c.exempt || 0);
   c.rate = c.total ? Math.round(c.came / c.total * 100) : 0;
   return c;
+}
+
+/* ---------------- biometric exemptions & special cases (استثناءات البصمة) ---------------- */
+export function getExemption(targetType, targetId, day = S.today) {
+  const k = dayKey(new Date(day));
+  return (S.exemptions || []).find(ex => {
+    if (!ex.active) return false;
+    if (ex.targetType !== targetType || ex.targetId !== targetId) return false;
+    if (ex.startDate && k < ex.startDate) return false;
+    if (ex.mode === 'temporary' && ex.endDate && k > ex.endDate) return false;
+    return true;
+  }) || null;
+}
+
+export const isExempt = (targetType, targetId, day = S.today) => !!getExemption(targetType, targetId, day);
+export const exemptions = () => S.exemptions || [];
+
+export function addExemption({ targetType = 'student', targetId, reason, category = 'medical', mode = 'permanent', startDate, endDate, attPolicy = 'auto_present', orderNo = '', notes = '' }, author) {
+  const errors = {};
+  if (!targetId) errors.targetId = 'اختر الشخص المراد استثناؤه.';
+  if (!String(reason || '').trim()) errors.reason = 'اكتب سبب الاستثناء أو الحالة الخاصة.';
+  if (mode === 'temporary' && !endDate) errors.endDate = 'حدد تاريخ نهاية الاستثناء المؤقت.';
+  if (Object.keys(errors).length) return { ok: false, errors };
+
+  const name = targetType === 'student' ? student(targetId)?.name : teacher(targetId)?.name;
+  if (!name) return { ok: false, errors: { targetId: 'الشخص غير موجود بالمنظومة.' } };
+
+  const ex = {
+    id: 'ex' + Date.now() + Math.floor(Math.random() * 1000),
+    targetType,
+    targetId,
+    targetName: name,
+    reason: reason.trim(),
+    category,
+    mode,
+    startDate: startDate || dayKey(new Date(now())),
+    endDate: mode === 'temporary' ? endDate : null,
+    attPolicy,
+    orderNo: String(orderNo || '').trim(),
+    notes: String(notes || '').trim(),
+    createdBy: author.name + (author.username ? ` (${author.username})` : ''),
+    createdAt: now(),
+    active: true
+  };
+
+  S.exemptions = S.exemptions || [];
+  S.exemptions.unshift(ex);
+  log('إضافة استثناء بصمة', `${name} (${targetType === 'student' ? 'طالب' : 'كادر'}) · ${reason} · بواسطة ${author.name}`);
+  emit('exemptions');
+  return { ok: true, exemption: ex };
+}
+
+export function updateExemption(id, patch, author) {
+  const ex = (S.exemptions || []).find(x => x.id === id);
+  if (!ex) return { ok: false, error: 'الاستثناء غير موجود.' };
+  Object.assign(ex, patch);
+  log('تعديل استثناء بصمة', `${ex.targetName} · بواسطة ${author.name}`);
+  emit('exemptions');
+  return { ok: true, exemption: ex };
+}
+
+export function deleteExemption(id, author) {
+  const ex = (S.exemptions || []).find(x => x.id === id);
+  if (!ex) return { ok: false, error: 'الاستثناء غير موجود.' };
+  S.exemptions = (S.exemptions || []).filter(x => x.id !== id);
+  log('حذف استثناء بصمة', `${ex.targetName} · بواسطة ${author.name}`);
+  emit('exemptions');
+  return { ok: true };
+}
+
+export function toggleExemption(id, author) {
+  const ex = (S.exemptions || []).find(x => x.id === id);
+  if (!ex) return { ok: false, error: 'الاستثناء غير موجود.' };
+  ex.active = !ex.active;
+  log(ex.active ? 'تفعيل استثناء بصمة' : 'تعطيل استثناء بصمة', `${ex.targetName} · بواسطة ${author.name}`);
+  emit('exemptions');
+  return { ok: true, active: ex.active };
 }
 
 export function teacherMarkManual(teacherId, type = 'in', by = 'الإدارة') {
@@ -1582,7 +1719,7 @@ const rank = a => ['owner', 'admin', 'teacher', 'parent', 'student'].indexOf(a.r
 /* ---------------- teacher access: which sections, and what they may do ----------------
    scope 'all' = every section (new ones too), 'grades' = every section of the chosen grades (new ones too),
    'sections' = only the ticked sections. The section list is kept up to date when sections are added. */
-export const TEACHER_PERMS = { att: 'تسجيل الحضور اليدوي والأعذار', posts: 'نشر الواجبات والملازم والفيديو', marks: 'رصد ونشر الدرجات', tt: 'تعديل ونشر الجدول', inbox: 'الرد على رسائل أولياء الأمور', reports: 'التقارير ونتائج الترحيل' };
+export const TEACHER_PERMS = { att: 'تسجيل الحضور اليدوي والأعذار', posts: 'نشر الواجبات والملازم والفيديو', marks: 'رصد ونشر الدرجات', tt: 'تعديل ونشر الجدول', inbox: 'الرد على رسائل أولياء الأمور', reports: 'التقارير ونتائج الترحيل', exemptions: 'استثناءات البصمة والحالات الخاصة' };
 const ALL_PERMS = () => Object.fromEntries(Object.keys(TEACHER_PERMS).map(k => [k, true]));
 function scopeSections(t) { if (t.scope === 'all') return S.sections.map(s => s.id); if (t.scope === 'grades') return S.sections.filter(s => (t.grades || []).includes(s.gradeId)).map(s => s.id); return (t.sections || []).filter(id => section(id)); }
 export function syncTeacherScopes() { S.teachers.forEach(t => { if (t.scope === 'all' || t.scope === 'grades') t.sections = scopeSections(t); }); }

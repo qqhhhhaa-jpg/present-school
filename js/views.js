@@ -371,17 +371,37 @@ const attendance = {
     const isToday = att.day === db.days()[0];
     const rows = list.map(s => ({ s, x: db.statusOf(s.id, att.day) }));
     const counts = { all: rows.length };
-    rows.forEach(r => { counts[r.x.status] = (counts[r.x.status] || 0) + 1; if (r.x.late) counts.late = (counts.late || 0) + (r.x.status === 'left' ? 1 : 0); });
-    const F = [['all', 'الكل'], ['present', 'حاضر'], ['late', 'متأخر'], ['absent', 'غائب'], ['excused', 'بعذر'], ['left', 'انصرف'], ...(isToday ? [['pending', 'لم يصل']] : [])];
+    rows.forEach(r => {
+      counts[r.x.status] = (counts[r.x.status] || 0) + 1;
+      if (r.x.late) counts.late = (counts.late || 0) + (r.x.status === 'left' ? 1 : 0);
+      if (r.x.exempt) counts.exempt = (counts.exempt || 0) + 1;
+    });
+    const F = [
+      ['all', 'الكل'],
+      ['present', 'حاضر'],
+      ['late', 'متأخر'],
+      ['absent', 'غائب'],
+      ['excused', 'بعذر'],
+      ['left', 'انصرف'],
+      ...(counts.exempt ? [['exempt', 'مستثنى (حالة خاصة)']] : []),
+      ...(isToday ? [['pending', 'لم يصل']] : [])
+    ];
     $('#fseg', el).innerHTML = F.map(([k, l]) => `<button data-f="${k}" aria-pressed="${att.f === k}">${l} <span class="num">${counts[k] || 0}</span></button>`).join('');
     const q = att.q.trim();
-    const shown = rows.filter(r => (att.f === 'all' || r.x.status === att.f || (att.f === 'late' && r.x.late)) && (!q || r.s.name.includes(q)));
+    const shown = rows.filter(r => {
+      const matchFilter = att.f === 'all'
+        ? true
+        : att.f === 'exempt'
+          ? r.x.exempt
+          : (r.x.status === att.f || (att.f === 'late' && r.x.late));
+      return matchFilter && (!q || r.s.name.includes(q));
+    });
     $('#tbl', el).innerHTML = shown.length ? `<table><thead><tr><th>الطالب</th><th>الشعبة</th><th>الوصول</th><th>الانصراف</th><th>الطريقة</th><th>الحالة</th><th></th></tr></thead><tbody>
       ${shown.map(({ s, x }) => `<tr><td><a href="#/student/${s.id}" style="color:inherit;display:flex;gap:10px;align-items:center;text-decoration:none">${avatar(s.name, x.status, db.photoOf(s.id))}<b>${esc(s.name)}</b></a></td>
         <td class="muted">${esc(db.sectionShort(s.sectionId))}</td>
-        <td class="num">${x.inEv ? `<button class="evlink" data-ev="${x.inEv.id}" title="إثبات الوصول">${fmtTime(x.inEv.ts)} ${icon('eye', 13)}</button>` : '—'}</td><td class="num">${x.outEv ? `<button class="evlink" data-ev="${x.outEv.id}" title="إثبات الانصراف">${fmtTime(x.outEv.ts)} ${icon('eye', 13)}</button>` : '—'}</td>
-        <td class="muted small">${x.inEv ? esc(x.inEv.method) : x.excuse ? esc(x.excuse.reason) : '—'}</td>
-        <td>${pill(x.status)}${x.status === 'left' && x.late ? ' ' + pill('late') : ''}</td>
+        <td class="num">${x.inEv ? `<button class="evlink" data-ev="${x.inEv.id}" title="إثبات الوصول">${fmtTime(x.inEv.ts)} ${icon('eye', 13)}</button>` : (x.exempt ? '<span class="muted small">مستثنى رسمياً</span>' : '—')}</td><td class="num">${x.outEv ? `<button class="evlink" data-ev="${x.outEv.id}" title="إثبات الانصراف">${fmtTime(x.outEv.ts)} ${icon('eye', 13)}</button>` : '—'}</td>
+        <td class="muted small">${x.inEv ? esc(x.inEv.method) : x.excuse ? esc(x.excuse.reason) : (x.exempt ? `<span title="${esc(x.exemption?.reason || '')}">حالة خاصة 🛡️</span>` : '—')}</td>
+        <td>${pill(x.status)}${x.status === 'left' && x.late ? ' ' + pill('late') : ''}${x.exempt ? ` <span class="pill" style="background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE" title="مستثنى بقرار: ${esc(x.exemption?.reason || '')}">مستثنى 🛡️</span>` : ''}</td>
         <td style="white-space:nowrap">${isToday && can('att') && (x.status === 'pending' || x.status === 'absent') ? `<button class="btn sm" data-mark="${s.id}">حضور يدوي</button> <button class="btn sm" data-excuse="${s.id}">عذر</button>` : ''}</td></tr>`).join('')}
       </tbody></table>` : `<div class="empty">لا يوجد طلاب بهذه الحالة</div>`;
   },
@@ -2739,14 +2759,15 @@ const staffAtt = {
         </thead>
         <tbody>
           ${rows.map(({ t, st }) => {
-            const inTime = st.inEv ? fmtTime(st.inEv.ts) : '—';
-            const inDev = st.inEv ? (st.inEv.deviceId ? db.device(st.inEv.deviceId)?.name.split(' · ')[0] : 'يدوي') : '';
-            const inMethod = st.inEv?.method || '';
+            const inTime = st.inEv ? fmtTime(st.inEv.ts) : (st.exempt ? '<span class="muted small">مستثنى رسمياً</span>' : '—');
+            const inDev = st.inEv ? (st.inEv.deviceId ? db.device(st.inEv.deviceId)?.name.split(' · ')[0] : 'يدوي') : (st.exempt ? 'إعفاء بقرار' : '');
+            const inMethod = st.inEv?.method || (st.exempt ? 'حالة خاصة' : '');
             const outTime = st.outEv ? fmtTime(st.outEv.ts) : '—';
             const outDev = st.outEv ? (st.outEv.deviceId ? db.device(st.outEv.deviceId)?.name.split(' · ')[0] : 'يدوي') : '';
 
             let pillHtml = '';
-            if (st.status === 'present') pillHtml = '<span class="pill p-present">حاضر في الموعد ✓</span>';
+            if (st.exempt) pillHtml = `<span class="pill" style="background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE" title="مستثنى بقرار: ${esc(st.exemption?.reason || '')}">مستثنى (حالة خاصة) 🛡️</span>`;
+            else if (st.status === 'present') pillHtml = '<span class="pill p-present">حاضر في الموعد ✓</span>';
             else if (st.status === 'late') pillHtml = '<span class="pill p-late">متأخر ⏱</span>';
             else if (st.status === 'left') pillHtml = '<span class="pill p-left">انصرف ⏏</span>';
             else if (st.status === 'excused') pillHtml = `<span class="pill p-excused" title="${esc(st.excuse?.note || '')}">إجازة: ${esc(st.excuse?.reason || 'عذر')}</span>`;
@@ -3072,7 +3093,495 @@ function teacherMonthReportModal() {
   });
 }
 
-export const views = { staffAtt, promotion: promotionView, timetable: timetableView, ask: askView, inbox: inboxView, login, me, myatt, users, audit: auditView, dashboard, attendance, reports, posts: postsView, marks: marksView, students, student, classes, section, devices, school: settings, teacher, parent, notes };
+/* ============ EXEMPTIONS & SPECIAL CASES (استثناءات البصمة والحالات الخاصة) ============ */
+const exState = { q: '', f: 'all' };
+
+const exemptionsView = {
+  render(el) {
+    const canManage = can('exemptions') || ['owner', 'admin'].includes(ctx().role);
+    el.innerHTML = topbar('استثناءات البصمة والحالات الخاصة', 'إدارة إعفاءات الطلاب والملاك التدريسي من البصمة البيومترية وتوثيق القرارات الرسمية', canManage ? `<button class="btn pr" id="add-ex">${icon('plus', 18)}إضافة استثناء جديد</button>` : '') + `
+    <div id="ex-stats" style="margin-bottom:14px"></div>
+    <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+      <div class="seg" id="ex-fseg" role="group" aria-label="تصفية الاستثناءات"></div>
+      <label class="field" style="flex:1;min-width:220px;margin:0">
+        <input class="input" id="ex-q" value="${esc(exState.q)}" placeholder="بحث بالاسم، رقم الأمر الإداري، سبب الإعفاء...">
+      </label>
+    </div>
+    <div class="card tablewrap" id="ex-tbl"></div>`;
+
+    $('#ex-q', el).oninput = e => { exState.q = e.target.value; this.update(el); };
+    $('#add-ex', el)?.addEventListener('click', () => addExemptionModal(() => this.update(el)));
+
+    el.addEventListener('click', e => {
+      const fBtn = e.target.closest('[data-ex-f]');
+      if (fBtn) {
+        exState.f = fBtn.dataset.exF;
+        this.update(el);
+        return;
+      }
+
+      const togBtn = e.target.closest('[data-ex-tog]');
+      if (togBtn) {
+        const id = togBtn.dataset.exTog;
+        const r = db.toggleExemption(id, ctx().name);
+        if (r.ok) {
+          toast(r.active ? 'تم تفعيل الاستثناء' : 'تم تعطيل الاستثناء', '');
+          this.update(el);
+        }
+        return;
+      }
+
+      const edBtn = e.target.closest('[data-ex-edit]');
+      if (edBtn) {
+        const ex = db.exemptions().find(x => x.id === edBtn.dataset.exEdit);
+        if (ex) editExemptionModal(ex, () => this.update(el));
+        return;
+      }
+
+      const delBtn = e.target.closest('[data-ex-del]');
+      if (delBtn) {
+        const ex = db.exemptions().find(x => x.id === delBtn.dataset.exDel);
+        if (ex) deleteExemptionModal(ex, () => this.update(el));
+        return;
+      }
+    });
+
+    this.update(el);
+  },
+
+  update(el) {
+    const list = db.exemptions();
+    const canManage = can('exemptions') || ['owner', 'admin'].includes(ctx().role);
+    const total = list.length;
+    const studentsCount = list.filter(x => x.targetType === 'student').length;
+    const staffCount = list.filter(x => x.targetType === 'teacher').length;
+    const activeCount = list.filter(x => x.active !== false).length;
+
+    const stats = $('#ex-stats', el);
+    if (stats) {
+      stats.innerHTML = `
+      <div class="grid g4" style="gap:10px">
+        <div class="card stat" style="border-right:4px solid var(--brand)">
+          <span class="pill p-quiet">إجمالي الاستثناءات</span>
+          <div class="n num">${total}</div>
+          <div class="small muted">مسجلة في سجل الحالات الخاصة</div>
+        </div>
+        <div class="card stat" style="border-right:4px solid var(--teal)">
+          <span class="pill p-present">سارية المفعول</span>
+          <div class="n num" style="color:var(--teal)">${activeCount}</div>
+          <div class="small muted">معفية من البصمة حالياً</div>
+        </div>
+        <div class="card stat" style="border-right:4px solid #7A5BB0">
+          <span class="pill" style="background:#F3E8FF;color:#6B21A8">طلاب مستثنون</span>
+          <div class="n num" style="color:#7A5BB0">${studentsCount}</div>
+          <div class="small muted">حالات مرضية / جلدية / تقارير</div>
+        </div>
+        <div class="card stat" style="border-right:4px solid var(--amber)">
+          <span class="pill p-late">كادر ومدرسون</span>
+          <div class="n num" style="color:var(--amber)">${staffCount}</div>
+          <div class="small muted">إعفاء رسمي من بصمة الدوام</div>
+        </div>
+      </div>`;
+    }
+
+    const fseg = $('#ex-fseg', el);
+    if (fseg) {
+      const F = [
+        ['all', `الكل (${total})`],
+        ['student', `الطلاب (${studentsCount})`],
+        ['teacher', `الكادر (${staffCount})`],
+        ['active', `سارية (${activeCount})`],
+        ['inactive', `معطلة / منتهية (${total - activeCount})`]
+      ];
+      fseg.innerHTML = F.map(([k, label]) => `<button type="button" data-ex-f="${k}" aria-pressed="${exState.f === k}">${label}</button>`).join('');
+    }
+
+    let rows = list;
+    if (exState.f === 'student') rows = rows.filter(x => x.targetType === 'student');
+    else if (exState.f === 'teacher') rows = rows.filter(x => x.targetType === 'teacher');
+    else if (exState.f === 'active') rows = rows.filter(x => x.active !== false);
+    else if (exState.f === 'inactive') rows = rows.filter(x => x.active === false);
+
+    if (exState.q) {
+      const q = norm(exState.q);
+      rows = rows.filter(x => {
+        const name = x.targetType === 'student' ? db.student(x.targetId)?.name || '' : db.teacher(x.targetId)?.name || '';
+        return norm(name).includes(q) || norm(x.reason || '').includes(q) || norm(x.category || '').includes(q) || norm(x.orderNo || '').includes(q) || norm(x.notes || '').includes(q);
+      });
+    }
+
+    const tbl = $('#ex-tbl', el);
+    if (tbl) {
+      tbl.innerHTML = rows.length ? `
+      <table>
+        <thead>
+          <tr>
+            <th>الشخص المستثنى</th>
+            <th>النوع</th>
+            <th>سبب الاستثناء والتصنيف</th>
+            <th>المدة والسريان</th>
+            <th>سياسة الحضور</th>
+            <th>التوثيق الرسمي</th>
+            <th>الحالة</th>
+            ${canManage ? '<th>الإجراءات</th>' : ''}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(ex => {
+            const isStu = ex.targetType === 'student';
+            const person = isStu ? db.student(ex.targetId) : db.teacher(ex.targetId);
+            const name = person?.name || (isStu ? 'طالب غير متوفر' : 'مدرس غير متوفر');
+            const subText = isStu ? (person ? db.sectionLabel(person.sectionId) : 'طالب') : (person ? `${person.subject || 'عام'} · ${person.phone}` : 'كادر');
+            const photo = isStu ? db.photoOf(ex.targetId) : null;
+            const isYear = ex.mode === 'year' || (!ex.startDate && !ex.endDate);
+            const durationText = isYear ? 'طوال العام الدراسي الحالي' : `من ${ex.startDate || '—'} إلى ${ex.endDate || '—'}`;
+            const isAuto = (ex.attPolicy || 'auto_present') === 'auto_present';
+            const policyBadge = isAuto
+              ? '<span class="pill p-present" title="يُحسب حاضر تلقائياً في موعد الحضور ولا يُرسل غياب لولي الأمر">حاضر تلقائياً ✓</span>'
+              : '<span class="pill" style="background:#EDE9FE;color:#5B21B6" title="يُسجّل كحالة مستثنى رسمياً">حالة خاصة 🛡️</span>';
+            const isActive = ex.active !== false;
+
+            return `<tr>
+              <td>
+                <div style="display:flex;gap:10px;align-items:center">
+                  ${avatar(name, '', photo)}
+                  <div>
+                    <b>${esc(name)}</b>
+                    <div class="muted small">${esc(subText)}</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="pill ${isStu ? 'p-quiet' : 'p-late'}">${isStu ? 'طالب' : 'كادر تدريسي'}</span>
+              </td>
+              <td>
+                <div style="font-weight:600">${esc(ex.category || 'استثناء خاص')}</div>
+                <div class="muted small">${esc(ex.reason)}</div>
+                ${ex.notes ? `<div class="muted small" style="color:var(--ink-muted);font-style:italic">${esc(ex.notes)}</div>` : ''}
+              </td>
+              <td>
+                <div style="font-size:13px">${durationText}</div>
+                <div class="muted small">${isYear ? 'دائم للسنة الدراسية' : 'مؤقت محدد بتاريخ'}</div>
+              </td>
+              <td>${policyBadge}</td>
+              <td>
+                <div><b class="num" dir="ltr">${esc(ex.orderNo || 'بدون رقم أمر')}</b></div>
+                <div class="muted small">سجّله: <b>${esc(ex.createdByName || ex.createdBy || 'الإدارة')}</b></div>
+              </td>
+              <td>
+                ${canManage ? `
+                <button type="button" class="toggle" role="switch" data-ex-tog="${ex.id}" aria-checked="${isActive}" title="${isActive ? 'انقر للتعطيل' : 'انقر للتفعيل'}"></button>`
+                : `<span class="pill ${isActive ? 'p-present' : 'p-absent'}">${isActive ? 'ساري' : 'متوقف'}</span>`}
+              </td>
+              ${canManage ? `
+              <td>
+                <div style="display:flex;gap:6px">
+                  <button type="button" class="btn sm" data-ex-edit="${ex.id}" title="تعديل تفاصيل الاستثناء">${icon('swap', 13)} تعديل</button>
+                  <button type="button" class="btn sm danger" data-ex-del="${ex.id}" title="حذف الاستثناء نهائياً">${icon('x', 13)} حذف</button>
+                </div>
+              </td>` : ''}
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>` : '<div class="empty">لا توجد استثناءات مسجلة مطابقة لخيارات البحث.</div>';
+    }
+  }
+};
+
+function addExemptionModal(onDone) {
+  const students = db.students();
+  const teachers = db.teachers();
+
+  modal('إضافة استثناء من البصمة / حالة خاصة', `
+  <form id="aexf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+    <label class="field">المشمول بالاستثناء
+      <select class="input" id="ex-target-type" name="targetType">
+        <option value="student">طالب / طالبة</option>
+        <option value="teacher">مدرس / كادر تعليمي</option>
+      </select>
+    </label>
+
+    <label class="field" id="box-stu-select">اسم الطالب
+      <select class="input" name="studentId">
+        ${students.map(s => `<option value="${s.id}">${esc(s.name)} · ${esc(db.sectionShort(s.sectionId))}</option>`).join('')}
+      </select>
+    </label>
+
+    <label class="field" id="box-tch-select" style="display:none">اسم المدرس / الكادر
+      <select class="input" name="teacherId">
+        ${teachers.map(t => `<option value="${t.id}">${esc(t.name)} · ${esc(t.subject || 'عام')}</option>`).join('')}
+      </select>
+    </label>
+
+    <div class="grid g2" style="gap:10px">
+      <label class="field">تصنيف الحالة الخاصة
+        <select class="input" name="category">
+          <option value="حالة جلدية في بصمات الأصابع">حالة جلدية في بصمات الأصابع (إكزيما / ضمور)</option>
+          <option value="كسر أو إصابة مؤقتة باليد">كسر أو إصابة مؤقتة باليد / الأصابع</option>
+          <option value="تقرير طبي من لجنة رسمية">تقرير طبي من لجنة صحية رسمية</option>
+          <option value="إعفاء إداري رسمي">إعفاء إداري رسمي بقرار إدارة المدرسة</option>
+          <option value="حالة مرضية خاصة أخرى">حالة مرضية خاصة أخرى</option>
+        </select>
+      </label>
+
+      <label class="field">رقم الأمر الإداري / التقرير الطبي
+        <input class="input" name="orderNo" placeholder="مثال: أ.إ/2026/89 أو تقرير-412">
+      </label>
+    </div>
+
+    <label class="field">سبب وتفاصيل الاستثناء
+      <input class="input" name="reason" placeholder="مثال: إصابة بإكزيما حادة في أصابع اليدين تمنع التقاط البصمة الحيوية" required>
+    </label>
+
+    <div class="grid g2" style="gap:10px">
+      <label class="field">مدة الاستثناء
+        <select class="input" id="ex-mode" name="mode">
+          <option value="year">طوال العام الدراسي الحالي</option>
+          <option value="range">فترة مؤقتة محددة بالتاريخ</option>
+        </select>
+      </label>
+
+      <label class="field">سياسة احتساب الحضور
+        <select class="input" name="attPolicy">
+          <option value="auto_present">حاضر تلقائياً (بدون إرسال غياب لولي الأمر)</option>
+          <option value="exempt_status">تسجيل كحالة مستثنى خاصة</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="grid g2" id="box-range-dates" style="gap:10px;display:none">
+      <label class="field">تاريخ البدء
+        <input class="input" type="date" name="startDate">
+      </label>
+      <label class="field">تاريخ الانتهاء
+        <input class="input" type="date" name="endDate">
+      </label>
+    </div>
+
+    <label class="field">ملاحظات الإدارة
+      <textarea class="input" name="notes" rows="2" placeholder="أي تفاصيل أو توثيقات إضافية..."></textarea>
+    </label>
+
+    <div class="muted small" style="background:var(--surface-200);padding:8px 12px;border-radius:8px">
+      <b>ملاحظة إدارية:</b> الأشخاص المستثنون لن تظهر لهم حالة «غائب» ولن تصل إشعارات غياب خاطئة لأولياء أمورهم.
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+      <button type="button" class="btn" data-close>إلغاء</button>
+      <button class="btn pr" style="min-height:44px">${icon('shield', 16)} حفظ وتفعيل الاستثناء</button>
+    </div>
+  </form>`, (m, close) => {
+    const typeSel = $('#ex-target-type', m);
+    const stuBox = $('#box-stu-select', m);
+    const tchBox = $('#box-tch-select', m);
+    const modeSel = $('#ex-mode', m);
+    const datesBox = $('#box-range-dates', m);
+
+    typeSel.onchange = () => {
+      const isStu = typeSel.value === 'student';
+      stuBox.style.display = isStu ? '' : 'none';
+      tchBox.style.display = isStu ? 'none' : '';
+    };
+
+    modeSel.onchange = () => {
+      datesBox.style.display = modeSel.value === 'range' ? '' : 'none';
+    };
+
+    $('#aexf', m).onsubmit = e => {
+      e.preventDefault();
+      const form = e.target;
+      const targetType = form.targetType.value;
+      const targetId = targetType === 'student' ? form.studentId.value : form.teacherId.value;
+      const reason = form.reason.value.trim();
+      if (!reason) return toast('يرجى كتابة سبب الاستثناء', '', 'absent');
+
+      const category = form.category.value;
+      const mode = form.mode.value;
+      const startDate = mode === 'range' ? form.startDate.value : null;
+      const endDate = mode === 'range' ? form.endDate.value : null;
+      const attPolicy = form.attPolicy.value;
+      const orderNo = form.orderNo.value.trim();
+      const notes = form.notes.value.trim();
+
+      const r = db.addExemption({
+        targetType,
+        targetId,
+        category,
+        reason,
+        mode,
+        startDate,
+        endDate,
+        attPolicy,
+        orderNo,
+        notes
+      }, ctx().name);
+
+      if (r.ok) {
+        const pName = targetType === 'student' ? db.student(targetId)?.name : db.teacher(targetId)?.name;
+        toast('تم تسجيل الاستثناء بنجاح', pName);
+        close();
+        onDone?.();
+      }
+    };
+  });
+}
+
+function editExemptionModal(ex, onDone) {
+  const isStu = ex.targetType === 'student';
+  const person = isStu ? db.student(ex.targetId) : db.teacher(ex.targetId);
+  const pName = person?.name || (isStu ? 'طالب' : 'مدرس');
+
+  modal(`تعديل استثناء: ${pName}`, `
+  <form id="eexf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+    <div class="row" style="background:var(--surface-200);padding:10px 14px;border-radius:8px">
+      <div style="flex:1">
+        <b>${esc(pName)}</b>
+        <div class="muted small">${isStu ? 'طالب بالمدرسة' : 'عضو كادر تدريسي'}</div>
+      </div>
+      <span class="pill ${isStu ? 'p-quiet' : 'p-late'}">${isStu ? 'طالب' : 'كادر'}</span>
+    </div>
+
+    <div class="grid g2" style="gap:10px">
+      <label class="field">تصنيف الحالة الخاصة
+        <select class="input" name="category">
+          <option value="حالة جلدية في بصمات الأصابع" ${ex.category === 'حالة جلدية في بصمات الأصابع' ? 'selected' : ''}>حالة جلدية في بصمات الأصابع (إكزيما / ضمور)</option>
+          <option value="كسر أو إصابة مؤقتة باليد" ${ex.category === 'كسر أو إصابة مؤقتة باليد' ? 'selected' : ''}>كسر أو إصابة مؤقتة باليد / الأصابع</option>
+          <option value="تقرير طبي من لجنة رسمية" ${ex.category === 'تقرير طبي من لجنة رسمية' ? 'selected' : ''}>تقرير طبي من لجنة صحية رسمية</option>
+          <option value="إعفاء إداري رسمي" ${ex.category === 'إعفاء إداري رسمي' ? 'selected' : ''}>إعفاء إداري رسمي بقرار إدارة المدرسة</option>
+          <option value="حالة مرضية خاصة أخرى" ${ex.category === 'حالة مرضية خاصة أخرى' ? 'selected' : ''}>حالة مرضية خاصة أخرى</option>
+        </select>
+      </label>
+
+      <label class="field">رقم الأمر الإداري / التقرير الطبي
+        <input class="input" name="orderNo" value="${esc(ex.orderNo || '')}" placeholder="مثال: أ.إ/2026/89">
+      </label>
+    </div>
+
+    <label class="field">سبب وتفاصيل الاستثناء
+      <input class="input" name="reason" value="${esc(ex.reason || '')}" required>
+    </label>
+
+    <div class="grid g2" style="gap:10px">
+      <label class="field">مدة الاستثناء
+        <select class="input" id="ex-edit-mode" name="mode">
+          <option value="year" ${ex.mode === 'year' ? 'selected' : ''}>طوال العام الدراسي الحالي</option>
+          <option value="range" ${ex.mode === 'range' ? 'selected' : ''}>فترة مؤقتة محددة بالتاريخ</option>
+        </select>
+      </label>
+
+      <label class="field">سياسة احتساب الحضور
+        <select class="input" name="attPolicy">
+          <option value="auto_present" ${(ex.attPolicy || 'auto_present') === 'auto_present' ? 'selected' : ''}>حاضر تلقائياً (بدون إرسال غياب لولي الأمر)</option>
+          <option value="exempt_status" ${ex.attPolicy === 'exempt_status' ? 'selected' : ''}>تسجيل كحالة مستثنى خاصة</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="grid g2" id="box-edit-range-dates" style="gap:10px;${ex.mode === 'range' ? '' : 'display:none'}">
+      <label class="field">تاريخ البدء
+        <input class="input" type="date" name="startDate" value="${ex.startDate || ''}">
+      </label>
+      <label class="field">تاريخ الانتهاء
+        <input class="input" type="date" name="endDate" value="${ex.endDate || ''}">
+      </label>
+    </div>
+
+    <label class="field">ملاحظات الإدارة
+      <textarea class="input" name="notes" rows="2">${esc(ex.notes || '')}</textarea>
+    </label>
+
+    <div class="row" style="padding:4px 0">
+      <span style="flex:1"><b>حالة تفعيل الاستثناء</b><div class="muted small">عند الإيقاف، يعود الشخص لنظام البصمة الاعتيادي</div></span>
+      <button type="button" class="toggle" role="switch" id="ex-edit-active" aria-checked="${ex.active !== false}"></button>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+      <button type="button" class="btn" data-close>إلغاء</button>
+      <button class="btn pr" style="min-height:44px">${icon('check', 16)} حفظ التعديلات</button>
+    </div>
+  </form>`, (m, close) => {
+    const modeSel = $('#ex-edit-mode', m);
+    const datesBox = $('#box-edit-range-dates', m);
+    const activeBtn = $('#ex-edit-active', m);
+
+    modeSel.onchange = () => {
+      datesBox.style.display = modeSel.value === 'range' ? '' : 'none';
+    };
+
+    activeBtn.onclick = () => {
+      const cur = activeBtn.getAttribute('aria-checked') === 'true';
+      activeBtn.setAttribute('aria-checked', !cur);
+    };
+
+    $('#eexf', m).onsubmit = e => {
+      e.preventDefault();
+      const form = e.target;
+      const reason = form.reason.value.trim();
+      if (!reason) return toast('يرجى كتابة سبب الاستثناء', '', 'absent');
+
+      const category = form.category.value;
+      const mode = form.mode.value;
+      const startDate = mode === 'range' ? form.startDate.value : null;
+      const endDate = mode === 'range' ? form.endDate.value : null;
+      const attPolicy = form.attPolicy.value;
+      const orderNo = form.orderNo.value.trim();
+      const notes = form.notes.value.trim();
+      const active = activeBtn.getAttribute('aria-checked') === 'true';
+
+      const r = db.updateExemption(ex.id, {
+        category,
+        reason,
+        mode,
+        startDate,
+        endDate,
+        attPolicy,
+        orderNo,
+        notes,
+        active
+      }, ctx().name);
+
+      if (r.ok) {
+        toast('تم تحديث الاستثناء بنجاح', pName);
+        close();
+        onDone?.();
+      }
+    };
+  });
+}
+
+function deleteExemptionModal(ex, onDone) {
+  const isStu = ex.targetType === 'student';
+  const person = isStu ? db.student(ex.targetId) : db.teacher(ex.targetId);
+  const pName = person?.name || (isStu ? 'طالب' : 'مدرس');
+
+  modal('تأكيد حذف الاستثناء', `
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div>هل أنت متأكد من رغبتك في حذف استثناء البصمة للشخص:</div>
+    <div style="background:var(--surface-200);padding:12px;border-radius:8px">
+      <b style="font-size:15px">${esc(pName)}</b>
+      <div class="muted small">${isStu ? 'طالب' : 'كادر تدريسي'} · ${esc(ex.category || 'استثناء')}</div>
+      <div class="muted small" style="margin-top:4px">${esc(ex.reason)}</div>
+    </div>
+    <div class="muted small" style="color:var(--red-ink)">
+      <b>تحذير:</b> سيتم إلغاء الإعفاء فوراً وسيعود الشخص لمتابعة البصمة الاعتيادية ويسجل كغائب إذا لم يبصم.
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button type="button" class="btn" data-close>إلغاء</button>
+      <button type="button" class="btn danger" id="ex-del-confirm" style="min-height:42px">${icon('x', 14)} نعم، حذف الاستثناء</button>
+    </div>
+  </div>`, (m, close) => {
+    $('#ex-del-confirm', m).onclick = () => {
+      const r = db.deleteExemption(ex.id, ctx().name);
+      if (r.ok) {
+        toast('تم حذف الاستثناء بنجاح', pName);
+        close();
+        onDone?.();
+      }
+    };
+  });
+}
+
+export const views = { staffAtt, exemptions: exemptionsView, promotion: promotionView, timetable: timetableView, ask: askView, inbox: inboxView, login, me, myatt, users, audit: auditView, dashboard, attendance, reports, posts: postsView, marks: marksView, students, student, classes, section, devices, school: settings, teacher, parent, notes };
 
 // Full screen for protected videos keeps the watermark: the wrapper goes full screen, not the bare video.
 document.addEventListener('click', e => { const b = e.target.closest('.vfs'); if (!b) return; const w = b.closest('.vwrap'); if (document.fullscreenElement) document.exitFullscreen(); else w.requestFullscreen?.().catch(() => {}); });
