@@ -44,19 +44,52 @@ export function setMode(m) { storage.del(KEY); const keepCreds = S?.creds; S = s
 // Off days: Friday and Saturday (real clock), plus official holidays announced by the administration.
 // On an off day no scan counts and nobody is marked absent.
 export const holidays = () => (S.holidays || []).slice().sort((a, b) => a.day.localeCompare(b.day));
-const holidayOn = ts => (S.holidays || []).find(h => h.day === dayKey(new Date(ts)));
+export const holidayOn = ts => (S.holidays || []).find(h => h.day === (typeof ts === 'string' ? ts : dayKey(new Date(ts))));
+export const getHoliday = ts => holidayOn(ts);
 export function offDay(ts) { if (holidayOn(ts)) return true; return S.clock?.mode === 'real' && !isSchoolDay(new Date(ts)); }
 export const isHoliday = () => !!S.holiday || !!holidayOn(S.today);
 export const holidayName = () => holidayOn(S.today)?.name || (S.holiday ? (new Date(S.today).getDay() === 5 ? 'الجمعة' : 'السبت') : '');
-export function addHoliday(day, name, by) {
+export function addHoliday(day, name, by, extra = {}) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '')) return { ok: false, error: 'اختر تاريخ العطلة.' };
-  if (day < dayKey(new Date(S.today))) return { ok: false, error: 'التاريخ لازم يكون اليوم أو بعده.' };
   S.holidays = (S.holidays || []).filter(h => h.day !== day);
-  S.holidays.push({ day, name: String(name || '').trim() || 'عطلة رسمية', by: by || '', ts: now() });
-  log('إعلان عطلة رسمية', `${day} · ${String(name || '').trim() || 'عطلة رسمية'}`);
-  IDX = null; emit('holidays'); return { ok: true };
+  const hol = {
+    day,
+    name: String(name || '').trim() || 'عطلة رسمية',
+    category: extra.category || 'عطلة رسمية',
+    orderNo: extra.orderNo || '',
+    notes: extra.notes || '',
+    by: by || '',
+    ts: now()
+  };
+  S.holidays.push(hol);
+  log('إعلان عطلة رسمية', `${day} · ${hol.name} (${hol.category})${extra.orderNo ? ' · أمر: ' + extra.orderNo : ''}`);
+  IDX = null; emit('holidays'); return { ok: true, holiday: hol };
 }
-export function removeHoliday(day) { const h = (S.holidays || []).find(x => x.day === day); S.holidays = (S.holidays || []).filter(x => x.day !== day); if (h) log('إلغاء عطلة', `${day} · ${h.name}`); IDX = null; emit('holidays'); }
+export function addHolidayRange({ startDate, endDate, name, category, orderNo, notes }, by) {
+  if (!startDate) return { ok: false, error: 'يرجى تحديد تاريخ البدء.' };
+  const d1 = new Date(startDate);
+  const d2 = endDate ? new Date(endDate) : new Date(startDate);
+  if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return { ok: false, error: 'التاريخ غير صحيح.' };
+  if (d2 < d1) return { ok: false, error: 'تاريخ الانتهاء يجب أن يكون بعد تاريخ البدء.' };
+
+  const added = [];
+  const cur = new Date(d1);
+  while (cur <= d2) {
+    const k = dayKey(cur);
+    addHoliday(k, name, by, { category, orderNo, notes });
+    added.push(k);
+    cur.setDate(cur.getDate() + 1);
+  }
+  return { ok: true, count: added.length };
+}
+export function removeHoliday(day, by) {
+  const h = (S.holidays || []).find(x => x.day === day);
+  S.holidays = (S.holidays || []).filter(x => x.day !== day);
+  if (h) log('إلغاء عطلة رسمية', `${day} · ${h.name}${by ? ' · ألغاها: ' + by : ''}`);
+  IDX = null;
+  emit('holidays');
+  return { ok: true };
+}
 
 /* ---------------- seed ---------------- */
 const MALE = ['أحمد', 'حسين', 'علي', 'محمد', 'مصطفى', 'يوسف', 'سجاد', 'كرار', 'عباس', 'حيدر', 'مرتضى', 'زين العابدين', 'منتظر', 'باقر', 'جعفر', 'أمير', 'حسن', 'كاظم', 'رضا', 'مهدي'];
@@ -384,7 +417,7 @@ export const STATUS = {
 export function statusOf(studentId, day = S.today) {
   const stu = student(studentId);
   if (stu && stu.since && day < stu.since) return { status: 'none' };
-  if ((S.holiday && day === S.today) || offDay(day)) return { status: 'holiday' };
+  if ((S.holiday && day === S.today) || offDay(day)) return { status: 'holiday', holiday: holidayOn(day) || { name: holidayName() } };
   const k = dayKey(new Date(day));
   const evs = indexed().get(studentId + '|' + k) || [];
   const inEv = evs.find(e => e.type === 'in');
@@ -473,7 +506,7 @@ export const teacherEvents = () => S.teacherEvents || [];
 export const teacherExcuses = () => S.teacherExcuses || [];
 
 export function teacherStatusOf(teacherId, day = S.today) {
-  if ((S.holiday && day === S.today) || offDay(day)) return { status: 'holiday' };
+  if ((S.holiday && day === S.today) || offDay(day)) return { status: 'holiday', holiday: holidayOn(day) || { name: holidayName() } };
   const k = dayKey(new Date(day));
   const evs = (S.teacherEvents || []).filter(e => e.teacherId === teacherId && dayKey(new Date(e.ts)) === k).sort((a, b) => a.ts - b.ts);
   const inEv = evs.find(e => e.type === 'in');

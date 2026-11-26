@@ -351,7 +351,9 @@ const attendance = {
     const sc = scope(); const secs = sc.sections ? db.sections().filter(s => sc.sections.includes(s.id)) : db.sections();
     if (sc.sections && !sc.sections.includes(att.sec)) att.sec = sc.sections[0];
     att.day = att.day || db.days()[0];
-    el.innerHTML = topbar('الحضور والانصراف', sub()) + `
+    const canManage = can('att') || ['owner', 'admin'].includes(ctx().role);
+    el.innerHTML = topbar('الحضور والانصراف', sub(), canManage ? `<button class="btn" id="att-hol-btn">${icon('calendar', 16)} إعلان عطلة رسمية / طارئة</button>` : '') + `
+    <div id="att-hol-banner"></div>
     <div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
       <label class="field" style="min-width:170px">اليوم<select class="input" id="day">${db.days().map((d, i) => `<option value="${d}" ${d === att.day ? 'selected' : ''}>${i === 0 ? 'اليوم · ' : ''}${fmtDay(new Date(d))}</option>`).join('')}</select></label>
       <label class="field" style="min-width:190px">الشعبة<select class="input" id="sec">${sc.sections ? '' : '<option value="">كل الشعب</option>'}${secs.map(s => `<option value="${s.id}" ${s.id === att.sec ? 'selected' : ''}>${esc(db.sectionLabel(s.id))}</option>`).join('')}</select></label>
@@ -362,10 +364,18 @@ const attendance = {
     $('#day', el).onchange = e => { att.day = +e.target.value; this.update(el); };
     $('#sec', el).onchange = e => { att.sec = e.target.value; this.update(el); };
     $('#aq', el).oninput = e => { att.q = e.target.value; this.update(el); };
+    $('#att-hol-btn', el)?.addEventListener('click', () => officialHolidayModal(att.day, () => this.update(el)));
     el.addEventListener('click', e => {
       const f = e.target.closest('[data-f]'); if (f) { att.f = f.dataset.f; this.update(el); }
       const m = e.target.closest('[data-mark]'); if (m) { db.markManual(m.dataset.mark, ctx().name); toast('سُجّل الحضور يدوياً', db.student(m.dataset.mark).name); }
       const x = e.target.closest('[data-excuse]'); if (x) excuseModal(db.student(x.dataset.excuse));
+      const delH = e.target.closest('[data-del-hol]');
+      if (delH) {
+        const d = delH.dataset.delHol;
+        db.removeHoliday(d, ctx().name);
+        toast('تم إلغاء العطلة واستئناف الدوام', d);
+        this.update(el);
+      }
     });
     this.update(el);
   },
@@ -374,6 +384,35 @@ const attendance = {
     let list = db.students(att.sec || undefined);
     if (sc.sections) list = list.filter(s => sc.sections.includes(s.sectionId));
     const isToday = att.day === db.days()[0];
+    const isHoliday = db.offDay(att.day);
+    const holInfo = db.holidayOn(att.day);
+    const canManage = can('att') || ['owner', 'admin'].includes(ctx().role);
+
+    const bannerBox = $('#att-hol-banner', el);
+    if (bannerBox) {
+      if (isHoliday) {
+        bannerBox.innerHTML = `
+        <div class="card" style="background:#FEF3C7;border:1px solid #FCD34D;display:flex;gap:14px;align-items:center;margin-bottom:12px;border-radius:12px;padding:12px 16px">
+          <span class="ti" style="background:#F59E0B;color:#fff;width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none">
+            ${icon('calendar', 22)}
+          </span>
+          <div style="flex:1">
+            <div style="font-size:16px;font-weight:700;color:#92400E">
+              ${holInfo ? `عطلة رسمية معتمدة: ${esc(holInfo.name)}` : 'عطلة نهاية الأسبوع الرسمية'}
+            </div>
+            <div style="font-size:13px;color:#B45309">
+              تم إعفاء جميع الطلاب والملاك التدريسي من البصمة لهذا اليوم (${fmtDay(new Date(att.day))})، ولا يُحسب أي غياب أو تأخير.
+              ${holInfo?.orderNo ? ` · رقم القرار: <b>${esc(holInfo.orderNo)}</b>` : ''}
+              ${holInfo?.by ? ` · بواسطة: <b>${esc(holInfo.by)}</b>` : ''}
+            </div>
+          </div>
+          ${canManage && holInfo ? `<button type="button" class="btn sm danger" data-del-hol="${holInfo.day}">${icon('trash', 14)} إلغاء العطلة</button>` : ''}
+        </div>`;
+      } else {
+        bannerBox.innerHTML = '';
+      }
+    }
+
     const rows = list.map(s => ({ s, x: db.statusOf(s.id, att.day) }));
     const counts = { all: rows.length };
     rows.forEach(r => {
@@ -381,7 +420,10 @@ const attendance = {
       if (r.x.late) counts.late = (counts.late || 0) + (r.x.status === 'left' ? 1 : 0);
       if (r.x.exempt) counts.exempt = (counts.exempt || 0) + 1;
     });
-    const F = [
+    const F = isHoliday ? [
+      ['all', 'الكل'],
+      ['holiday', `عطلة رسمية (${counts.holiday || rows.length})`]
+    ] : [
       ['all', 'الكل'],
       ['present', 'حاضر'],
       ['late', 'متأخر'],
@@ -402,15 +444,166 @@ const attendance = {
       return matchFilter && (!q || r.s.name.includes(q));
     });
     $('#tbl', el).innerHTML = shown.length ? `<table><thead><tr><th>الطالب</th><th>الشعبة</th><th>الوصول</th><th>الانصراف</th><th>الطريقة</th><th>الحالة</th><th></th></tr></thead><tbody>
-      ${shown.map(({ s, x }) => `<tr><td><a href="#/student/${s.id}" style="color:inherit;display:flex;gap:10px;align-items:center;text-decoration:none">${avatar(s.name, x.status, db.photoOf(s.id))}<b>${esc(s.name)}</b></a></td>
-        <td class="muted">${esc(db.sectionShort(s.sectionId))}</td>
-        <td class="num">${x.inEv ? `<button class="evlink" data-ev="${x.inEv.id}" title="إثبات الوصول">${fmtTime(x.inEv.ts)} ${icon('eye', 13)}</button>` : (x.exempt ? '<span class="muted small">مستثنى رسمياً</span>' : '—')}</td><td class="num">${x.outEv ? `<button class="evlink" data-ev="${x.outEv.id}" title="إثبات الانصراف">${fmtTime(x.outEv.ts)} ${icon('eye', 13)}</button>` : '—'}</td>
-        <td class="muted small">${x.inEv ? esc(x.inEv.method) : x.excuse ? esc(x.excuse.reason) : (x.exempt ? `<span title="${esc(x.exemption?.reason || '')}">حالة خاصة 🛡️</span>` : '—')}</td>
-        <td>${pill(x.status)}${x.status === 'left' && x.late ? ' ' + pill('late') : ''}${x.exempt ? ` <span class="pill" style="background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE" title="مستثنى بقرار: ${esc(x.exemption?.reason || '')}">مستثنى 🛡️</span>` : ''}</td>
-        <td style="white-space:nowrap">${isToday && can('att') && (x.status === 'pending' || x.status === 'absent') ? `<button class="btn sm" data-mark="${s.id}">حضور يدوي</button> <button class="btn sm" data-excuse="${s.id}">عذر</button>` : ''}</td></tr>`).join('')}
+      ${shown.map(({ s, x }) => {
+        const isH = x.status === 'holiday';
+        return `<tr><td><a href="#/student/${s.id}" style="color:inherit;display:flex;gap:10px;align-items:center;text-decoration:none">${avatar(s.name, x.status, db.photoOf(s.id))}<b>${esc(s.name)}</b></a></td>
+          <td class="muted">${esc(db.sectionShort(s.sectionId))}</td>
+          <td class="num">${x.inEv ? `<button class="evlink" data-ev="${x.inEv.id}" title="إثبات الوصول">${fmtTime(x.inEv.ts)} ${icon('eye', 13)}</button>` : (isH ? '<span class="muted small">—</span>' : x.exempt ? '<span class="muted small">مستثنى رسمياً</span>' : '—')}</td>
+          <td class="num">${x.outEv ? `<button class="evlink" data-ev="${x.outEv.id}" title="إثبات الانصراف">${fmtTime(x.outEv.ts)} ${icon('eye', 13)}</button>` : (isH ? '<span class="muted small">—</span>' : '—')}</td>
+          <td class="muted small">${isH ? '<span style="color:#4338CA;font-weight:600">عطلة معفاة رسمياً</span>' : x.inEv ? esc(x.inEv.method) : x.excuse ? esc(x.excuse.reason) : (x.exempt ? `<span title="${esc(x.exemption?.reason || '')}">حالة خاصة 🛡️</span>` : '—')}</td>
+          <td>${isH ? '<span class="pill" style="background:#E0E7FF;color:#3730A3;border:1px solid #C7D2FE">عطلة رسمية 🏖️</span>' : pill(x.status)}${x.status === 'left' && x.late ? ' ' + pill('late') : ''}${x.exempt && !isH ? ` <span class="pill" style="background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE" title="مستثنى بقرار: ${esc(x.exemption?.reason || '')}">مستثنى 🛡️</span>` : ''}</td>
+          <td style="white-space:nowrap">${!isH && isToday && can('att') && (x.status === 'pending' || x.status === 'absent') ? `<button class="btn sm" data-mark="${s.id}">حضور يدوي</button> <button class="btn sm" data-excuse="${s.id}">عذر</button>` : ''}</td></tr>`;
+      }).join('')}
       </tbody></table>` : `<div class="empty">لا يوجد طلاب بهذه الحالة</div>`;
   },
 };
+
+function officialHolidayModal(defaultDay, onDone) {
+  const dStr = typeof defaultDay === 'string' ? defaultDay : (defaultDay ? db.dayKey(new Date(defaultDay)) : db.dayKey(new Date(db.now())));
+  const allHols = db.holidays();
+
+  modal('إعلان عطلة رسمية / طارئة (إعفاء الكل من البصمة)', `
+  <form id="holf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+    <div style="background:var(--surface-200);padding:10px 14px;border-radius:10px">
+      <div style="font-weight:700;color:var(--ink)">إعفاء عام وشامل من البصمة والحضور</div>
+      <div class="muted small" style="margin-top:2px">
+        عند إعلان العطلة، يُعفى جميع الطلاب وكافة أعضاء الكادر التعليمي من تسجيل البصمة لذلك اليوم ولا يُسجل أي غياب أو تأخير.
+      </div>
+    </div>
+
+    <div class="grid g2" style="gap:10px">
+      <label class="field">نطاق مدة العطلة
+        <select class="input" id="hol-range-mode" name="rangeMode">
+          <option value="single">يوم واحد فقط</option>
+          <option value="range">فترة محددة (عدة أيام)</option>
+        </select>
+      </label>
+
+      <label class="field">تصنيف العطلة
+        <select class="input" name="category" id="hol-cat">
+          <option value="عطلة رسمية عامة">عطلة رسمية عامة (وطنية / دينية)</option>
+          <option value="عطلة طارئة لسوء الأحوال الجوية">عطلة طارئة لسوء الأحوال الجوية (أمطار / سيول / غبار)</option>
+          <option value="عطلة بقرار مجلس الوزراء">عطلة بقرار مجلس الوزراء / الأمانة العامة</option>
+          <option value="عطلة محلية بقرار المحافظة">عطلة محلية بقرار المحافظة أو مديرية التربية</option>
+          <option value="عطلة انتخابية أو مناسبة خاصة">عطلة انتخابية أو مناسبة خاصة</option>
+          <option value="أخرى">سبب آخر</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="grid g2" style="gap:10px">
+      <label class="field" id="box-start-date">تاريخ العطلة
+        <input class="input" type="date" name="startDate" value="${dStr}" required>
+      </label>
+
+      <label class="field" id="box-end-date" style="display:none">إلى تاريخ (نهاية العطلة)
+        <input class="input" type="date" name="endDate" value="${dStr}">
+      </label>
+    </div>
+
+    <label class="field">مسمى وعنوان العطلة
+      <input class="input" name="name" id="hol-name" placeholder="مثال: عطلة طارئة لسوء الأحوال الجوية وهطول الأمطار" value="عطلة رسمية" required>
+    </label>
+
+    <div class="grid g2" style="gap:10px">
+      <label class="field">رقم الأمر / القرار الرسمي (اختياري)
+        <input class="input" name="orderNo" placeholder="مثال: قرار وزاري رقم 418">
+      </label>
+
+      <label class="field">ملاحظات إضافية (اختياري)
+        <input class="input" name="notes" placeholder="ملاحظات للإدارة وأولياء الأمور">
+      </label>
+    </div>
+
+    <details style="margin-top:4px" ${allHols.length ? '' : 'hidden'}>
+      <summary style="cursor:pointer;font-weight:700;padding:6px 0">
+        عرض العطلات الرسمية المعلنة (${allHols.length})
+      </summary>
+      <div style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-top:6px" id="hol-list-box">
+        ${allHols.length ? allHols.map(h => `
+          <div class="row" style="background:var(--surface-200);padding:6px 10px;border-radius:8px">
+            <div style="flex:1">
+              <b>${esc(h.name)}</b>
+              <div class="muted small">${h.day} · ${esc(h.category || 'عطلة رسمية')} ${h.orderNo ? `· ${esc(h.orderNo)}` : ''}</div>
+            </div>
+            <button type="button" class="btn sm danger" data-pop-del-hol="${h.day}">إلغاء</button>
+          </div>
+        `).join('') : '<div class="muted small">لا توجد عطلات معلنة حالياً.</div>'}
+      </div>
+    </details>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+      <button type="button" class="btn" data-close>إلغاء</button>
+      <button class="btn pr" style="min-height:44px">${icon('calendar', 16)} حفظ وإعلان العطلة</button>
+    </div>
+  </form>`, (m, close) => {
+    const rangeMode = $('#hol-range-mode', m);
+    const startBox = $('#box-start-date', m);
+    const endBox = $('#box-end-date', m);
+    const catSel = $('#hol-cat', m);
+    const nameInput = $('#hol-name', m);
+
+    catSel.onchange = () => {
+      if (catSel.value === 'عطلة طارئة لسوء الأحوال الجوية') {
+        nameInput.value = 'عطلة طارئة لسوء الأحوال الجوية وهطول الأمطار';
+      } else if (catSel.value === 'عطلة بقرار مجلس الوزراء') {
+        nameInput.value = 'عطلة رسمية بقرار الأمانة العامة لمجلس الوزراء';
+      } else if (catSel.value === 'عطلة محلية بقرار المحافظة') {
+        nameInput.value = 'عطلة رسمية بقرار ديوان المحافظة';
+      } else if (catSel.value === 'عطلة انتخابية أو مناسبة خاصة') {
+        nameInput.value = 'عطلة رسمية للمراكز الانتخابية';
+      }
+    };
+
+    rangeMode.onchange = () => {
+      const isRange = rangeMode.value === 'range';
+      startBox.childNodes[0].nodeValue = isRange ? 'من تاريخ (بداية العطلة)' : 'تاريخ العطلة';
+      endBox.style.display = isRange ? '' : 'none';
+    };
+
+    m.addEventListener('click', e => {
+      const delBtn = e.target.closest('[data-pop-del-hol]');
+      if (delBtn) {
+        const d = delBtn.dataset.popDelHol;
+        db.removeHoliday(d, ctx().name);
+        toast('تم إلغاء العطلة واستئناف الدوام', d);
+        delBtn.closest('.row')?.remove();
+        onDone?.();
+      }
+    });
+
+    $('#holf', m).onsubmit = e => {
+      e.preventDefault();
+      const form = e.target;
+      const isRange = rangeMode.value === 'range';
+      const startDate = form.startDate.value;
+      const endDate = isRange ? form.endDate.value : startDate;
+      const name = form.name.value.trim() || 'عطلة رسمية';
+      const category = form.category.value;
+      const orderNo = form.orderNo.value.trim();
+      const notes = form.notes.value.trim();
+
+      if (!startDate) return toast('يرجى تحديد تاريخ العطلة', '', 'absent');
+
+      const r = db.addHolidayRange({
+        startDate,
+        endDate,
+        name,
+        category,
+        orderNo,
+        notes
+      }, ctx().name);
+
+      if (r.ok) {
+        toast('تم إعلان العطلة بنجاح وإعفاء الجميع من البصمة', name);
+        close();
+        onDone?.();
+      } else {
+        toast('خطأ في التاريخ', r.error, 'absent');
+      }
+    };
+  });
+}
 
 function excuseModal(s, onDone) {
   let reason = 'مريض';
@@ -2780,12 +2973,14 @@ const staffAtt = {
     const canManage = can('att') || ctx().role === 'owner' || ctx().role === 'admin';
     el.innerHTML = topbar('حضور وبصمة الكادر التدريسي', 'متابعة حية لبصمات دخول وانصراف المدرسين وأجهزة البصمة', canManage ? `
       <button class="btn pr" id="btn-quick-t-scan">${icon('device', 18)} محاكاة بصمة مدرس</button>
+      <button class="btn" id="btn-t-holiday">${icon('calendar', 16)} إعلان عطلة رسمية</button>
       <button class="btn" id="btn-manual-t-att">${icon('plus', 16)} تسجيل يدوي</button>
       <button class="btn" id="btn-t-excuse">${icon('plus', 16)} إجازة / عذر</button>
       <button class="btn" id="btn-t-month-rep">${icon('report', 16)} تقرير الدوام الشهري</button>
     ` : `
       <button class="btn" id="btn-t-month-rep">${icon('report', 16)} تقرير الدوام الشهري</button>
     `) + `
+    <div id="t-hol-banner"></div>
     <div class="card" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
       <label class="field" style="min-width:180px">اليوم
         <select class="input" id="t-day">
@@ -2812,6 +3007,18 @@ const staffAtt = {
       const f = e.target.closest('[data-tf]');
       if (f) { staffAttState.f = f.dataset.tf; this.update(el); return; }
 
+      if (e.target.closest('#btn-t-holiday')) {
+        officialHolidayModal(staffAttState.day, () => this.update(el));
+        return;
+      }
+      const delTHol = e.target.closest('[data-del-t-hol]');
+      if (delTHol) {
+        const d = delTHol.dataset.delTHol;
+        db.removeHoliday(d, ctx().name);
+        toast('تم إلغاء العطلة واستئناف الدوام', d);
+        this.update(el);
+        return;
+      }
       if (e.target.closest('#btn-quick-t-scan')) {
         simulateTeacherScanModal(() => this.update(el));
         return;
@@ -2867,7 +3074,35 @@ const staffAtt = {
     const list = db.teachers();
     const day = staffAttState.day || db.days()[0];
     const isToday = day === db.days()[0];
+    const isHoliday = db.offDay(day);
+    const holInfo = db.holidayOn(day);
+    const canManage = can('att') || ctx().role === 'owner' || ctx().role === 'admin';
     const summ = db.teacherSummary(day);
+
+    const holBanner = $('#t-hol-banner', el);
+    if (holBanner) {
+      if (isHoliday) {
+        holBanner.innerHTML = `
+        <div class="card" style="background:#FEF3C7;border:1px solid #FCD34D;display:flex;gap:14px;align-items:center;margin-bottom:12px;border-radius:12px;padding:12px 16px">
+          <span class="ti" style="background:#F59E0B;color:#fff;width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none">
+            ${icon('calendar', 22)}
+          </span>
+          <div style="flex:1">
+            <div style="font-size:16px;font-weight:700;color:#92400E">
+              ${holInfo ? `عطلة رسمية معتمدة: ${esc(holInfo.name)}` : 'عطلة نهاية الأسبوع الرسمية'}
+            </div>
+            <div style="font-size:13px;color:#B45309">
+              تم إعفاء جميع أعضاء الكادر التعليمي والطلاب من البصمة والحضور لهذا اليوم (${fmtDay(new Date(day))})، ولا يُحسب أي غياب أو تأخير.
+              ${holInfo?.orderNo ? ` · رقم القرار: <b>${esc(holInfo.orderNo)}</b>` : ''}
+              ${holInfo?.by ? ` · بواسطة: <b>${esc(holInfo.by)}</b>` : ''}
+            </div>
+          </div>
+          ${canManage && holInfo ? `<button type="button" class="btn sm danger" data-del-t-hol="${holInfo.day}">${icon('trash', 14)} إلغاء العطلة</button>` : ''}
+        </div>`;
+      } else {
+        holBanner.innerHTML = '';
+      }
+    }
 
     const statsBox = $('#t-stats-box', el);
     if (statsBox) {
@@ -2898,7 +3133,10 @@ const staffAtt = {
 
     const fseg = $('#t-fseg', el);
     if (fseg) {
-      const F = [
+      const F = isHoliday ? [
+        ['all', `الكل (${summ.total})`],
+        ['holiday', `عطلة رسمية (${summ.total})`]
+      ] : [
         ['all', `الكل (${summ.total})`],
         ['present', `حاضر (${summ.present})`],
         ['late', `متأخر (${summ.late})`],
