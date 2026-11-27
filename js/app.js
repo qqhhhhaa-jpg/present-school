@@ -88,7 +88,7 @@ const SIDE_GROUPS = [
 ];
 // Phone: four main sections in the bottom bar, everything else in «المزيد» (a sheet that slides up).
 const PRIMARY = { owner: ['dashboard', 'attendance', 'posts', 'inbox'], admin: ['dashboard', 'attendance', 'posts', 'inbox'], teacher: ['teacher', 'attendance', 'posts', 'marks'], parent: ['parent', 'posts', 'marks', 'ask'], student: ['me', 'timetable', 'posts', 'marks'] };
-const TILE = { staffAtt: '#0B7F70', exemptions: '#7A5BB0', promotion: '#7A5BB0', dashboard: '#1E2B5C', users: '#5B6478', attendance: '#0B7F70', reports: '#2B5797', students: '#0B7F70', classes: '#7A5BB0', posts: '#B9770E', marks: '#C8453F', timetable: '#2B5797', inbox: '#0B7F70', ask: '#0B7F70', devices: '#5B6478', audit: '#5B6478', school: '#5B6478', teacher: '#1E2B5C', parent: '#1E2B5C', me: '#1E2B5C', myatt: '#0B7F70', notes: '#B9770E' };
+const TILE = { staffAtt: '#0B7F70', exemptions: '#6A5A9E', promotion: '#6A5A9E', dashboard: '#2B428C', users: '#3D5A80', attendance: '#0B7F70', reports: '#2F5592', students: '#148678', classes: '#6A5A9E', posts: '#C47F17', marks: '#C8453F', timetable: '#2F5592', inbox: '#0E8A7A', ask: '#0B7F70', devices: '#3D5A80', audit: '#4B5B78', school: '#3D5A80', teacher: '#2B428C', parent: '#2B428C', me: '#2B428C', myatt: '#0B7F70', notes: '#C47F17' };
 function mobileNav(c, name, items, groups, other, cred, link) {
   const prim = PRIMARY[c.role].map(id => items.find(it => it[0] === id)).filter(Boolean);
   const rest = items.filter(it => !prim.includes(it));
@@ -145,7 +145,7 @@ function badgeFor(c, id) {
 }
 function shell(c, name) {
   const items = navFor(c);
-  const link = ([id, label, ic]) => { const n = badgeFor(c, id); return `<a href="#/${id}" class="${id === name ? 'on' : ''}" ${id === name ? 'aria-current="page"' : ''} title="${label}"><i class="ni">${icon(ic, 18)}</i><span>${label}</span>${n ? `<span class="cnt">${n}</span>` : ''}</a>`; };
+  const link = ([id, label, ic]) => { const n = badgeFor(c, id); return `<a href="#/${id}" class="${id === name ? 'on' : ''}" ${id === name ? 'aria-current="page"' : ''} title="${label}"><i class="ni" style="--ic:${TILE[id] || '#2B428C'}">${icon(ic, 17)}</i><span>${label}</span>${n ? `<span class="cnt">${n}</span>` : ''}</a>`; };
   // Sidebar: items grouped under small headings (only when the list is long enough to need it).
   const groups = items.length > 6 ? SIDE_GROUPS.map(([label, ids]) => [label, items.filter(it => ids.includes(it[0]))]).filter(g => g[1].length) : [['', items]];
   const placed = new Set(groups.flatMap(g => g[1].map(it => it[0])));
@@ -431,7 +431,7 @@ function bindSearch(root) {
         }),
         ...r.sections.map(s => ({
           href: `#/section/${s.id}`,
-          html: `<span class="ti" style="width:40px;height:40px;font-size:13px">${esc(db.grade(s.gradeId).short)}</span><div style="flex:1"><b>${esc(db.sectionLabel(s.id))}</b><div class="muted small">${db.students(s.id).length} طالباً</div></div>`
+          html: `<span class="tip" style="width:42px;height:42px;border-radius:13px">${icon('grade', 16)}<b>${esc(db.grade(s.gradeId).short)}</b></span><div style="flex:1"><b>${esc(db.sectionLabel(s.id))}</b><div class="muted small">${db.students(s.id).length} طالباً</div></div>`
         })),
         ...r.guardians.map(g => {
           const kids = db.childrenOf(g.id);
@@ -489,7 +489,7 @@ function bindSearch(root) {
         const matched = secs.filter(s => norm(db.sectionLabel(s.id)).includes(nq) || norm(s.homeroom || '').includes(nq) || String(s.room || '').includes(q));
         items = matched.map(s => ({
           href: `#/section/${s.id}`,
-          html: `<span class="ti" style="width:40px;height:40px;font-size:13px">${esc(db.grade(s.gradeId).short)}</span><div style="flex:1;min-width:0"><b>${mark(db.sectionLabel(s.id))}</b><div class="muted small">مربي الشعبة: ${esc(s.homeroom || '—')} · ${db.students(s.id).length} طالباً · قاعة <span class="num">${s.room}</span></div></div>`
+          html: `<span class="tip" style="width:42px;height:42px;border-radius:13px">${icon('grade', 16)}<b>${esc(db.grade(s.gradeId).short)}</b></span><div style="flex:1;min-width:0"><b>${mark(db.sectionLabel(s.id))}</b><div class="muted small">مربي الشعبة: ${esc(s.homeroom || '—')} · ${db.students(s.id).length} طالباً · قاعة <span class="num">${s.room}</span></div></div>`
         }));
         $$('#live .card, #live .sec, #live [data-addsec]', current?.el).forEach(el => {
           const text = el.textContent || '';
@@ -521,7 +521,7 @@ function bindSearch(root) {
               setTimeout(() => { card.style.outline = ''; }, 2000);
             }
           },
-          html: `<span class="ti" style="width:40px;height:40px;font-size:13px;background:var(--surface-300)">${icon(d.type === 'zk' ? 'device' : 'child', 20)}</span><div style="flex:1;min-width:0"><b>${mark(d.name)}</b><div class="muted small">${esc(d.model || '')} · <span class="num" dir="ltr">${esc(d.serial || d.ip || '—')}</span></div></div><span class="pill ${d.online ? 'p-present' : 'p-absent'}">${d.online ? 'متصل' : 'منقطع'}</span>`
+          html: `<span class="ti" style="width:40px;height:40px;border-radius:12px;--ic:${d.online ? '#0B7F70' : '#C8453F'}">${icon(d.type === 'zk' ? 'device' : 'child', 20)}</span><div style="flex:1;min-width:0"><b>${mark(d.name)}</b><div class="muted small">${esc(d.model || '')} · <span class="num" dir="ltr">${esc(d.serial || d.ip || '—')}</span></div></div><span class="pill ${d.online ? 'p-present' : 'p-absent'}">${d.online ? 'متصل' : 'منقطع'}</span>`
         }));
         $$('#live .tile', current?.el).forEach(tile => {
           const text = tile.textContent || '';
@@ -538,7 +538,7 @@ function bindSearch(root) {
             if (card) card.click();
             else location.hash = '#/posts';
           },
-          html: `<span class="ti" style="width:40px;height:40px;font-size:13px;background:var(--surface-300)">${icon(p.type === 'hw' ? 'book' : 'spark', 18)}</span><div style="flex:1;min-width:0"><b>${mark(p.title)}</b><div class="muted small">${esc(p.subject || (p.type === 'hw' ? 'واجب' : 'إعلان'))} · ${esc(p.by || '')}</div></div>`
+          html: `<span class="ti" style="width:40px;height:40px;border-radius:12px;--ic:${p.type === 'hw' ? '#C47F17' : '#1E2B5C'}">${icon(p.type === 'hw' ? 'book' : 'spark', 18)}</span><div style="flex:1;min-width:0"><b>${mark(p.title)}</b><div class="muted small">${esc(p.subject || (p.type === 'hw' ? 'واجب' : 'إعلان'))} · ${esc(p.by || '')}</div></div>`
         }));
         $$('#live .card, #live [data-post]', current?.el).forEach(card => {
           const text = card.textContent || '';
@@ -556,7 +556,7 @@ function bindSearch(root) {
             if (card) card.click();
             else location.hash = '#/marks';
           },
-          html: `<span class="ti" style="width:40px;height:40px;font-size:13px;background:var(--brand);color:var(--on-brand)">${icon('grade', 20)}</span><div style="flex:1;min-width:0"><b>${mark(m.subject)} · ${mark(m.exam)}</b><div class="muted small">${esc(db.sectionShort(m.sectionId))} · ${esc(m.byName || '')}</div></div>`
+          html: `<span class="ti" style="width:40px;height:40px;border-radius:12px;--ic:#1E2B5C">${icon('grade', 20)}</span><div style="flex:1;min-width:0"><b>${mark(m.subject)} · ${mark(m.exam)}</b><div class="muted small">${esc(db.sectionShort(m.sectionId))} · ${esc(m.byName || '')}</div></div>`
         }));
         $$('#live .card', current?.el).forEach(card => {
           const text = card.textContent || '';

@@ -614,25 +614,51 @@ html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;width:0;height:0}
 .sec.sc.c0{--c:#1E2B5C;--cs:#EEF1F8} .sec.sc.c1{--c:#0B7F70;--cs:#E8F4F1} .sec.sc.c2{--c:#C08A2E;--cs:#FBF3E3}
 .sec.sc.c3{--c:#3D6FA6;--cs:#EAF1F9} .sec.sc.c4{--c:#6A5A9E;--cs:#F0EEF7} .sec.sc.c5{--c:#A44A55;--cs:#F8ECEE}
 
-/* Attendance: professional app icons */
-.stg-h{--c1:#2A3B7A;--c2:#1E2B5C;display:flex;align-items:center;gap:10px;margin:8px 0 12px}
-.stg-h.st1{--c1:#13998A;--c2:#0B7F70} .stg-h.st2{--c1:#4A6FB0;--c2:#2F5592}
+/* ===== Unified 3D Glossy Squircle App Icons (Platform-wide) ===== */
+.stg-h{--ic:#1E2B5C;display:flex;align-items:center;gap:10px;margin:8px 0 12px}
+.stg-h.st1{--ic:#0B7F70} .stg-h.st2{--ic:#2F5592}
 .stg-h h2{margin:0;font-size:16px;font-weight:800;color:var(--ink)}
-.stg-h .stg-i{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;background:linear-gradient(145deg,var(--c1),var(--c2));box-shadow:0 2px 6px rgba(30,43,92,.18),inset 0 1px 0 rgba(255,255,255,.25)}
+.stg-h .stg-i{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none}
 .stg-h .stg-c{order:10;font-size:12px;color:var(--muted);font-weight:600;padding:1px 10px;border-radius:999px;background:var(--surface-300)}
 .stg-h::after{content:"";flex:1;height:1px;background:var(--line);order:9}
-.tip{--c1:#2A3B7A;--c2:#1E2B5C;position:relative;width:50px;height:50px;border-radius:15px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:#fff;background:linear-gradient(145deg,var(--c1) 0%,var(--c2) 100%);box-shadow:0 6px 14px -4px rgba(30,43,92,.45),inset 0 1px 0 rgba(255,255,255,.28),inset 0 -2px 0 rgba(0,0,0,.12);overflow:hidden}
-.tip::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 70% at 30% 0%,rgba(255,255,255,.28),transparent 60%);pointer-events:none}
-.tip.st1{--c1:#13998A;--c2:#0B6E62} .tip.st2{--c1:#4A6FB0;--c2:#2A4C87}
-.tip svg{width:20px;height:20px;opacity:.95;position:relative}
-.tip b{font:800 10.5px/1 var(--font-ar);letter-spacing:.2px;opacity:.92;position:relative}
-.sec.sc .sl{background:linear-gradient(145deg,color-mix(in srgb,var(--c) 78%,#fff),var(--c));box-shadow:0 3px 8px -3px color-mix(in srgb,var(--c) 70%,transparent),inset 0 1px 0 rgba(255,255,255,.3);position:relative}
-.ap-ico{background:linear-gradient(145deg,#2A3B7A,#1E2B5C);box-shadow:0 6px 14px -4px rgba(30,43,92,.45),inset 0 1px 0 rgba(255,255,255,.28)}
 
-/* ===== Unified app icons: flat fill + fixed blue misty glow behind, nothing else ===== */
-:root{--app-glow:0 0 0 1px rgba(59,130,246,.10),0 0 14px 2px rgba(59,130,246,.38),0 0 30px 6px rgba(96,165,250,.22)}
-.ti,.tip,.ap-ico,.sec.sc .sl,.stg-h .stg-i{box-shadow:var(--app-glow)!important;background-image:none!important;filter:none}
-.tip::before,.tip::after,.ap-ico::before,.ap-ico::after,.ti::before,.ti::after{content:none!important;display:none!important}
-.tip{background-color:var(--c2)} .ap-ico{background-color:var(--brand)}
-.sec.sc .sl{background-color:var(--c)} .stg-h .stg-i{background-color:var(--c2)}
-.tile.ok .ti,.tile.bad .ti{box-shadow:var(--app-glow)!important}
+.tip{--ic:#1E2B5C;width:50px;height:50px;border-radius:15px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.tip.st1{--ic:#0B7F70} .tip.st2{--ic:#2F5592}
+.tip svg{width:20px;height:20px;opacity:.96}
+.tip b{font:800 10.5px/1 var(--font-ar);letter-spacing:.2px;opacity:.95}
+
+/* Core glossy 3D squircle styling applied uniformly across every section, grade, division, KPI, tile & nav icon */
+.tip,.ti,.ap-ico,.stg-h .stg-i,.sec.sc .sl,.ki,.side .nav a .ni,.mti{
+  position:relative;
+  overflow:hidden;
+  color:#fff!important;
+  background:linear-gradient(145deg,color-mix(in srgb,var(--ic,#1E2B5C) 84%,#fff) 0%,var(--ic,#1E2B5C) 56%,color-mix(in srgb,var(--ic,#1E2B5C) 82%,#0A1026) 100%)!important;
+  box-shadow:0 6px 14px -4px color-mix(in srgb,var(--ic,#1E2B5C) 52%,transparent),inset 0 1px 0 rgba(255,255,255,.30),inset 0 -2px 0 rgba(0,0,0,.14)!important;
+}
+.tip::before,.ti::before,.ap-ico::before,.stg-h .stg-i::before,.sec.sc .sl::before,.ki::before,.side .nav a .ni::before,.mti::before{
+  content:""!important;
+  display:block!important;
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  background:radial-gradient(120% 70% at 30% 0%,rgba(255,255,255,.30),transparent 60%);
+  pointer-events:none;
+}
+.tip>*,.ti>*,.ap-ico>*,.stg-h .stg-i>*,.sec.sc .sl>*,.ki>*,.side .nav a .ni>*,.mti>*{position:relative;z-index:1}
+
+/* Specific sizing & color tokens per icon family */
+.ti{border-radius:14px}
+.tile.ok .ti{--ic:#0B7F70}
+.tile.bad .ti{--ic:#C8453F}
+.ap-ico{--ic:#1E2B5C;border-radius:14px}
+.ap-ico.lg{border-radius:15px}
+.sec.sc .sl{--ic:var(--c);width:30px;height:30px;border-radius:10px;box-shadow:0 4px 10px -3px color-mix(in srgb,var(--c) 55%,transparent),inset 0 1px 0 rgba(255,255,255,.30),inset 0 -1.5px 0 rgba(0,0,0,.14)!important}
+.ki{--ic:#1E2B5C;width:34px;height:34px;border-radius:11px}
+.ki.t{--ic:#0B7F70}
+.ki.a{--ic:#C47F17}
+.ki.r{--ic:#C8453F}
+.side .nav a .ni{width:32px;height:32px;border-radius:10px;box-shadow:0 4px 10px -2px rgba(7,12,32,.48),inset 0 1px 0 rgba(255,255,255,.32),inset 0 -2px 0 rgba(0,0,0,.18)!important;transition:transform .15s ease,box-shadow .15s ease}
+.side .nav a:hover .ni{transform:translateY(-1px);box-shadow:0 6px 14px -2px rgba(7,12,32,.58),inset 0 1px 0 rgba(255,255,255,.38),inset 0 -2px 0 rgba(0,0,0,.18)!important}
+.side .nav a.on .ni{box-shadow:0 0 0 2px rgba(255,255,255,.32),0 6px 14px -2px rgba(7,12,32,.55),inset 0 1px 0 rgba(255,255,255,.40),inset 0 -2px 0 rgba(0,0,0,.16)!important}
+.mti{--ic:var(--tc,#1E2B5C);width:44px;height:44px;border-radius:13px}
+a.sec.sc{color:inherit;text-decoration:none}

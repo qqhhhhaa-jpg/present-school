@@ -1395,12 +1395,16 @@ const classes = {
   update(el) {
     const box = $('#live', el); if (!box) return;
     const stages = [...new Set(db.grades().map(g => g.stage))];
-    box.innerHTML = stages.map(stage => `<h2>المرحلة ${esc(stage.replace('ال', ''))}</h2><div class="tiles">${db.grades().filter(g => g.stage === stage).map(g => {
+    const hol = db.offDay();
+    box.innerHTML = stages.map((stage, sti) => {
+      const stageGrades = db.grades().filter(g => g.stage === stage);
+      return `<div class="stg-h st${sti % 3}"><span class="stg-i">${icon('grade', 16)}</span><h2>المرحلة ${esc(stage.replace('ال', ''))}</h2><span class="stg-c">${stageGrades.length} صف</span></div><div class="tiles">${stageGrades.map(g => {
       const list = db.students().filter(s => db.section(s.sectionId).gradeId === g.id); const x = db.summary(list);
-      return `<div class="tile"><div style="display:flex;gap:12px;align-items:center"><span class="ti">${esc(g.short)}</span><div style="flex:1"><b style="font-size:17px">${esc(g.name)}</b><div class="muted small">${db.sections(g.id).length} شعبة · ${list.length} طالباً</div></div><b class="num" style="font-size:20px;color:${x.rate >= 90 ? 'var(--teal-ink)' : 'var(--amber-ink)'}">${x.rate}%</b></div>
-        <div class="bar" style="flex:none"><i style="width:${x.rate}%;background:${x.rate >= 90 ? 'var(--teal)' : 'var(--amber)'}"></i></div>
-        <div class="secs">${db.sections(g.id).map(s => { const y = db.summary(db.students(s.id)); return `<a class="sec ${y.absent ? 'warn' : 'ok'}" href="#/section/${s.id}" style="color:inherit;text-decoration:none"><b>${esc(s.name)}</b><span>${y.came} من ${y.total} حاضر</span></a>`; }).join('')}${['owner', 'admin'].includes(ctx().role) ? `<button type="button" class="sec add" data-addsec="${g.id}">${icon('plus', 16)}شعبة</button>` : ''}</div></div>`;
-    }).join('')}</div>`).join('');
+      return `<div class="tile"><div style="display:flex;gap:12px;align-items:center"><span class="tip st${sti % 3}">${icon('grade', 20)}<b>${esc(g.short || g.name.slice(0, 2))}</b></span><div style="flex:1"><b style="font-size:17px">${esc(g.name)}</b><div class="muted small">${db.sections(g.id).length} شعبة · ${list.length} طالباً</div></div>${hol ? `<span class="pill p-quiet">${icon('calendar', 13)} عطلة</span>` : `<b class="num" style="font-size:20px;color:${x.rate >= 90 ? 'var(--teal-ink)' : 'var(--amber-ink)'}">${x.rate}%</b>`}</div>
+        ${hol ? '' : `<div class="bar" style="flex:none"><i style="width:${x.rate}%;background:${x.rate >= 90 ? 'var(--teal)' : 'var(--amber)'}"></i></div>`}
+        <div class="secs">${db.sections(g.id).map((s, si) => { const ss = db.students(s.id); const n = ss.length; const y = db.summary(ss); const pct = n ? Math.round(y.came / n * 100) : 0; return `<a class="sec sc c${si % 6}" href="#/section/${s.id}"><span class="sl">${esc(s.name)}</span><span class="sb"><span class="sn">الكل <em>${n}</em></span><span class="sp">${hol ? 'عطلة رسمية' : `حاضر <em>${y.came}</em>`}</span><span class="sm"><i style="width:${hol ? 0 : pct}%"></i></span></span></a>`; }).join('')}${['owner', 'admin'].includes(ctx().role) ? `<button type="button" class="sec add" data-addsec="${g.id}">${icon('plus', 16)}شعبة</button>` : ''}</div></div>`;
+    }).join('')}</div>`;
+    }).join('');
   },
 };
 function sectionModal(gradeId) {
@@ -1961,16 +1965,17 @@ const reports = {
         const list = secs.filter(s => { if (!q) return true; const g = db.grade(s.gradeId); return norm(`${g?.name || ''} ${s.name} ${s.homeroom || ''} ${g?.stage || ''}`).includes(q); });
         const groups = db.grades().map(g => ({ g, ss: list.filter(s => s.gradeId === g.id) })).filter(x => x.ss.length);
         const stColor = r => r >= 90 ? 'var(--teal)' : r >= 75 ? 'var(--amber)' : 'var(--red)';
-        $('#rep-apps', el).innerHTML = groups.length ? groups.map(({ g, ss }) => `
+        $('#rep-apps', el).innerHTML = groups.length ? groups.map(({ g, ss }, gi) => `
           <section class="ap-group">
-            <div class="ap-ghead"><span class="ap-gmark"></span><h2>${esc(g.name)}</h2>${g.stage ? `<span class="pill p-quiet">${esc(g.stage)}</span>` : ''}<span class="ap-gcount">${ss.length} شعبة</span></div>
-            <div class="ap-grid">${ss.map(s => {
+            <div class="stg-h st${gi % 3}"><span class="stg-i">${icon('grade', 16)}</span><h2>${esc(g.name)}</h2>${g.stage ? `<span class="pill p-quiet">${esc(g.stage)}</span>` : ''}<span class="stg-c">${ss.length} شعبة</span></div>
+            <div class="ap-grid">${ss.map((s, si) => {
               const r = db.monthReport(s.id);
               const t = r.rows.reduce((a, x) => ({ p: a.p + x.c.present, l: a.l + x.c.late, ab: a.ab + x.c.absent, e: a.e + x.c.excused }), { p: 0, l: 0, ab: 0, e: 0 });
               const all = t.p + t.l + t.ab + t.e; const rate = all ? Math.round((t.p + t.l) / all * 100) : 0;
+              const secColors = ['#1E2B5C', '#0B7F70', '#C08A2E', '#2F5592', '#6A5A9E', '#A44A55'];
               return `<button type="button" class="ap-tile" data-open-sec="${s.id}" style="--st:${stColor(rate)}" aria-label="فتح تقرير ${esc(g.name)} شعبة ${esc(s.name)}">
                 <div class="ap-top">
-                  <span class="ap-ico"><b>${esc(s.name)}</b><small>${esc(g.short || 'شعبة')}</small></span>
+                  <span class="ap-ico" style="--ic:${secColors[si % 6]}"><b>${esc(s.name)}</b><small>${esc(g.short || 'شعبة')}</small></span>
                   <span class="ap-ttl"><div>${esc(g.name)} · شعبة ${esc(s.name)}</div><p>${s.homeroom ? `المربي: ${esc(s.homeroom)}` : 'لا يوجد مربٍّ معيّن'}${s.room ? ` · قاعة ${esc(s.room)}` : ''}</p></span>
                   <span class="ap-rate">${rate}<small>%</small></span>
                 </div>
@@ -2064,8 +2069,8 @@ const reports = {
 };
 
 /* ============ POSTS ============ */
-const TYPE_COLOR = { hw: ['var(--amber)', 'var(--on-amber)'], ann: ['var(--brand)', 'var(--on-brand)'], pdf: ['var(--red)', 'var(--on-red)'], video: ['var(--teal)', 'var(--on-teal)'] };
-const typeIcon = (t, size = 44) => `<span class="ti" style="width:${size}px;height:${size}px;background:${TYPE_COLOR[t][0]};color:${TYPE_COLOR[t][1]}">${icon(t, size > 50 ? 30 : 22)}</span>`;
+const TYPE_COLOR = { hw: ['#C47F17', '#FFFFFF'], ann: ['#1E2B5C', '#FFFFFF'], pdf: ['#C8453F', '#FFFFFF'], video: ['#0B7F70', '#FFFFFF'] };
+const typeIcon = (t, size = 44) => `<span class="ti" style="width:${size}px;height:${size}px;border-radius:${Math.round(size * 0.3)}px;--ic:${TYPE_COLOR[t][0]}">${icon(t, size > 50 ? 30 : 22)}</span>`;
 const postState = { type: '', kid: '' };
 function postCard(p, c) {
   const gid = c.role === 'parent' ? c.roleInfo.guardianId : c.role === 'student' ? 's:' + c.roleInfo.studentId : null;
@@ -2543,7 +2548,7 @@ const auditView = {
     box.innerHTML = days.map(d => `<div class="card" style="padding:6px 18px 10px"><div class="row" style="border-bottom:1px solid var(--line)"><b style="flex:1">${d.k}</b><span class="muted small">${d.items.length} عملية</span></div>
       ${d.items.map(a => {
       const c = audCat(a); const sens = AUD_SENSITIVE.test(a.action); return `<div class="row" style="align-items:flex-start;${sens ? 'background:var(--amber-soft);margin:0 -18px;padding:10px 18px' : ''}">
-        <span class="ti" style="width:36px;height:36px;border-radius:10px;flex:none;${sens ? 'background:var(--amber);color:var(--on-amber)' : ''}">${icon(c[3], 18)}</span>
+        <span class="ti" style="width:36px;height:36px;border-radius:11px;flex:none;--ic:${sens ? '#C47F17' : '#1E2B5C'}">${icon(c[3], 18)}</span>
         <div style="flex:1;min-width:0"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b>${esc(a.action)}</b>${sens ? '<span class="pill p-late" style="font-size:10px;padding:0 7px">حساسة</span>' : ''}<span class="pill p-quiet" style="font-size:10px;padding:0 7px">${c[1]}</span></div>
           <div class="small" style="margin-top:2px">${esc(a.detail)}</div><div class="muted small" style="margin-top:2px">بواسطة <b>${esc(a.by)}</b></div></div>
         <span class="num small muted" style="white-space:nowrap">${fmtTime(a.ts)}</span></div>`;
@@ -2610,7 +2615,7 @@ const marksView = {
       const [bg] = markTone(st.avg, m.max);
       return `<button class="card" data-sheet="${m.id}" style="text-align:right;cursor:pointer;display:flex;flex-direction:column;gap:10px;${m.draft ? 'border:1.5px dashed var(--amber);background:#FFFDF8' : ''}">
       <div style="display:flex;gap:10px;align-items:center">
-        <span class="ti" style="width:44px;height:44px;background:${m.draft ? 'var(--amber)' : 'var(--brand)'};color:${m.draft ? 'var(--on-amber)' : 'var(--on-brand)'}">${icon(m.draft ? 'bookmark' : 'grade', 22)}</span>
+        <span class="ti" style="width:44px;height:44px;border-radius:13px;--ic:${m.draft ? '#C47F17' : '#1E2B5C'}">${icon(m.draft ? 'bookmark' : 'grade', 22)}</span>
         <div style="flex:1;min-width:0"><b>${esc(m.subject)} · ${esc(m.exam)}</b><div class="muted small">${esc(m.lesson)}</div></div>
         ${m.draft ? '<span class="pill p-late" style="font-weight:700">مسودة (غير منشورة)</span>' : '<span class="pill p-present">منشورة ✓</span>'}
         <span class="pill p-quiet">${db.EXAM_TYPES[m.examType]}</span>
@@ -2878,7 +2883,7 @@ function publishModal() {
         box.innerHTML = `
         <div class="card" style="background:var(--amber-soft);border:1.5px solid var(--amber);padding:14px;display:flex;flex-direction:column;gap:10px">
           <div style="display:flex;align-items:center;gap:8px">
-            <span class="ti" style="width:36px;height:36px;background:var(--amber);color:var(--on-amber)">${icon('grade', 18)}</span>
+            <span class="ti" style="width:36px;height:36px;border-radius:11px;--ic:#C47F17">${icon('grade', 18)}</span>
             <div style="flex:1">
               <b>يوجد <span class="num">${drafts.length}</span> امتحانات محفوظة كمسودة لـ (${esc(label)})</b>
               <div class="small muted">تتضمن درجات <span class="num">${studs.length}</span> طالباً جاهزة للنشر الفوري.</div>
@@ -3756,7 +3761,7 @@ const staffAtt = {
         const dev = e.deviceId ? db.device(e.deviceId) : null;
         const isIn = e.type === 'in';
         return `<div class="row" style="background:var(--surface-200);border-radius:10px;padding:8px 12px">
-            <span class="ti" style="width:34px;height:34px;background:${isIn ? 'var(--teal-soft)' : 'var(--brand-soft)'};color:${isIn ? 'var(--teal)' : 'var(--brand)'}">
+            <span class="ti" style="width:34px;height:34px;border-radius:10px;--ic:${isIn ? '#0B7F70' : '#1E2B5C'}">
               ${icon(isIn ? 'check' : 'logout', 16)}
             </span>
             <div style="flex:1">
