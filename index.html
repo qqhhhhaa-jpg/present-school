@@ -5440,6 +5440,33 @@ button.tt-dh:focus-visible {
   }
 }
 
+/* ===== Dashboard 5-KPI responsive layout (Total Students + 4 live KPIs) ===== */
+.grid.kpis5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.kpi-link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: transform .14s ease;
+}
+.kpi-link:hover {
+  transform: translateY(-2px);
+}
+@media (max-width: 1180px) {
+  .grid.kpis5 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .grid.kpis5 {
+    grid-template-columns: 1fr 1fr;
+  }
+  .grid.kpis5 > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -8137,7 +8164,9 @@ function arrivalsChart(evs, st, day) {
   const ticks = bins.map((_, i) => i % 3 === 0 ? `<text x="${P.l + i * bw + bw / 2}" y="${H - 8}" text-anchor="middle" class="ax">${fmtTime(t0 + i * step)}</text>` : '').join('');
   return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="توزيع أوقات الوصول"><line x1="${P.l}" x2="${W - P.r}" y1="${P.t + ih}" y2="${P.t + ih}" stroke="#E3E8EF"/>${bars}<line x1="${lx}" x2="${lx}" y1="${P.t}" y2="${P.t + ih}" stroke="#8A5A0B" stroke-dasharray="4 4"/><text x="${lx - 4}" y="${P.t + 12}" text-anchor="end" class="ax" style="fill:#8A5A0B;font-weight:700">بداية التأخير</text>${ticks}</svg>`;
 }
-const kpi = (ic, tone, label, n, sub, extra = '') => `<div class="card kpi"><div class="kh"><span class="ki ${tone}">${icon(ic, 18)}</span><span>${label}</span></div><div class="kn num">${n}</div><div class="kf"><span class="muted small">${sub}</span>${extra}</div></div>`;
+const kpi = (ic, tone, label, n, sub, extra = '', href = '') => href
+  ? `<a class="card kpi kpi-link" href="${href}"><div class="kh"><span class="ki ${tone}">${icon(ic, 18)}</span><span>${label}</span></div><div class="kn num">${n}</div><div class="kf"><span class="muted small">${sub}</span>${extra}</div></a>`
+  : `<div class="card kpi"><div class="kh"><span class="ki ${tone}">${icon(ic, 18)}</span><span>${label}</span></div><div class="kn num">${n}</div><div class="kf"><span class="muted small">${sub}</span>${extra}</div></div>`;
 const delta = d => d === null || isNaN(d) ? '' : `<span class="dl ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '▲' : '▼'} ${Math.abs(d)}%</span>`;
 const dashboard = {
   render(el) {
@@ -8168,7 +8197,8 @@ const dashboard = {
     const open = db.openTickets();
     const parts = [{ l: 'حاضر', v: c.present + c.left - lateLeft, c: C_ST.present }, { l: 'متأخر', v: lateN, c: C_ST.late }, { l: 'غائب', v: c.absent, c: C_ST.absent }, { l: 'بعذر', v: c.excused, c: C_ST.excused }, { l: 'لم يصل', v: c.pending, c: C_ST.pending }];
     box.innerHTML = `${hol ? `<div class="card holnote"><span class="ki a">${icon('clock', 16)}</span><div><b>اليوم عطلة (${esc(db.holidayName())})</b><div class="muted small">الأرقام أدناه من ${esc(refLabel.replace('آخر يوم دوام: ', 'آخر يوم دوام، '))}.</div></div></div>` : ''}
-    <div class="grid g4 kpis">
+    <div class="grid kpis kpis5">
+      ${kpi('users', '', 'عدد الطلاب الكلي', all.length, `${db.grades().length} صف · ${db.sections().length} شعبة`, `<span class="small" style="color:var(--brand);font-weight:700;display:inline-flex;align-items:center;gap:3px">عرض ${icon('back', 13)}</span>`, '#/students')}
       ${kpi('check', 't', hol ? 'نسبة الحضور' : 'نسبة الحضور اليوم', c.rate + '%', `${c.came} من ${c.total} طالب`, !beforeCut && !hol && isToday && prev ? delta(c.rate - prev.rate) : spark(series.map(s => s.rate)))}
       ${kpi('clock', 'a', 'المتأخرون', lateN, `بعد ${fmtTime(atTime(day, st.late))}`, spark(series.map(s => s.late), '#F2A93B'))}
       ${kpi('alert', 'r', beforeCut ? 'لم يصلوا بعد' : 'الغائبون', beforeCut ? c.pending : c.absent, beforeCut ? `يُحسب غياب بعد ${fmtTime(atTime(day, st.absentAt))}` : `${c.excused} منهم بعذر`, spark(series.map(s => s.absent), '#C8453F'))}
