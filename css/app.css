@@ -628,3 +628,11 @@ html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;width:0;height:0}
 .tip b{font:800 10.5px/1 var(--font-ar);letter-spacing:.2px;opacity:.92;position:relative}
 .sec.sc .sl{background:linear-gradient(145deg,color-mix(in srgb,var(--c) 78%,#fff),var(--c));box-shadow:0 3px 8px -3px color-mix(in srgb,var(--c) 70%,transparent),inset 0 1px 0 rgba(255,255,255,.3);position:relative}
 .ap-ico{background:linear-gradient(145deg,#2A3B7A,#1E2B5C);box-shadow:0 6px 14px -4px rgba(30,43,92,.45),inset 0 1px 0 rgba(255,255,255,.28)}
+
+/* ===== Unified app icons: flat fill + fixed blue misty glow behind, nothing else ===== */
+:root{--app-glow:0 0 0 1px rgba(59,130,246,.10),0 0 14px 2px rgba(59,130,246,.38),0 0 30px 6px rgba(96,165,250,.22)}
+.ti,.tip,.ap-ico,.sec.sc .sl,.stg-h .stg-i{box-shadow:var(--app-glow)!important;background-image:none!important;filter:none}
+.tip::before,.tip::after,.ap-ico::before,.ap-ico::after,.ti::before,.ti::after{content:none!important;display:none!important}
+.tip{background-color:var(--c2)} .ap-ico{background-color:var(--brand)}
+.sec.sc .sl{background-color:var(--c)} .stg-h .stg-i{background-color:var(--c2)}
+.tile.ok .ti,.tile.bad .ti{box-shadow:var(--app-glow)!important}
