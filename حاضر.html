@@ -5200,6 +5200,62 @@ button.tt-dh:focus-visible { outline: 2px solid var(--focus); outline-offset: 2p
 .tt tr.today .tt-dh .tt-dt { background: var(--teal); color: #fff; }
 .ttcmp .tt-dh { min-height: 46px; padding: 5px 4px; }
 
+/* ===== Focused Section Mode (shows only the opened section interface across all accounts) ===== */
+.side-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 48, .36);
+  backdrop-filter: blur(2px);
+  z-index: 38;
+}
+.app.sec-focus { display: block; }
+.app.sec-focus .main {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100vh;
+}
+.app.sec-focus .side {
+  position: fixed;
+  top: 0;
+  inset-inline-start: 0;
+  bottom: 0;
+  z-index: 40;
+  width: 240px !important;
+  transform: translateX(105%);
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 20px 50px rgba(15, 23, 48, .35);
+  transition: transform .22s cubic-bezier(.22, 1, .36, 1), opacity .18s ease;
+}
+.app.sec-focus.side-open .side {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.app.sec-focus.side-open .side-scrim { display: block; }
+.nav-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+  font-weight: 800;
+  padding: 0 12px;
+  min-height: 36px;
+  border-radius: 10px;
+}
+.nav-toggle-btn:hover {
+  background: #283A7A;
+  color: #fff;
+  border-color: #283A7A;
+}
+@media (max-width: 760px) {
+  .nav-toggle-btn,
+  .side-scrim { display: none !important; }
+}
+
 </style>
 </head>
 <body>
@@ -12912,6 +12968,7 @@ function shell(c, name) {
   const other = c.roleInfo.viaGuardian ? [] : c.roles.filter(r => (r.rid || r.role) !== c.rid);
   let mini = false; try { mini = localStorage.getItem('hader-mini') === '1'; } catch { }
   return `<div class="app${mini ? ' mini' : ''}">
+  <div class="side-scrim" data-side-close></div>
   <aside class="side" aria-label="القائمة">
     <div class="brand"><div class="bmain">${wordmark(38, '#FFFFFF')}<small>${esc(db.settings().schoolName)}</small></div><button class="collapse" data-collapse aria-label="تصغير القائمة" title="تصغير / تكبير القائمة">${icon('chev', 18)}</button></div>
     <nav class="nav">${navHtml}</nav>
@@ -13068,6 +13125,7 @@ function topbar(title, sub, actions = '') {
   const secName = current?.name || 'dashboard';
   const scfg = getSectionSearchConfig(secName);
   return `<div class="top">
+    <button type="button" class="btn sm nav-toggle-btn" data-menu-toggle aria-label="الأقسام" title="إظهار / إخفاء قائمة الأقسام">${icon('grid', 16)}<span>الأقسام</span></button>
     ${atHome ? '' : `<button type="button" class="iconbtn backbtn" data-back aria-label="رجوع" title="رجوع">${icon('back', 20)}</button>`}
     <div class="t"><h1>${esc(title)}</h1><div class="muted small">${sub}</div></div>
     ${canSearch ? `<label class="search" id="gsearch" data-section="${secName}" title="${scfg.title}">${icon('search', 18)}<span class="sbadge ${scfg.isGlobal ? 'sbadge-global' : ''}">${scfg.badge}</span><input id="q" placeholder="${scfg.placeholder}" autocomplete="off" aria-label="${scfg.title}"><span class="kbd">/</span><div class="pop" id="qpop" hidden></div></label>` : ''}
@@ -13561,9 +13619,37 @@ function goBack() {
   location.hash = prev || parent || `#/${HOME[c.role]}`;
 }
 function onChromeClick(e) {
+  if (e.target.closest('.side .nav a')) {
+    const a = $('.app');
+    if (a) { a.classList.add('sec-focus'); a.classList.remove('side-open', 'mini'); }
+    return;
+  }
+  if (e.target.closest('[data-side-close]')) {
+    $('.app')?.classList.remove('side-open');
+    return;
+  }
+  if (e.target.closest('[data-menu-toggle]')) {
+    const a = $('.app');
+    if (!a) return;
+    if (a.classList.contains('sec-focus')) {
+      const opening = !a.classList.contains('side-open');
+      a.classList.toggle('side-open', opening);
+      if (opening) { const sn = $('.side .nav'); if (sn && sideNavScroll) sn.scrollTop = sideNavScroll; }
+    } else {
+      a.classList.add('sec-focus');
+      a.classList.remove('side-open', 'mini');
+    }
+    return;
+  }
   if (e.target.closest('[data-chpw]')) { changePwModal(); return; }
   if (e.target.closest('[data-back]')) { goBack(); return; }
-  if (e.target.closest('[data-collapse]')) { const a = $('.app'); const on = !a.classList.contains('mini'); a.classList.toggle('mini', on); try { localStorage.setItem('hader-mini', on ? '1' : '0'); } catch { } return; }
+  if (e.target.closest('[data-collapse]')) {
+    const a = $('.app');
+    if (!a) return;
+    if (a.classList.contains('sec-focus')) { a.classList.remove('side-open'); return; }
+    const on = !a.classList.contains('mini'); a.classList.toggle('mini', on); try { localStorage.setItem('hader-mini', on ? '1' : '0'); } catch { }
+    return;
+  }
   if (e.target.closest('[data-bell]')) { toggleBell(); return; }
   if (e.target.closest('#npop a')) { closeBell(); return; }
   const b = e.target.closest('[data-logout],[data-role],[data-clock]'); if (!b) return;
@@ -13589,7 +13675,7 @@ function openBell() {
 }
 function closeBell() { const p = $('#npop'); if (p) p.hidden = true; $('[data-bell]')?.setAttribute('aria-expanded', 'false'); bellFresh = null; }
 document.addEventListener('mousedown', e => { if (!e.target.closest('.bellwrap')) closeBell(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeBell(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeBell(); $('.app')?.classList.remove('side-open'); } });
 
 function changePwModal() {
   modal('تغيير الرمز', `<form id="cp" style="display:flex;flex-direction:column;gap:12px" novalidate>

@@ -155,6 +155,7 @@ function shell(c, name) {
   const other = c.roleInfo.viaGuardian ? [] : c.roles.filter(r => (r.rid || r.role) !== c.rid);
   let mini = false; try { mini = localStorage.getItem('hader-mini') === '1'; } catch { }
   return `<div class="app${mini ? ' mini' : ''}">
+  <div class="side-scrim" data-side-close></div>
   <aside class="side" aria-label="القائمة">
     <div class="brand"><div class="bmain">${wordmark(38, '#FFFFFF')}<small>${esc(db.settings().schoolName)}</small></div><button class="collapse" data-collapse aria-label="تصغير القائمة" title="تصغير / تكبير القائمة">${icon('chev', 18)}</button></div>
     <nav class="nav">${navHtml}</nav>
@@ -311,6 +312,7 @@ export function topbar(title, sub, actions = '') {
   const secName = current?.name || 'dashboard';
   const scfg = getSectionSearchConfig(secName);
   return `<div class="top">
+    <button type="button" class="btn sm nav-toggle-btn" data-menu-toggle aria-label="الأقسام" title="إظهار / إخفاء قائمة الأقسام">${icon('grid', 16)}<span>الأقسام</span></button>
     ${atHome ? '' : `<button type="button" class="iconbtn backbtn" data-back aria-label="رجوع" title="رجوع">${icon('back', 20)}</button>`}
     <div class="t"><h1>${esc(title)}</h1><div class="muted small">${sub}</div></div>
     ${canSearch ? `<label class="search" id="gsearch" data-section="${secName}" title="${scfg.title}">${icon('search', 18)}<span class="sbadge ${scfg.isGlobal ? 'sbadge-global' : ''}">${scfg.badge}</span><input id="q" placeholder="${scfg.placeholder}" autocomplete="off" aria-label="${scfg.title}"><span class="kbd">/</span><div class="pop" id="qpop" hidden></div></label>` : ''}
@@ -804,9 +806,37 @@ function goBack() {
   location.hash = prev || parent || `#/${HOME[c.role]}`;
 }
 function onChromeClick(e) {
+  if (e.target.closest('.side .nav a')) {
+    const a = $('.app');
+    if (a) { a.classList.add('sec-focus'); a.classList.remove('side-open', 'mini'); }
+    return;
+  }
+  if (e.target.closest('[data-side-close]')) {
+    $('.app')?.classList.remove('side-open');
+    return;
+  }
+  if (e.target.closest('[data-menu-toggle]')) {
+    const a = $('.app');
+    if (!a) return;
+    if (a.classList.contains('sec-focus')) {
+      const opening = !a.classList.contains('side-open');
+      a.classList.toggle('side-open', opening);
+      if (opening) { const sn = $('.side .nav'); if (sn && sideNavScroll) sn.scrollTop = sideNavScroll; }
+    } else {
+      a.classList.add('sec-focus');
+      a.classList.remove('side-open', 'mini');
+    }
+    return;
+  }
   if (e.target.closest('[data-chpw]')) { changePwModal(); return; }
   if (e.target.closest('[data-back]')) { goBack(); return; }
-  if (e.target.closest('[data-collapse]')) { const a = $('.app'); const on = !a.classList.contains('mini'); a.classList.toggle('mini', on); try { localStorage.setItem('hader-mini', on ? '1' : '0'); } catch { } return; }
+  if (e.target.closest('[data-collapse]')) {
+    const a = $('.app');
+    if (!a) return;
+    if (a.classList.contains('sec-focus')) { a.classList.remove('side-open'); return; }
+    const on = !a.classList.contains('mini'); a.classList.toggle('mini', on); try { localStorage.setItem('hader-mini', on ? '1' : '0'); } catch { }
+    return;
+  }
   if (e.target.closest('[data-bell]')) { toggleBell(); return; }
   if (e.target.closest('#npop a')) { closeBell(); return; }
   const b = e.target.closest('[data-logout],[data-role],[data-clock]'); if (!b) return;
@@ -832,7 +862,7 @@ function openBell() {
 }
 function closeBell() { const p = $('#npop'); if (p) p.hidden = true; $('[data-bell]')?.setAttribute('aria-expanded', 'false'); bellFresh = null; }
 document.addEventListener('mousedown', e => { if (!e.target.closest('.bellwrap')) closeBell(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeBell(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeBell(); $('.app')?.classList.remove('side-open'); } });
 
 function changePwModal() {
   modal('تغيير الرمز', `<form id="cp" style="display:flex;flex-direction:column;gap:12px" novalidate>

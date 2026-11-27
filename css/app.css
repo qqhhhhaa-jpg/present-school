@@ -5180,3 +5180,59 @@ button.tt-dh:focus-visible { outline: 2px solid var(--focus); outline-offset: 2p
 }
 .tt tr.today .tt-dh .tt-dt { background: var(--teal); color: #fff; }
 .ttcmp .tt-dh { min-height: 46px; padding: 5px 4px; }
+
+/* ===== Focused Section Mode (shows only the opened section interface across all accounts) ===== */
+.side-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 48, .36);
+  backdrop-filter: blur(2px);
+  z-index: 38;
+}
+.app.sec-focus { display: block; }
+.app.sec-focus .main {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100vh;
+}
+.app.sec-focus .side {
+  position: fixed;
+  top: 0;
+  inset-inline-start: 0;
+  bottom: 0;
+  z-index: 40;
+  width: 240px !important;
+  transform: translateX(105%);
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 20px 50px rgba(15, 23, 48, .35);
+  transition: transform .22s cubic-bezier(.22, 1, .36, 1), opacity .18s ease;
+}
+.app.sec-focus.side-open .side {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.app.sec-focus.side-open .side-scrim { display: block; }
+.nav-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+  font-weight: 800;
+  padding: 0 12px;
+  min-height: 36px;
+  border-radius: 10px;
+}
+.nav-toggle-btn:hover {
+  background: #283A7A;
+  color: #fff;
+  border-color: #283A7A;
+}
+@media (max-width: 760px) {
+  .nav-toggle-btn,
+  .side-scrim { display: none !important; }
+}
