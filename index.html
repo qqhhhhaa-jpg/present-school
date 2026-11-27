@@ -5474,6 +5474,90 @@ button.tt-dh:focus-visible {
   text-align: right;
 }
 
+/* ===== Google Authenticator (2FA TOTP) UI ===== */
+.tfa-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--surface-100);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.tfa-qr-box {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface-100);
+}
+.tfa-qr {
+  background: #fff;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  line-height: 0;
+  flex: none;
+  box-shadow: 0 4px 12px rgba(30, 43, 92, .08);
+}
+.tfa-qr svg { display: block; border-radius: 6px; }
+.tfa-key-col {
+  flex: 1;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tfa-secret {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: #fff;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  padding: 8px 10px;
+  text-align: center;
+  word-break: break-all;
+  color: var(--brand);
+  user-select: all;
+}
+.tfa-code {
+  font-size: 22px !important;
+  font-weight: 800 !important;
+  letter-spacing: 6px;
+  text-align: center;
+  min-height: 50px !important;
+}
+.tfa-backups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.tfa-backups span {
+  background: var(--surface-100);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--ink);
+  user-select: all;
+}
+.mebtn.tfa-on {
+  color: #34C3AE !important;
+  border-color: rgba(52, 195, 174, .45) !important;
+}
+
 </style>
 </head>
 <body>
@@ -5607,6 +5691,7 @@ const ICON = {
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
   grade: '<path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="M6 10.5V16c0 1.5 2.7 3 6 3s6-1.5 6-3v-5.5"/><path d="M22 8v6"/>',
   save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>',
+  shield: '<path d="M12 3 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-3z"/><path d="m9 12 2 2 4-4"/>',
   video: '<rect x="2" y="5" width="15" height="14" rx="3"/><path d="m17 10 5-3v10l-5-3"/>',
 };
 const icon = (name, size = 20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name] || ''}</svg>`;
@@ -5754,6 +5839,290 @@ async function sampleHandout({ title, teacher, school }) {
     let y = block(g, W, 260, 62, 'تمارين', ['1. أعرب ما تحته خط: الطالبُ مجتهدٌ.', '2. أدخل (أصبح) على الجملة: السماءُ صافيةٌ.', '3. استخرج المبتدأ والخبر من: المدرسةُ بيتُنا الثاني.', '4. ضع خبراً مناسباً: الوطنُ ........', '5. ما نوع الخبر في: الكتابُ على الطاولة؟', '6. اكتب جملتين فيهما (ليس) واضبطهما بالشكل.']);
     for (let i = 0; i < 9; i++) { g.strokeStyle = '#D5DBE5'; g.lineWidth = 2; g.beginPath(); g.moveTo(110, y + i * 60); g.lineTo(W - 110, y + i * 60); g.stroke(); } });
   return jpegsToPdf([p1, p2]);
+}
+
+/* ===== Google Authenticator TOTP (RFC 6238 / HMAC-SHA1) + Pure-JS QR SVG (ISO 18004) ===== */
+const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+function sha1Bytes(msg) {
+  const len = msg.length;
+  const total = ((len + 9 + 63) >> 6) << 6;
+  const buf = new Uint8Array(total);
+  buf.set(msg);
+  buf[len] = 0x80;
+  const bitLenHi = Math.floor(len / 0x20000000);
+  const bitLenLo = (len << 3) >>> 0;
+  const dv = new DataView(buf.buffer);
+  dv.setUint32(total - 8, bitLenHi, false);
+  dv.setUint32(total - 4, bitLenLo, false);
+  let h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+  const w = new Uint32Array(80);
+  const rol = (x, n) => ((x << n) | (x >>> (32 - n))) >>> 0;
+  for (let off = 0; off < total; off += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4, false);
+    for (let i = 16; i < 80; i++) w[i] = rol(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+    let a = h0, b = h1, c = h2, d = h3, e = h4;
+    for (let i = 0; i < 80; i++) {
+      let f, k;
+      if (i < 20) { f = (b & c) | ((~b) & d); k = 0x5A827999; }
+      else if (i < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1; }
+      else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
+      else { f = b ^ c ^ d; k = 0xCA62C1D6; }
+      const temp = (rol(a, 5) + f + e + k + w[i]) >>> 0;
+      e = d; d = c; c = rol(b, 30); b = a; a = temp;
+    }
+    h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0; h4 = (h4 + e) >>> 0;
+  }
+  const out = new Uint8Array(20);
+  const odv = new DataView(out.buffer);
+  odv.setUint32(0, h0, false); odv.setUint32(4, h1, false); odv.setUint32(8, h2, false); odv.setUint32(12, h3, false); odv.setUint32(16, h4, false);
+  return out;
+}
+function hmacSha1(key, msg) {
+  const k = key.length > 64 ? sha1Bytes(key) : key;
+  const ipad = new Uint8Array(64 + msg.length);
+  const opad = new Uint8Array(64 + 20);
+  for (let i = 0; i < 64; i++) {
+    const kb = i < k.length ? k[i] : 0;
+    ipad[i] = kb ^ 0x36;
+    opad[i] = kb ^ 0x5c;
+  }
+  ipad.set(msg, 64);
+  opad.set(sha1Bytes(ipad), 64);
+  return sha1Bytes(opad);
+}
+function base32Encode(bytes) {
+  let out = '', bits = 0, val = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    val = (val << 8) | bytes[i];
+    bits += 8;
+    while (bits >= 5) { bits -= 5; out += B32[(val >>> bits) & 31]; }
+  }
+  if (bits > 0) out += B32[(val << (5 - bits)) & 31];
+  return out;
+}
+function base32Decode(str) {
+  const clean = String(str || '').toUpperCase().replace(/[^A-Z2-7]/g, '');
+  let bits = 0, val = 0;
+  const out = [];
+  for (let i = 0; i < clean.length; i++) {
+    const idx = B32.indexOf(clean[i]);
+    if (idx < 0) continue;
+    val = (val << 5) | idx;
+    bits += 5;
+    if (bits >= 8) { bits -= 8; out.push((val >>> bits) & 0xff); }
+  }
+  return new Uint8Array(out);
+}
+function totpGenerateSecret(byteLen = 20) {
+  const buf = new Uint8Array(byteLen);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(buf);
+  else for (let i = 0; i < byteLen; i++) buf[i] = Math.floor(Math.random() * 256);
+  return base32Encode(buf);
+}
+function totpCode(secretBase32, timeMs = Date.now(), stepOffset = 0) {
+  const key = base32Decode(secretBase32);
+  const counter = Math.floor(timeMs / 1000 / 30) + stepOffset;
+  const msg = new Uint8Array(8);
+  const hi = Math.floor(counter / 0x100000000);
+  const lo = counter >>> 0;
+  const dv = new DataView(msg.buffer);
+  dv.setUint32(0, hi, false);
+  dv.setUint32(4, lo, false);
+  const mac = hmacSha1(key, msg);
+  const off = mac[19] & 0x0f;
+  const bin = ((mac[off] & 0x7f) << 24) | (mac[off + 1] << 16) | (mac[off + 2] << 8) | mac[off + 3];
+  return String(bin % 1000000).padStart(6, '0');
+}
+function totpVerify(secretBase32, inputCode, window = 1, timeMs = Date.now()) {
+  const clean = String(inputCode || '').replace(/[\s-]/g, '');
+  if (!/^\d{6}$/.test(clean)) return false;
+  for (let w = -window; w <= window; w++) {
+    if (totpCode(secretBase32, timeMs, w) === clean) return true;
+  }
+  return false;
+}
+function totpUri(secretBase32, accountLabel, issuer = 'Hader') {
+  const iss = encodeURIComponent(issuer);
+  const acc = encodeURIComponent(accountLabel);
+  return `otpauth://totp/${iss}:${acc}?secret=${secretBase32}&issuer=${iss}&algorithm=SHA1&digits=6&period=30`;
+}
+
+// Pure-JS ISO/IEC 18004 QR Code (Byte mode, ECC Level L, Versions 1..9)
+function qrSvg(text, size = 210) {
+  const bytes = new TextEncoder().encode(String(text || ''));
+  // [version, dataCodewords, ecPerBlock, numBlocks, alignCenters]
+  const VSPEC = [
+    null,
+    [1, 19, 7, 1, []],
+    [2, 34, 10, 1, [6, 18]],
+    [3, 55, 15, 1, [6, 22]],
+    [4, 80, 20, 1, [6, 26]],
+    [5, 108, 26, 1, [6, 30]],
+    [6, 136, 18, 2, [6, 34]],
+    [7, 156, 20, 2, [6, 22, 38]],
+    [8, 194, 24, 2, [6, 24, 42]],
+    [9, 232, 30, 2, [6, 26, 46]],
+  ];
+  const spec = VSPEC.slice(1).find(s => bytes.length + 2 <= s[1]);
+  if (!spec) return '';
+  const [ver, totalData, ecLen, numBlocks, aligns] = spec;
+  const N = 17 + 4 * ver;
+
+  // GF(256) tables (poly 0x11D)
+  const EXP = new Uint8Array(512), LOG = new Uint8Array(256);
+  let x = 1;
+  for (let i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11D; }
+  for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+  const gfMul = (a, b) => (a && b) ? EXP[LOG[a] + LOG[b]] : 0;
+  const rsPoly = deg => {
+    let p = [1];
+    for (let i = 0; i < deg; i++) {
+      const next = new Array(p.length + 1).fill(0);
+      for (let j = 0; j < p.length; j++) { next[j] ^= p[j]; next[j + 1] ^= gfMul(p[j], EXP[i]); }
+      p = next;
+    }
+    return p;
+  };
+  const rsEncode = (data, deg) => {
+    const gen = rsPoly(deg);
+    const rem = new Uint8Array(deg);
+    for (let i = 0; i < data.length; i++) {
+      const factor = data[i] ^ rem[0];
+      rem.copyWithin(0, 1); rem[deg - 1] = 0;
+      for (let j = 0; j < deg; j++) rem[j] ^= gfMul(gen[j + 1], factor);
+    }
+    return rem;
+  };
+
+  // Encode byte-mode bit stream
+  const bits = [];
+  const pushBits = (v, n) => { for (let i = n - 1; i >= 0; i--) bits.push((v >>> i) & 1); };
+  pushBits(0b0100, 4); // Byte mode
+  pushBits(bytes.length, 8); // Versions 1..9 use 8-bit length
+  for (let i = 0; i < bytes.length; i++) pushBits(bytes[i], 8);
+  const capBits = totalData * 8;
+  for (let i = 0; i < 4 && bits.length < capBits; i++) bits.push(0);
+  while (bits.length % 8) bits.push(0);
+  const dataCW = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let b = 0; for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j];
+    dataCW.push(b);
+  }
+  const padBytes = [0xEC, 0x11];
+  for (let pi = 0; dataCW.length < totalData; pi++) dataCW.push(padBytes[pi & 1]);
+
+  // Split blocks & interleave
+  const bSize = totalData / numBlocks;
+  const dBlocks = [], eBlocks = [];
+  for (let b = 0; b < numBlocks; b++) {
+    const blk = dataCW.slice(b * bSize, (b + 1) * bSize);
+    dBlocks.push(blk);
+    eBlocks.push(rsEncode(blk, ecLen));
+  }
+  const codewords = [];
+  for (let i = 0; i < bSize; i++) for (let b = 0; b < numBlocks; b++) codewords.push(dBlocks[b][i]);
+  for (let i = 0; i < ecLen; i++) for (let b = 0; b < numBlocks; b++) codewords.push(eBlocks[b][i]);
+
+  // Build function-pattern matrix
+  const mat = Array.from({ length: N }, () => new Int8Array(N).fill(-1));
+  const func = Array.from({ length: N }, () => new Uint8Array(N));
+  const setF = (r, c, v) => { if (r >= 0 && r < N && c >= 0 && c < N) { mat[r][c] = v ? 1 : 0; func[r][c] = 1; } };
+  const drawFinder = (r0, c0) => {
+    for (let dr = -1; dr <= 7; dr++) for (let dc = -1; dc <= 7; dc++) {
+      const r = r0 + dr, c = c0 + dc;
+      if (r < 0 || r >= N || c < 0 || c >= N) continue;
+      const inOuter = dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6;
+      const dark = inOuter && (dr === 0 || dr === 6 || dc === 0 || dc === 6 || (dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4));
+      setF(r, c, dark);
+    }
+  };
+  drawFinder(0, 0); drawFinder(0, N - 7); drawFinder(N - 7, 0);
+  for (let i = 8; i < N - 8; i++) { setF(6, i, (i & 1) === 0); setF(i, 6, (i & 1) === 0); }
+  for (const ar of aligns) for (const ac of aligns) {
+    if ((ar === 6 && ac === 6) || (ar === 6 && ac === N - 7) || (ar === N - 7 && ac === 6)) continue;
+    for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+      setF(ar + dr, ac + dc, Math.max(Math.abs(dr), Math.abs(dc)) !== 1);
+    }
+  }
+  setF(4 * ver + 9, 8, 1); // Dark module
+  // Reserve format info cells
+  for (let i = 0; i < 9; i++) { if (i !== 6) { setF(8, i, 0); setF(i, 8, 0); } }
+  for (let i = 0; i < 8; i++) { setF(8, N - 1 - i, 0); setF(N - 1 - i, 8, 0); }
+  // Version info for V7..V9
+  if (ver >= 7) {
+    let rem = ver;
+    for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1F25);
+    const vBits = (ver << 12) | rem;
+    for (let i = 0; i < 18; i++) {
+      const bit = (vBits >>> i) & 1;
+      const a = Math.floor(i / 3), b = N - 11 + (i % 3);
+      setF(a, b, bit); setF(b, a, bit);
+    }
+  }
+
+  // Place data bits (zigzag upward/downward right-to-left)
+  const allBits = [];
+  for (const cw of codewords) for (let i = 7; i >= 0; i--) allBits.push((cw >>> i) & 1);
+  let bi = 0;
+  for (let col = N - 1; col >= 1; col -= 2) {
+    if (col === 6) col--;
+    const up = (((N - 1 - col) >> 1) & 1) === 0;
+    for (let step = 0; step < N; step++) {
+      const r = up ? N - 1 - step : step;
+      for (let dc = 0; dc < 2; dc++) {
+        const c = col - dc;
+        if (!func[r][c]) mat[r][c] = bi < allBits.length ? allBits[bi++] : 0;
+      }
+    }
+  }
+
+  // Evaluate masks 0..7 and pick lowest penalty
+  const maskFn = [
+    (r, c) => (r + c) % 2 === 0,
+    (r) => r % 2 === 0,
+    (_, c) => c % 3 === 0,
+    (r, c) => (r + c) % 3 === 0,
+    (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0,
+    (r, c) => ((r * c) % 2 + (r * c) % 3) === 0,
+    (r, c) => (((r * c) % 2 + (r * c) % 3) % 2) === 0,
+    (r, c) => (((r + c) % 2 + (r * c) % 3) % 2) === 0,
+  ];
+  const writeFormat = (grid, m) => {
+    const data = (0b01 << 3) | m; // ECC Level L = 01
+    let rem = data;
+    for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+    const fmt = ((data << 10) | rem) ^ 0x5412;
+    const bit = k => (fmt >>> k) & 1;
+    for (let i = 0; i <= 5; i++) grid[8][i] = bit(14 - i);
+    grid[8][7] = bit(8); grid[8][8] = bit(7); grid[7][8] = bit(6);
+    for (let i = 0; i <= 5; i++) grid[5 - i][8] = bit(5 - i);
+    for (let i = 0; i <= 7; i++) grid[8][N - 1 - i] = bit(i);
+    for (let i = 0; i <= 6; i++) grid[N - 1 - i][8] = bit(14 - i);
+  };
+  let bestGrid = null, bestScore = Infinity;
+  for (let m = 0; m < 8; m++) {
+    const g = mat.map((row, r) => row.map((v, c) => func[r][c] ? v : (v ^ (maskFn[m](r, c) ? 1 : 0))));
+    writeFormat(g, m);
+    let score = 0, dark = 0;
+    for (let r = 0; r < N; r++) {
+      let runR = 1, runC = 1;
+      for (let c = 0; c < N; c++) {
+        if (g[r][c]) dark++;
+        if (c > 0) { if (g[r][c] === g[r][c - 1]) { runR++; if (runR === 5) score += 3; else if (runR > 5) score++; } else runR = 1; }
+        if (c > 0) { if (g[c][r] === g[c - 1][r]) { runC++; if (runC === 5) score += 3; else if (runC > 5) score++; } else runC = 1; }
+        if (r > 0 && c > 0 && g[r][c] === g[r - 1][c] && g[r][c] === g[r][c - 1] && g[r][c] === g[r - 1][c - 1]) score += 3;
+      }
+    }
+    score += Math.floor(Math.abs(dark * 100 / (N * N) - 50) / 5) * 10;
+    if (score < bestScore) { bestScore = score; bestGrid = g; }
+  }
+
+  const qz = 4, vb = N + qz * 2;
+  let path = '';
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    if (bestGrid[r][c]) path += `M${c + qz},${r + qz}h1v1h-1z`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${vb} ${vb}" shape-rendering="crispEdges" role="img" aria-label="رمز QR لتطبيق Google Authenticator"><rect width="${vb}" height="${vb}" fill="#FFFFFF"/><path d="${path}" fill="#111827"/></svg>`;
 }
 
 const db = (() => {
@@ -7100,7 +7469,109 @@ function loginWithPassword(username, password) {
   delete S.fails[username];
   if (S.disabled.includes(phone)) return { ok: false, error: 'هذا الحساب موقوف. تواصل مع إدارة المنصة.' };
   if (!isStaff(phone)) return { ok: false, error: 'هذا الحساب ما عنده دخول باليوزر.' };
+  if (S.creds[phone]?.totp?.secret) {
+    const token = 'tfa_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    pending2fa = { token, phone, username, until: Date.now() + 5 * 60000 };
+    return { ok: true, needTotp: true, token, username, name: rolesFor(phone)[0]?.name || username };
+  }
   return startSession(phone);
+}
+let pending2fa = null;
+function genBackupCodes(n = 6) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const codes = [];
+  for (let i = 0; i < n; i++) {
+    const b = new Uint8Array(8);
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(b);
+    else for (let j = 0; j < 8; j++) b[j] = Math.floor(Math.random() * 256);
+    const s = [...b].map(x => chars[x % chars.length]).join('');
+    codes.push(s.slice(0, 4) + '-' + s.slice(4));
+  }
+  return codes;
+}
+function totpStatus(phone) {
+  const p = normalizePhone(phone || session()?.phone || '');
+  const c = (S.creds || {})[p];
+  return {
+    enabled: !!c?.totp?.secret,
+    enabledAt: c?.totp?.enabledAt || null,
+    backupsLeft: (c?.totp?.backups || []).length,
+    username: c?.username || '',
+  };
+}
+function beginTotpSetup() {
+  const s = session();
+  if (!s) return { ok: false, error: 'سجّل دخولك أولاً.' };
+  const c = (S.creds || {})[s.phone];
+  if (!c) return { ok: false, error: 'المصادقة الثنائية متاحة لحسابات الإدارة والمدرسين.' };
+  const secret = totpGenerateSecret(20);
+  const uri = totpUri(secret, c.username, 'Hader');
+  return { ok: true, secret, uri, username: c.username };
+}
+function confirmTotpSetup(secret, code) {
+  const s = session();
+  if (!s) return { ok: false, error: 'انتهت الجلسة. سجّل دخولك من جديد.' };
+  const c = (S.creds || {})[s.phone];
+  if (!c) return { ok: false, error: 'الحساب غير موجود.' };
+  if (!secret || !totpVerify(secret, code, 1)) {
+    return { ok: false, error: 'الرمز غير صحيح. تأكد من كتابة الـ 6 أرقام الظاهرة حالياً في Google Authenticator.' };
+  }
+  const backups = genBackupCodes(6);
+  c.totp = { secret, enabledAt: Date.now(), backups: backups.map(b => hashPw(b.replace(/-/g, '').toUpperCase())) };
+  log('تفعيل Google Authenticator', `${c.username} · تم ربط التحقق بخطوتين (2FA)`);
+  save();
+  emit('creds');
+  return { ok: true, backups };
+}
+function disableTotp(password, code) {
+  const s = session();
+  if (!s) return { ok: false, error: 'انتهت الجلسة.' };
+  const c = (S.creds || {})[s.phone];
+  if (!c || !c.totp?.secret) return { ok: false, error: 'المصادقة الثنائية غير مفعّلة أصلاً.' };
+  if (!password || !safeCompare(c.hash, hashPw(password))) return { ok: false, error: 'كلمة المرور الحالية غير صحيحة.' };
+  const cleanCode = String(code || '').replace(/[\s-]/g, '').toUpperCase();
+  const validTotp = totpVerify(c.totp.secret, cleanCode, 1);
+  const bIdx = (c.totp.backups || []).findIndex(h => safeCompare(h, hashPw(cleanCode)));
+  if (!validTotp && bIdx < 0) return { ok: false, error: 'أدخل رمز Google Authenticator الصحيح (أو رمز استرداد) لتأكيد الإلغاء.' };
+  delete c.totp;
+  log('تعطيل Google Authenticator', `${c.username} · تم فك ربط التحقق بخطوتين`);
+  save();
+  emit('creds');
+  return { ok: true };
+}
+function verifyLoginTotp(token, code) {
+  if (!pending2fa || !safeCompare(pending2fa.token, String(token || '')) || pending2fa.until < Date.now()) {
+    pending2fa = null;
+    return { ok: false, expired: true, error: 'انتهت مهلة التحقق. أعد إدخال اليوزر والرمز.' };
+  }
+  const { phone, username } = pending2fa;
+  const c = (S.creds || {})[phone];
+  if (!c?.totp?.secret) { pending2fa = null; return startSession(phone); }
+  S.fails = S.fails || {};
+  const fk = '2fa_' + username;
+  const f = S.fails[fk];
+  if (f && f.until > Date.now()) return { ok: false, error: `محاولات خاطئة كثيرة. حاول بعد ${Math.ceil((f.until - Date.now()) / 60000)} دقيقة.` };
+  const clean = String(code || '').replace(/[\s-]/g, '').toUpperCase();
+  const okTotp = totpVerify(c.totp.secret, clean, 1);
+  const bIdx = !okTotp ? (c.totp.backups || []).findIndex(h => safeCompare(h, hashPw(clean))) : -1;
+  if (!okTotp && bIdx < 0) {
+    const n = (f?.n || 0) + 1;
+    S.fails[fk] = { n, until: n >= 5 ? Date.now() + 5 * 60000 : 0 };
+    if (n >= 5) S.fails[fk].n = 0;
+    save();
+    return { ok: false, error: n >= 5 ? 'خمس محاولات خاطئة. انقفل التحقق 5 دقائق.' : `رمز التحقق غير صحيح. بقت ${5 - n} محاولات.` };
+  }
+  delete S.fails[fk];
+  if (bIdx >= 0) {
+    c.totp.backups.splice(bIdx, 1);
+    log('دخول برمز استرداد 2FA', `${username} · المتبقي ${c.totp.backups.length} رموز استرداد`);
+    save();
+  } else {
+    log('دخول عبر Google Authenticator', username);
+  }
+  pending2fa = null;
+  const res = startSession(phone);
+  return { ...res, usedBackup: bIdx >= 0 };
 }
 function startSession(phone) {
   const roles = rolesFor(phone);
@@ -7896,7 +8367,7 @@ function saveAccount({ phone, name, admin, teacher, subject, sections: secs, dis
   return { ok: true };
 }
 
-return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, holidayOn, getHoliday, offDay, isHoliday, holidayName, broadcastHolidayNotification, publishHolidayAnnouncement, publishHoliday, addHoliday, editHoliday, addHolidayRange, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, updateSection, deleteSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, PROOF_RETENTION_DAYS, pruneExpiredProofs, attachEventProof, proofStorageStats, eventById, evidenceOf, markManual, addExcuse, teacherEvents, teacherExcuses, teacherStatusOf, teacherSummary, getExemption, isExempt, exemptions, addExemption, updateExemption, deleteExemption, toggleExemption, teacherMarkManual, teacherAddExcuse, simulateTeacherScan, teacherMonthReport, recentTeacherEvents, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, updateStudent, deleteStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, publishMarks, publishGradeMarks, quickPublishGradeExam, addStudentScore, deleteSheet, canEditSheet, editMark, markHistory, WEEK, weekDays, updateWeekDay, resetWeekDays, SUBJECTS, periods, periodName, updatePeriod, resetPeriods, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, setStudentPromoStatus, studentPromoOverride, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
+return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, holidayOn, getHoliday, offDay, isHoliday, holidayName, broadcastHolidayNotification, publishHolidayAnnouncement, publishHoliday, addHoliday, editHoliday, addHolidayRange, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, updateSection, deleteSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, PROOF_RETENTION_DAYS, pruneExpiredProofs, attachEventProof, proofStorageStats, eventById, evidenceOf, markManual, addExcuse, teacherEvents, teacherExcuses, teacherStatusOf, teacherSummary, getExemption, isExempt, exemptions, addExemption, updateExemption, deleteExemption, toggleExemption, teacherMarkManual, teacherAddExcuse, simulateTeacherScan, teacherMonthReport, recentTeacherEvents, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, updateStudent, deleteStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, totpStatus, beginTotpSetup, confirmTotpSetup, disableTotp, verifyLoginTotp, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, publishMarks, publishGradeMarks, quickPublishGradeExam, addStudentScore, deleteSheet, canEditSheet, editMark, markHistory, WEEK, weekDays, updateWeekDay, resetWeekDays, SUBJECTS, periods, periodName, updatePeriod, resetPeriods, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, setStudentPromoStatus, studentPromoOverride, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
 })();
 
 
@@ -7959,9 +8430,34 @@ const login = {
       $('#fu', step).onsubmit = e => {
         e.preventDefault();
         const r = db.loginWithPassword(un.value, pw.value);
-        if (!r.ok) userStep(r.error, un.value); else if (r.needSet) setPwStep(r); else if (r.session.roles.length > 1) whoStep(r.session.roles); else go();
+        if (!r.ok) userStep(r.error, un.value); else if (r.needSet) setPwStep(r); else if (r.needTotp) totpStep(r); else if (r.session.roles.length > 1) whoStep(r.session.roles); else go();
       };
       (un.value ? pw : un).focus();
+    };
+    const totpStep = (info, err = '') => {
+      step.innerHTML = `<div style="display:flex;gap:10px;align-items:center">${wordmark(46)}</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="ki t" style="width:44px;height:44px;border-radius:13px">${icon('shield', 22)}</span>
+          <div><h1 style="font-size:20px;margin:0">Google Authenticator</h1><div class="muted small">التحقق بخطوتين لحساب <b class="num" dir="ltr">${esc(info.username)}</b></div></div>
+        </div>
+        <form id="ftfa" style="display:flex;flex-direction:column;gap:14px" novalidate>
+          <label class="field ${err ? 'err' : ''}">رمز التحقق (6 أرقام من التطبيق أو رمز استرداد)
+            <input class="input num tfa-code" id="tfa-in" dir="ltr" inputmode="numeric" autocomplete="one-time-code" placeholder="000 000" maxlength="10">
+            <span class="help">${esc(err || 'افتح تطبيق Google Authenticator واكتب الرمز الظاهر حالياً.')}</span>
+          </label>
+          <button class="btn pr" style="min-height:50px">${icon('shield', 18)}تحقق ودخول</button>
+          <button type="button" class="btn" id="tfa-back">رجوع لتسجيل الدخول</button>
+        </form>`;
+      const inp = $('#tfa-in', step);
+      inp.focus();
+      $('#tfa-back', step).onclick = () => userStep('', info.username);
+      $('#ftfa', step).onsubmit = e => {
+        e.preventDefault();
+        const r = db.verifyLoginTotp(info.token, inp.value);
+        if (!r.ok) { if (r.expired) userStep(r.error, info.username); else totpStep(info, r.error); return; }
+        if (r.usedBackup) toast('تم الدخول برمز استرداد احتياطي', 'ننصح بحفظ ما تبقى من رموزك');
+        if (r.session.roles.length > 1) whoStep(r.session.roles); else go();
+      };
     };
     // Forgot password: username → SMS code to the registered phone → new password.
     const forgotStep = (err = '', u = '') => {
@@ -9745,6 +10241,12 @@ const settings = {
         <h2 style="margin-top:8px">العطل الرسمية</h2>
         <div class="muted small">الجمعة والسبت عطلة دائماً. العطل الرسمية تنضاف من «نشر تبليغ» بتفعيل «عطلة رسمية».</div>
         <div id="hols">${db.holidays().length ? db.holidays().map(h => `<div class="row"><span class="num" style="font-weight:700">${h.day}</span><span style="flex:1">${esc(h.name)}</span><button type="button" class="btn sm dg" data-unhol="${h.day}">إلغاء</button></div>`).join('') : '<div class="small muted">ما أكو عطل رسمية مسجّلة.</div>'}</div>
+        <h2 style="margin-top:8px">المصادقة الثنائية (Google Authenticator)</h2>
+        ${(() => {
+          const ts = db.totpStatus();
+          return `<div class="muted small">${ts.enabled ? `حسابك (<b class="num" dir="ltr">${esc(ts.username)}</b>) مربوط بتطبيق Google Authenticator ومفعّل ✓ · رموز الاسترداد المتبقية: <b class="num">${ts.backupsLeft}</b>.` : 'اربط حسابك بتطبيق Google Authenticator لتأمين تسجيل الدخول برمز مؤقت يتجدد كل 30 ثانية.'}</div>
+          <button type="button" class="btn ${ts.enabled ? '' : 'pr'}" data-totp style="align-self:flex-start">${icon('shield', 16)}${ts.enabled ? 'إدارة / تعطيل Google Authenticator' : 'ربط تطبيق Google Authenticator'}</button>`;
+        })()}
         <h2 style="margin-top:8px">حسابات الدخول</h2>
         <div class="muted small">ترجع اليوزرات والرموز مثل البداية (hader2026)، وتنفتح الحسابات المقفولة والموقوفة، وتطلع كل الأجهزة المسجّل دخولها. أرقام أولياء الأمور والطلاب تبقى تدخل برمز SMS.</div>
         <button class="btn" id="resetlogins">${icon('key', 16)}إعادة تهيئة اليوزرات وأرقام الموبايل</button>
@@ -13150,7 +13652,7 @@ function mobileNav(c, name, items, groups, other, cred, link) {
     <div class="mpanel" role="dialog" aria-label="كل الأقسام"><div class="mhandle" data-more-close></div>
       <div class="mme">${avatar(c.name)}<div style="flex:1;min-width:0"><b class="ell" style="display:block">${esc(c.name)}</b><span class="muted small">${esc(c.roleInfo.label.split(' · ')[0])}${cred && !cred.pending ? ` · <span class="num" dir="ltr">${esc(cred.username)}</span>` : ''}</span></div><button class="iconbtn" data-more-close aria-label="إغلاق">${icon('x', 18)}</button></div>
       ${sheetGroups}
-      <div class="macts">${other.map(r => `<button class="btn sm" data-role="${r.rid || r.role}">${icon('swap', 14)}التبديل إلى: ${esc(r.label.split(' · ')[0])}</button>`).join('')}${cred && !cred.pending ? `<button class="btn sm" data-chpw>${icon('key', 14)}تغيير الرمز</button>` : ''}<button class="btn sm" data-install ${matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'hidden' : ''}>${icon('download', 14)}ثبّت التطبيق</button><button class="btn sm danger" data-logout>${icon('logout', 14)}تسجيل الخروج</button></div>
+      <div class="macts">${other.map(r => `<button class="btn sm" data-role="${r.rid || r.role}">${icon('swap', 14)}التبديل إلى: ${esc(r.label.split(' · ')[0])}</button>`).join('')}${cred && !cred.pending ? `<button class="btn sm" data-totp>${icon('shield', 14)}Google Authenticator</button><button class="btn sm" data-chpw>${icon('key', 14)}تغيير الرمز</button>` : ''}<button class="btn sm" data-install ${matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'hidden' : ''}>${icon('download', 14)}ثبّت التطبيق</button><button class="btn sm danger" data-logout>${icon('logout', 14)}تسجيل الخروج</button></div>
     </div></div>`;
 }
 function toggleMore(open) {
@@ -13207,7 +13709,7 @@ function shell(c, name) {
     <div class="brand"><div class="bmain">${wordmark(38, '#FFFFFF')}<small>${esc(db.settings().schoolName)}</small></div><button class="collapse" data-collapse aria-label="تصغير القائمة" title="تصغير / تكبير القائمة">${icon('chev', 18)}</button></div>
     <nav class="nav">${navHtml}</nav>
     <div class="me">
-      <div class="who">${avatar(c.name)}<div style="flex:1;min-width:0"><b class="ell">${esc(c.name)}</b><span class="ell">${esc(c.roleInfo.label.split(' · ')[0])}${cred && !cred.pending ? ` · <span class="num" dir="ltr">${esc(cred.username)}</span>` : ''}</span></div>${cred && !cred.pending ? `<button class="mebtn" data-chpw title="تغيير الرمز" aria-label="تغيير الرمز">${icon('key', 17)}</button>` : ''}</div>
+      <div class="who">${avatar(c.name)}<div style="flex:1;min-width:0"><b class="ell">${esc(c.name)}</b><span class="ell">${esc(c.roleInfo.label.split(' · ')[0])}${cred && !cred.pending ? ` · <span class="num" dir="ltr">${esc(cred.username)}</span>` : ''}</span></div>${cred && !cred.pending ? `<button class="mebtn ${db.totpStatus(c.phone).enabled ? 'tfa-on' : ''}" data-totp title="Google Authenticator (2FA)" aria-label="Google Authenticator">${icon('shield', 17)}</button><button class="mebtn" data-chpw title="تغيير الرمز" aria-label="تغيير الرمز">${icon('key', 17)}</button>` : ''}</div>
       ${other.map(r => `<button class="sidebtn" data-role="${r.rid || r.role}">${icon('swap', 15)}التبديل إلى: ${esc(r.label.split(' · ')[0])}</button>`).join('')}
       <button class="sidebtn" data-install ${matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'hidden' : ''}>${icon('download', 15)}ثبّت «حاضر» على شاشتك</button>
       <button class="logout" data-logout>${icon('logout', 18)}تسجيل الخروج</button></div>
@@ -13852,6 +14354,7 @@ function goBack() {
   location.hash = prev || parent || `#/${HOME[c.role]}`;
 }
 function onChromeClick(e) {
+  if (e.target.closest('[data-totp]')) { totpModal(); return; }
   if (e.target.closest('[data-chpw]')) { changePwModal(); return; }
   if (e.target.closest('[data-back]')) { goBack(); return; }
   if (e.target.closest('[data-collapse]')) { const a = $('.app'); const on = !a.classList.contains('mini'); a.classList.toggle('mini', on); try { localStorage.setItem('hader-mini', on ? '1' : '0'); } catch { } return; }
@@ -13892,6 +14395,113 @@ function closeBell() { const p = $('#npop'); if (p) { p.hidden = true; p.style.t
 document.addEventListener('mousedown', e => { if (!e.target.closest('.bellwrap')) closeBell(); });
 document.addEventListener('click', e => { if (e.target.closest('#npop [data-ev]')) closeBell(); }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeBell(); });
+
+function totpModal() {
+  const c = ctx();
+  if (!c) return;
+  const st = db.totpStatus(c.phone);
+  if (st.enabled) {
+    modal('Google Authenticator (المصادقة الثنائية)', `
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card" style="background:var(--teal-soft);border-color:var(--teal);padding:12px 14px;display:flex;align-items:center;gap:10px">
+          <span class="ki t">${icon('shield', 18)}</span>
+          <div style="flex:1">
+            <b style="color:var(--teal-ink)">حسابك محمي بتطبيق Google Authenticator ✓</b>
+            <div class="muted small">اليوزر: <b class="num" dir="ltr">${esc(st.username)}</b>${st.enabledAt ? ` · مفعّل منذ ${fmtDay(new Date(st.enabledAt))}` : ''} · رموز الاسترداد المتبقية: <b class="num">${st.backupsLeft}</b></div>
+          </div>
+        </div>
+        <form id="tfa-off" style="display:flex;flex-direction:column;gap:10px" novalidate>
+          <div class="small muted">لتعطيل التحقق بخطوتين، أدخل كلمة المرور الحالية مع رمز الـ 6 أرقام من التطبيق (أو رمز استرداد):</div>
+          ${pwField('tfa-pw', 'كلمة المرور الحالية')}
+          <label class="field">رمز Google Authenticator (6 أرقام أو رمز استرداد)
+            <input class="input num tfa-code" id="tfa-off-code" dir="ltr" inputmode="numeric" autocomplete="one-time-code" placeholder="000 000" maxlength="10">
+          </label>
+          <div id="tfa-off-err" class="small" style="color:var(--red-ink);font-weight:700;display:none"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+            <button type="button" class="btn" data-close>إغلاق</button>
+            <button type="submit" class="btn danger-solid">${icon('x', 15)}تعطيل الربط</button>
+          </div>
+        </form>
+      </div>`, (m, close) => {
+      bindEyes(m);
+      $('#tfa-off', m).onsubmit = e => {
+        e.preventDefault();
+        const r = db.disableTotp($('#tfa-pw', m).value, $('#tfa-off-code', m).value);
+        const err = $('#tfa-off-err', m);
+        if (!r.ok) { err.textContent = r.error; err.style.display = 'block'; return; }
+        close();
+        toast('تم تعطيل Google Authenticator', 'رجع الدخول بكلمة المرور فقط');
+        route();
+      };
+    });
+    return;
+  }
+
+  const setup = db.beginTotpSetup();
+  if (!setup.ok) { toast(setup.error, '', 'absent'); return; }
+  const formattedKey = setup.secret.replace(/(.{4})/g, '$1 ').trim();
+
+  modal('ربط تطبيق Google Authenticator', `
+    <div id="tfa-wrap" style="display:flex;flex-direction:column;gap:12px">
+      <div class="tfa-steps">
+        <span><b>1.</b> افتح تطبيق <b>Google Authenticator</b> على هاتفك واضغط <b>+</b>.</span>
+        <span><b>2.</b> امسح رمز <b>QR</b> أدناه (أو انسخ المفتاح السري وأدخله يدوياً).</span>
+        <span><b>3.</b> اكتب الرمز المكوّن من <b>6 أرقام</b> الظاهر في التطبيق لتأكيد الربط.</span>
+      </div>
+      <div class="tfa-qr-box">
+        <div class="tfa-qr">${qrSvg(setup.uri, 196)}</div>
+        <div class="tfa-key-col">
+          <div class="small muted">أو أدخل المفتاح يدوياً في التطبيق:</div>
+          <div class="tfa-secret num" dir="ltr">${esc(formattedKey)}</div>
+          <div class="small muted">الحساب: <b class="num" dir="ltr">Hader:${esc(setup.username)}</b> · التوقيت: 30 ثانية</div>
+          <button type="button" class="btn sm" id="tfa-copy-key" style="align-self:flex-start">${icon('book', 14)}نسخ المفتاح السري</button>
+        </div>
+      </div>
+      <form id="tfa-on" style="display:flex;flex-direction:column;gap:10px" novalidate>
+        <label class="field">أدخل الرمز من Google Authenticator (6 أرقام)
+          <input class="input num tfa-code" id="tfa-code" dir="ltr" inputmode="numeric" autocomplete="one-time-code" placeholder="000 000" maxlength="7">
+        </label>
+        <div id="tfa-err" class="small" style="color:var(--red-ink);font-weight:700;display:none"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn" data-close>إلغاء</button>
+          <button type="submit" class="btn pr">${icon('shield', 16)}تفعيل الربط الآن</button>
+        </div>
+      </form>
+    </div>`, (m, close) => {
+    $('#tfa-copy-key', m).onclick = async () => {
+      try { await navigator.clipboard.writeText(setup.secret); toast('تم نسخ المفتاح السري', 'الصقه داخل Google Authenticator'); }
+      catch { toast('انسخ المفتاح يدوياً من المربع', ''); }
+    };
+    const inp = $('#tfa-code', m);
+    inp.focus();
+    $('#tfa-on', m).onsubmit = e => {
+      e.preventDefault();
+      const r = db.confirmTotpSetup(setup.secret, inp.value);
+      const err = $('#tfa-err', m);
+      if (!r.ok) { err.textContent = r.error; err.style.display = 'block'; inp.select(); return; }
+      toast('تم ربط Google Authenticator بنجاح ✓', 'حسابك محمي الآن بالتحقق بخطوتين');
+      $('#tfa-wrap', m).innerHTML = `
+        <div class="card" style="background:var(--teal-soft);border-color:var(--teal);padding:12px 14px">
+          <b style="color:var(--teal-ink)">تم التفعيل بنجاح ✓</b>
+          <div class="small" style="margin-top:4px">في كل مرة تسجل دخولك سيطلب النظام رمز الـ 6 أرقام من تطبيق <b>Google Authenticator</b>.</div>
+        </div>
+        <div>
+          <b>رموز الاسترداد الاحتياطية (تُعرض مرة واحدة فقط):</b>
+          <div class="muted small" style="margin:3px 0 8px">احفظ هذه الرموز بمكان آمن — تستخدمها للدخول إذا بدّلت موبايلك أو انمسح التطبيق. كل رمز يشتغل مرة واحدة.</div>
+          <div class="tfa-backups num" dir="ltr">${r.backups.map(b => `<span>${esc(b)}</span>`).join('')}</div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+          <button type="button" class="btn sm" id="tfa-copy-bk">${icon('book', 14)}نسخ رموز الاسترداد</button>
+          <button type="button" class="btn pr" id="tfa-done">تم، حفظت الرموز</button>
+        </div>`;
+      $('#tfa-copy-bk', m).onclick = async () => {
+        try { await navigator.clipboard.writeText(r.backups.join('\n')); toast('تم نسخ رموز الاسترداد', 'احفظها بمكان آمن'); }
+        catch { toast('انسخ الرموز يدوياً', ''); }
+      };
+      $('#tfa-done', m).onclick = () => { close(); route(); };
+    };
+  });
+}
 
 function changePwModal() {
   modal('تغيير الرمز', `<form id="cp" style="display:flex;flex-direction:column;gap:12px" novalidate>

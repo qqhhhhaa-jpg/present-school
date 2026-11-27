@@ -58,9 +58,34 @@ const login = {
       $('#fu', step).onsubmit = e => {
         e.preventDefault();
         const r = db.loginWithPassword(un.value, pw.value);
-        if (!r.ok) userStep(r.error, un.value); else if (r.needSet) setPwStep(r); else if (r.session.roles.length > 1) whoStep(r.session.roles); else go();
+        if (!r.ok) userStep(r.error, un.value); else if (r.needSet) setPwStep(r); else if (r.needTotp) totpStep(r); else if (r.session.roles.length > 1) whoStep(r.session.roles); else go();
       };
       (un.value ? pw : un).focus();
+    };
+    const totpStep = (info, err = '') => {
+      step.innerHTML = `<div style="display:flex;gap:10px;align-items:center">${wordmark(46)}</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="ki t" style="width:44px;height:44px;border-radius:13px">${icon('shield', 22)}</span>
+          <div><h1 style="font-size:20px;margin:0">Google Authenticator</h1><div class="muted small">التحقق بخطوتين لحساب <b class="num" dir="ltr">${esc(info.username)}</b></div></div>
+        </div>
+        <form id="ftfa" style="display:flex;flex-direction:column;gap:14px" novalidate>
+          <label class="field ${err ? 'err' : ''}">رمز التحقق (6 أرقام من التطبيق أو رمز استرداد)
+            <input class="input num tfa-code" id="tfa-in" dir="ltr" inputmode="numeric" autocomplete="one-time-code" placeholder="000 000" maxlength="10">
+            <span class="help">${esc(err || 'افتح تطبيق Google Authenticator واكتب الرمز الظاهر حالياً.')}</span>
+          </label>
+          <button class="btn pr" style="min-height:50px">${icon('shield', 18)}تحقق ودخول</button>
+          <button type="button" class="btn" id="tfa-back">رجوع لتسجيل الدخول</button>
+        </form>`;
+      const inp = $('#tfa-in', step);
+      inp.focus();
+      $('#tfa-back', step).onclick = () => userStep('', info.username);
+      $('#ftfa', step).onsubmit = e => {
+        e.preventDefault();
+        const r = db.verifyLoginTotp(info.token, inp.value);
+        if (!r.ok) { if (r.expired) userStep(r.error, info.username); else totpStep(info, r.error); return; }
+        if (r.usedBackup) toast('تم الدخول برمز استرداد احتياطي', 'ننصح بحفظ ما تبقى من رموزك');
+        if (r.session.roles.length > 1) whoStep(r.session.roles); else go();
+      };
     };
     // Forgot password: username → SMS code to the registered phone → new password.
     const forgotStep = (err = '', u = '') => {
@@ -1844,6 +1869,12 @@ const settings = {
         <h2 style="margin-top:8px">العطل الرسمية</h2>
         <div class="muted small">الجمعة والسبت عطلة دائماً. العطل الرسمية تنضاف من «نشر تبليغ» بتفعيل «عطلة رسمية».</div>
         <div id="hols">${db.holidays().length ? db.holidays().map(h => `<div class="row"><span class="num" style="font-weight:700">${h.day}</span><span style="flex:1">${esc(h.name)}</span><button type="button" class="btn sm dg" data-unhol="${h.day}">إلغاء</button></div>`).join('') : '<div class="small muted">ما أكو عطل رسمية مسجّلة.</div>'}</div>
+        <h2 style="margin-top:8px">المصادقة الثنائية (Google Authenticator)</h2>
+        ${(() => {
+          const ts = db.totpStatus();
+          return `<div class="muted small">${ts.enabled ? `حسابك (<b class="num" dir="ltr">${esc(ts.username)}</b>) مربوط بتطبيق Google Authenticator ومفعّل ✓ · رموز الاسترداد المتبقية: <b class="num">${ts.backupsLeft}</b>.` : 'اربط حسابك بتطبيق Google Authenticator لتأمين تسجيل الدخول برمز مؤقت يتجدد كل 30 ثانية.'}</div>
+          <button type="button" class="btn ${ts.enabled ? '' : 'pr'}" data-totp style="align-self:flex-start">${icon('shield', 16)}${ts.enabled ? 'إدارة / تعطيل Google Authenticator' : 'ربط تطبيق Google Authenticator'}</button>`;
+        })()}
         <h2 style="margin-top:8px">حسابات الدخول</h2>
         <div class="muted small">ترجع اليوزرات والرموز مثل البداية (hader2026)، وتنفتح الحسابات المقفولة والموقوفة، وتطلع كل الأجهزة المسجّل دخولها. أرقام أولياء الأمور والطلاب تبقى تدخل برمز SMS.</div>
         <button class="btn" id="resetlogins">${icon('key', 16)}إعادة تهيئة اليوزرات وأرقام الموبايل</button>

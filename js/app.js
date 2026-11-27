@@ -1,5 +1,5 @@
 import * as db from './store.js';
-import { $, $$, esc, icon, fmtTime, fmtDay, dayName, ago, norm, maskPhone, fmtPhone, atTime } from './util.js';
+import { $, $$, esc, icon, fmtTime, fmtDay, dayName, ago, norm, maskPhone, fmtPhone, atTime, qrSvg } from './util.js';
 import { views, pwField, bindEyes, notesList } from './views.js';
 
 document.documentElement.dir = 'rtl'; document.documentElement.lang = 'ar';
@@ -102,7 +102,7 @@ function mobileNav(c, name, items, groups, other, cred, link) {
     <div class="mpanel" role="dialog" aria-label="كل الأقسام"><div class="mhandle" data-more-close></div>
       <div class="mme">${avatar(c.name)}<div style="flex:1;min-width:0"><b class="ell" style="display:block">${esc(c.name)}</b><span class="muted small">${esc(c.roleInfo.label.split(' · ')[0])}${cred && !cred.pending ? ` · <span class="num" dir="ltr">${esc(cred.username)}</span>` : ''}</span></div><button class="iconbtn" data-more-close aria-label="إغلاق">${icon('x', 18)}</button></div>
       ${sheetGroups}
-      <div class="macts">${other.map(r => `<button class="btn sm" data-role="${r.rid || r.role}">${icon('swap', 14)}التبديل إلى: ${esc(r.label.split(' · ')[0])}</button>`).join('')}${cred && !cred.pending ? `<button class="btn sm" data-chpw>${icon('key', 14)}تغيير الرمز</button>` : ''}<button class="btn sm" data-install ${matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'hidden' : ''}>${icon('download', 14)}ثبّت التطبيق</button><button class="btn sm danger" data-logout>${icon('logout', 14)}تسجيل الخروج</button></div>
+      <div class="macts">${other.map(r => `<button class="btn sm" data-role="${r.rid || r.role}">${icon('swap', 14)}التبديل إلى: ${esc(r.label.split(' · ')[0])}</button>`).join('')}${cred && !cred.pending ? `<button class="btn sm" data-totp>${icon('shield', 14)}Google Authenticator</button><button class="btn sm" data-chpw>${icon('key', 14)}تغيير الرمز</button>` : ''}<button class="btn sm" data-install ${matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'hidden' : ''}>${icon('download', 14)}ثبّت التطبيق</button><button class="btn sm danger" data-logout>${icon('logout', 14)}تسجيل الخروج</button></div>
     </div></div>`;
 }
 function toggleMore(open) {
@@ -159,7 +159,7 @@ function shell(c, name) {
     <div class="brand"><div class="bmain">${wordmark(38, '#FFFFFF')}<small>${esc(db.settings().schoolName)}</small></div><button class="collapse" data-collapse aria-label="تصغير القائمة" title="تصغير / تكبير القائمة">${icon('chev', 18)}</button></div>
     <nav class="nav">${navHtml}</nav>
     <div class="me">
-      <div class="who">${avatar(c.name)}<div style="flex:1;min-width:0"><b class="ell">${esc(c.name)}</b><span class="ell">${esc(c.roleInfo.label.split(' · ')[0])}${cred && !cred.pending ? ` · <span class="num" dir="ltr">${esc(cred.username)}</span>` : ''}</span></div>${cred && !cred.pending ? `<button class="mebtn" data-chpw title="تغيير الرمز" aria-label="تغيير الرمز">${icon('key', 17)}</button>` : ''}</div>
+      <div class="who">${avatar(c.name)}<div style="flex:1;min-width:0"><b class="ell">${esc(c.name)}</b><span class="ell">${esc(c.roleInfo.label.split(' · ')[0])}${cred && !cred.pending ? ` · <span class="num" dir="ltr">${esc(cred.username)}</span>` : ''}</span></div>${cred && !cred.pending ? `<button class="mebtn ${db.totpStatus(c.phone).enabled ? 'tfa-on' : ''}" data-totp title="Google Authenticator (2FA)" aria-label="Google Authenticator">${icon('shield', 17)}</button><button class="mebtn" data-chpw title="تغيير الرمز" aria-label="تغيير الرمز">${icon('key', 17)}</button>` : ''}</div>
       ${other.map(r => `<button class="sidebtn" data-role="${r.rid || r.role}">${icon('swap', 15)}التبديل إلى: ${esc(r.label.split(' · ')[0])}</button>`).join('')}
       <button class="sidebtn" data-install ${matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'hidden' : ''}>${icon('download', 15)}ثبّت «حاضر» على شاشتك</button>
       <button class="logout" data-logout>${icon('logout', 18)}تسجيل الخروج</button></div>
@@ -804,6 +804,7 @@ function goBack() {
   location.hash = prev || parent || `#/${HOME[c.role]}`;
 }
 function onChromeClick(e) {
+  if (e.target.closest('[data-totp]')) { totpModal(); return; }
   if (e.target.closest('[data-chpw]')) { changePwModal(); return; }
   if (e.target.closest('[data-back]')) { goBack(); return; }
   if (e.target.closest('[data-collapse]')) { const a = $('.app'); const on = !a.classList.contains('mini'); a.classList.toggle('mini', on); try { localStorage.setItem('hader-mini', on ? '1' : '0'); } catch { } return; }
@@ -844,6 +845,113 @@ function closeBell() { const p = $('#npop'); if (p) { p.hidden = true; p.style.t
 document.addEventListener('mousedown', e => { if (!e.target.closest('.bellwrap')) closeBell(); });
 document.addEventListener('click', e => { if (e.target.closest('#npop [data-ev]')) closeBell(); }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeBell(); });
+
+function totpModal() {
+  const c = ctx();
+  if (!c) return;
+  const st = db.totpStatus(c.phone);
+  if (st.enabled) {
+    modal('Google Authenticator (المصادقة الثنائية)', `
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card" style="background:var(--teal-soft);border-color:var(--teal);padding:12px 14px;display:flex;align-items:center;gap:10px">
+          <span class="ki t">${icon('shield', 18)}</span>
+          <div style="flex:1">
+            <b style="color:var(--teal-ink)">حسابك محمي بتطبيق Google Authenticator ✓</b>
+            <div class="muted small">اليوزر: <b class="num" dir="ltr">${esc(st.username)}</b>${st.enabledAt ? ` · مفعّل منذ ${fmtDay(new Date(st.enabledAt))}` : ''} · رموز الاسترداد المتبقية: <b class="num">${st.backupsLeft}</b></div>
+          </div>
+        </div>
+        <form id="tfa-off" style="display:flex;flex-direction:column;gap:10px" novalidate>
+          <div class="small muted">لتعطيل التحقق بخطوتين، أدخل كلمة المرور الحالية مع رمز الـ 6 أرقام من التطبيق (أو رمز استرداد):</div>
+          ${pwField('tfa-pw', 'كلمة المرور الحالية')}
+          <label class="field">رمز Google Authenticator (6 أرقام أو رمز استرداد)
+            <input class="input num tfa-code" id="tfa-off-code" dir="ltr" inputmode="numeric" autocomplete="one-time-code" placeholder="000 000" maxlength="10">
+          </label>
+          <div id="tfa-off-err" class="small" style="color:var(--red-ink);font-weight:700;display:none"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+            <button type="button" class="btn" data-close>إغلاق</button>
+            <button type="submit" class="btn danger-solid">${icon('x', 15)}تعطيل الربط</button>
+          </div>
+        </form>
+      </div>`, (m, close) => {
+      bindEyes(m);
+      $('#tfa-off', m).onsubmit = e => {
+        e.preventDefault();
+        const r = db.disableTotp($('#tfa-pw', m).value, $('#tfa-off-code', m).value);
+        const err = $('#tfa-off-err', m);
+        if (!r.ok) { err.textContent = r.error; err.style.display = 'block'; return; }
+        close();
+        toast('تم تعطيل Google Authenticator', 'رجع الدخول بكلمة المرور فقط');
+        route();
+      };
+    });
+    return;
+  }
+
+  const setup = db.beginTotpSetup();
+  if (!setup.ok) { toast(setup.error, '', 'absent'); return; }
+  const formattedKey = setup.secret.replace(/(.{4})/g, '$1 ').trim();
+
+  modal('ربط تطبيق Google Authenticator', `
+    <div id="tfa-wrap" style="display:flex;flex-direction:column;gap:12px">
+      <div class="tfa-steps">
+        <span><b>1.</b> افتح تطبيق <b>Google Authenticator</b> على هاتفك واضغط <b>+</b>.</span>
+        <span><b>2.</b> امسح رمز <b>QR</b> أدناه (أو انسخ المفتاح السري وأدخله يدوياً).</span>
+        <span><b>3.</b> اكتب الرمز المكوّن من <b>6 أرقام</b> الظاهر في التطبيق لتأكيد الربط.</span>
+      </div>
+      <div class="tfa-qr-box">
+        <div class="tfa-qr">${qrSvg(setup.uri, 196)}</div>
+        <div class="tfa-key-col">
+          <div class="small muted">أو أدخل المفتاح يدوياً في التطبيق:</div>
+          <div class="tfa-secret num" dir="ltr">${esc(formattedKey)}</div>
+          <div class="small muted">الحساب: <b class="num" dir="ltr">Hader:${esc(setup.username)}</b> · التوقيت: 30 ثانية</div>
+          <button type="button" class="btn sm" id="tfa-copy-key" style="align-self:flex-start">${icon('book', 14)}نسخ المفتاح السري</button>
+        </div>
+      </div>
+      <form id="tfa-on" style="display:flex;flex-direction:column;gap:10px" novalidate>
+        <label class="field">أدخل الرمز من Google Authenticator (6 أرقام)
+          <input class="input num tfa-code" id="tfa-code" dir="ltr" inputmode="numeric" autocomplete="one-time-code" placeholder="000 000" maxlength="7">
+        </label>
+        <div id="tfa-err" class="small" style="color:var(--red-ink);font-weight:700;display:none"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn" data-close>إلغاء</button>
+          <button type="submit" class="btn pr">${icon('shield', 16)}تفعيل الربط الآن</button>
+        </div>
+      </form>
+    </div>`, (m, close) => {
+    $('#tfa-copy-key', m).onclick = async () => {
+      try { await navigator.clipboard.writeText(setup.secret); toast('تم نسخ المفتاح السري', 'الصقه داخل Google Authenticator'); }
+      catch { toast('انسخ المفتاح يدوياً من المربع', ''); }
+    };
+    const inp = $('#tfa-code', m);
+    inp.focus();
+    $('#tfa-on', m).onsubmit = e => {
+      e.preventDefault();
+      const r = db.confirmTotpSetup(setup.secret, inp.value);
+      const err = $('#tfa-err', m);
+      if (!r.ok) { err.textContent = r.error; err.style.display = 'block'; inp.select(); return; }
+      toast('تم ربط Google Authenticator بنجاح ✓', 'حسابك محمي الآن بالتحقق بخطوتين');
+      $('#tfa-wrap', m).innerHTML = `
+        <div class="card" style="background:var(--teal-soft);border-color:var(--teal);padding:12px 14px">
+          <b style="color:var(--teal-ink)">تم التفعيل بنجاح ✓</b>
+          <div class="small" style="margin-top:4px">في كل مرة تسجل دخولك سيطلب النظام رمز الـ 6 أرقام من تطبيق <b>Google Authenticator</b>.</div>
+        </div>
+        <div>
+          <b>رموز الاسترداد الاحتياطية (تُعرض مرة واحدة فقط):</b>
+          <div class="muted small" style="margin:3px 0 8px">احفظ هذه الرموز بمكان آمن — تستخدمها للدخول إذا بدّلت موبايلك أو انمسح التطبيق. كل رمز يشتغل مرة واحدة.</div>
+          <div class="tfa-backups num" dir="ltr">${r.backups.map(b => `<span>${esc(b)}</span>`).join('')}</div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+          <button type="button" class="btn sm" id="tfa-copy-bk">${icon('book', 14)}نسخ رموز الاسترداد</button>
+          <button type="button" class="btn pr" id="tfa-done">تم، حفظت الرموز</button>
+        </div>`;
+      $('#tfa-copy-bk', m).onclick = async () => {
+        try { await navigator.clipboard.writeText(r.backups.join('\n')); toast('تم نسخ رموز الاسترداد', 'احفظها بمكان آمن'); }
+        catch { toast('انسخ الرموز يدوياً', ''); }
+      };
+      $('#tfa-done', m).onclick = () => { close(); route(); };
+    };
+  });
+}
 
 function changePwModal() {
   modal('تغيير الرمز', `<form id="cp" style="display:flex;flex-direction:column;gap:12px" novalidate>

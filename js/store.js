@@ -2,7 +2,7 @@
 // exported here. Today they run on demo data in the browser; later the same
 // functions call the server (Supabase) and the screens do not change.
 
-import { rng, dayKey, atTime, minutesOf, norm, normalizePhone, validPhone, storage, fmtTime } from './util.js';
+import { rng, dayKey, atTime, minutesOf, norm, normalizePhone, validPhone, storage, fmtTime, totpGenerateSecret, totpVerify, totpUri } from './util.js';
 export { dayKey };
 
 const KEY = 'hader-demo-v5';
@@ -1341,7 +1341,109 @@ export function loginWithPassword(username, password) {
   delete S.fails[username];
   if (S.disabled.includes(phone)) return { ok: false, error: 'هذا الحساب موقوف. تواصل مع إدارة المنصة.' };
   if (!isStaff(phone)) return { ok: false, error: 'هذا الحساب ما عنده دخول باليوزر.' };
+  if (S.creds[phone]?.totp?.secret) {
+    const token = 'tfa_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    pending2fa = { token, phone, username, until: Date.now() + 5 * 60000 };
+    return { ok: true, needTotp: true, token, username, name: rolesFor(phone)[0]?.name || username };
+  }
   return startSession(phone);
+}
+let pending2fa = null;
+function genBackupCodes(n = 6) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const codes = [];
+  for (let i = 0; i < n; i++) {
+    const b = new Uint8Array(8);
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(b);
+    else for (let j = 0; j < 8; j++) b[j] = Math.floor(Math.random() * 256);
+    const s = [...b].map(x => chars[x % chars.length]).join('');
+    codes.push(s.slice(0, 4) + '-' + s.slice(4));
+  }
+  return codes;
+}
+export function totpStatus(phone) {
+  const p = normalizePhone(phone || session()?.phone || '');
+  const c = (S.creds || {})[p];
+  return {
+    enabled: !!c?.totp?.secret,
+    enabledAt: c?.totp?.enabledAt || null,
+    backupsLeft: (c?.totp?.backups || []).length,
+    username: c?.username || '',
+  };
+}
+export function beginTotpSetup() {
+  const s = session();
+  if (!s) return { ok: false, error: 'سجّل دخولك أولاً.' };
+  const c = (S.creds || {})[s.phone];
+  if (!c) return { ok: false, error: 'المصادقة الثنائية متاحة لحسابات الإدارة والمدرسين.' };
+  const secret = totpGenerateSecret(20);
+  const uri = totpUri(secret, c.username, 'Hader');
+  return { ok: true, secret, uri, username: c.username };
+}
+export function confirmTotpSetup(secret, code) {
+  const s = session();
+  if (!s) return { ok: false, error: 'انتهت الجلسة. سجّل دخولك من جديد.' };
+  const c = (S.creds || {})[s.phone];
+  if (!c) return { ok: false, error: 'الحساب غير موجود.' };
+  if (!secret || !totpVerify(secret, code, 1)) {
+    return { ok: false, error: 'الرمز غير صحيح. تأكد من كتابة الـ 6 أرقام الظاهرة حالياً في Google Authenticator.' };
+  }
+  const backups = genBackupCodes(6);
+  c.totp = { secret, enabledAt: Date.now(), backups: backups.map(b => hashPw(b.replace(/-/g, '').toUpperCase())) };
+  log('تفعيل Google Authenticator', `${c.username} · تم ربط التحقق بخطوتين (2FA)`);
+  save();
+  emit('creds');
+  return { ok: true, backups };
+}
+export function disableTotp(password, code) {
+  const s = session();
+  if (!s) return { ok: false, error: 'انتهت الجلسة.' };
+  const c = (S.creds || {})[s.phone];
+  if (!c || !c.totp?.secret) return { ok: false, error: 'المصادقة الثنائية غير مفعّلة أصلاً.' };
+  if (!password || !safeCompare(c.hash, hashPw(password))) return { ok: false, error: 'كلمة المرور الحالية غير صحيحة.' };
+  const cleanCode = String(code || '').replace(/[\s-]/g, '').toUpperCase();
+  const validTotp = totpVerify(c.totp.secret, cleanCode, 1);
+  const bIdx = (c.totp.backups || []).findIndex(h => safeCompare(h, hashPw(cleanCode)));
+  if (!validTotp && bIdx < 0) return { ok: false, error: 'أدخل رمز Google Authenticator الصحيح (أو رمز استرداد) لتأكيد الإلغاء.' };
+  delete c.totp;
+  log('تعطيل Google Authenticator', `${c.username} · تم فك ربط التحقق بخطوتين`);
+  save();
+  emit('creds');
+  return { ok: true };
+}
+export function verifyLoginTotp(token, code) {
+  if (!pending2fa || !safeCompare(pending2fa.token, String(token || '')) || pending2fa.until < Date.now()) {
+    pending2fa = null;
+    return { ok: false, expired: true, error: 'انتهت مهلة التحقق. أعد إدخال اليوزر والرمز.' };
+  }
+  const { phone, username } = pending2fa;
+  const c = (S.creds || {})[phone];
+  if (!c?.totp?.secret) { pending2fa = null; return startSession(phone); }
+  S.fails = S.fails || {};
+  const fk = '2fa_' + username;
+  const f = S.fails[fk];
+  if (f && f.until > Date.now()) return { ok: false, error: `محاولات خاطئة كثيرة. حاول بعد ${Math.ceil((f.until - Date.now()) / 60000)} دقيقة.` };
+  const clean = String(code || '').replace(/[\s-]/g, '').toUpperCase();
+  const okTotp = totpVerify(c.totp.secret, clean, 1);
+  const bIdx = !okTotp ? (c.totp.backups || []).findIndex(h => safeCompare(h, hashPw(clean))) : -1;
+  if (!okTotp && bIdx < 0) {
+    const n = (f?.n || 0) + 1;
+    S.fails[fk] = { n, until: n >= 5 ? Date.now() + 5 * 60000 : 0 };
+    if (n >= 5) S.fails[fk].n = 0;
+    save();
+    return { ok: false, error: n >= 5 ? 'خمس محاولات خاطئة. انقفل التحقق 5 دقائق.' : `رمز التحقق غير صحيح. بقت ${5 - n} محاولات.` };
+  }
+  delete S.fails[fk];
+  if (bIdx >= 0) {
+    c.totp.backups.splice(bIdx, 1);
+    log('دخول برمز استرداد 2FA', `${username} · المتبقي ${c.totp.backups.length} رموز استرداد`);
+    save();
+  } else {
+    log('دخول عبر Google Authenticator', username);
+  }
+  pending2fa = null;
+  const res = startSession(phone);
+  return { ...res, usedBackup: bIdx >= 0 };
 }
 function startSession(phone) {
   const roles = rolesFor(phone);

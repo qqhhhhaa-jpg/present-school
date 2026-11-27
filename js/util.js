@@ -123,6 +123,7 @@ export const ICON = {
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
   grade: '<path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="M6 10.5V16c0 1.5 2.7 3 6 3s6-1.5 6-3v-5.5"/><path d="M22 8v6"/>',
   save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>',
+  shield: '<path d="M12 3 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-3z"/><path d="m9 12 2 2 4-4"/>',
   video: '<rect x="2" y="5" width="15" height="14" rx="3"/><path d="m17 10 5-3v10l-5-3"/>',
 };
 export const icon = (name, size = 20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name] || ''}</svg>`;
@@ -270,4 +271,288 @@ export async function sampleHandout({ title, teacher, school }) {
     let y = block(g, W, 260, 62, 'تمارين', ['1. أعرب ما تحته خط: الطالبُ مجتهدٌ.', '2. أدخل (أصبح) على الجملة: السماءُ صافيةٌ.', '3. استخرج المبتدأ والخبر من: المدرسةُ بيتُنا الثاني.', '4. ضع خبراً مناسباً: الوطنُ ........', '5. ما نوع الخبر في: الكتابُ على الطاولة؟', '6. اكتب جملتين فيهما (ليس) واضبطهما بالشكل.']);
     for (let i = 0; i < 9; i++) { g.strokeStyle = '#D5DBE5'; g.lineWidth = 2; g.beginPath(); g.moveTo(110, y + i * 60); g.lineTo(W - 110, y + i * 60); g.stroke(); } });
   return jpegsToPdf([p1, p2]);
+}
+
+/* ===== Google Authenticator TOTP (RFC 6238 / HMAC-SHA1) + Pure-JS QR SVG (ISO 18004) ===== */
+const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+function sha1Bytes(msg) {
+  const len = msg.length;
+  const total = ((len + 9 + 63) >> 6) << 6;
+  const buf = new Uint8Array(total);
+  buf.set(msg);
+  buf[len] = 0x80;
+  const bitLenHi = Math.floor(len / 0x20000000);
+  const bitLenLo = (len << 3) >>> 0;
+  const dv = new DataView(buf.buffer);
+  dv.setUint32(total - 8, bitLenHi, false);
+  dv.setUint32(total - 4, bitLenLo, false);
+  let h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+  const w = new Uint32Array(80);
+  const rol = (x, n) => ((x << n) | (x >>> (32 - n))) >>> 0;
+  for (let off = 0; off < total; off += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4, false);
+    for (let i = 16; i < 80; i++) w[i] = rol(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+    let a = h0, b = h1, c = h2, d = h3, e = h4;
+    for (let i = 0; i < 80; i++) {
+      let f, k;
+      if (i < 20) { f = (b & c) | ((~b) & d); k = 0x5A827999; }
+      else if (i < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1; }
+      else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
+      else { f = b ^ c ^ d; k = 0xCA62C1D6; }
+      const temp = (rol(a, 5) + f + e + k + w[i]) >>> 0;
+      e = d; d = c; c = rol(b, 30); b = a; a = temp;
+    }
+    h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0; h4 = (h4 + e) >>> 0;
+  }
+  const out = new Uint8Array(20);
+  const odv = new DataView(out.buffer);
+  odv.setUint32(0, h0, false); odv.setUint32(4, h1, false); odv.setUint32(8, h2, false); odv.setUint32(12, h3, false); odv.setUint32(16, h4, false);
+  return out;
+}
+function hmacSha1(key, msg) {
+  const k = key.length > 64 ? sha1Bytes(key) : key;
+  const ipad = new Uint8Array(64 + msg.length);
+  const opad = new Uint8Array(64 + 20);
+  for (let i = 0; i < 64; i++) {
+    const kb = i < k.length ? k[i] : 0;
+    ipad[i] = kb ^ 0x36;
+    opad[i] = kb ^ 0x5c;
+  }
+  ipad.set(msg, 64);
+  opad.set(sha1Bytes(ipad), 64);
+  return sha1Bytes(opad);
+}
+export function base32Encode(bytes) {
+  let out = '', bits = 0, val = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    val = (val << 8) | bytes[i];
+    bits += 8;
+    while (bits >= 5) { bits -= 5; out += B32[(val >>> bits) & 31]; }
+  }
+  if (bits > 0) out += B32[(val << (5 - bits)) & 31];
+  return out;
+}
+export function base32Decode(str) {
+  const clean = String(str || '').toUpperCase().replace(/[^A-Z2-7]/g, '');
+  let bits = 0, val = 0;
+  const out = [];
+  for (let i = 0; i < clean.length; i++) {
+    const idx = B32.indexOf(clean[i]);
+    if (idx < 0) continue;
+    val = (val << 5) | idx;
+    bits += 5;
+    if (bits >= 8) { bits -= 8; out.push((val >>> bits) & 0xff); }
+  }
+  return new Uint8Array(out);
+}
+export function totpGenerateSecret(byteLen = 20) {
+  const buf = new Uint8Array(byteLen);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(buf);
+  else for (let i = 0; i < byteLen; i++) buf[i] = Math.floor(Math.random() * 256);
+  return base32Encode(buf);
+}
+export function totpCode(secretBase32, timeMs = Date.now(), stepOffset = 0) {
+  const key = base32Decode(secretBase32);
+  const counter = Math.floor(timeMs / 1000 / 30) + stepOffset;
+  const msg = new Uint8Array(8);
+  const hi = Math.floor(counter / 0x100000000);
+  const lo = counter >>> 0;
+  const dv = new DataView(msg.buffer);
+  dv.setUint32(0, hi, false);
+  dv.setUint32(4, lo, false);
+  const mac = hmacSha1(key, msg);
+  const off = mac[19] & 0x0f;
+  const bin = ((mac[off] & 0x7f) << 24) | (mac[off + 1] << 16) | (mac[off + 2] << 8) | mac[off + 3];
+  return String(bin % 1000000).padStart(6, '0');
+}
+export function totpVerify(secretBase32, inputCode, window = 1, timeMs = Date.now()) {
+  const clean = String(inputCode || '').replace(/[\s-]/g, '');
+  if (!/^\d{6}$/.test(clean)) return false;
+  for (let w = -window; w <= window; w++) {
+    if (totpCode(secretBase32, timeMs, w) === clean) return true;
+  }
+  return false;
+}
+export function totpUri(secretBase32, accountLabel, issuer = 'Hader') {
+  const iss = encodeURIComponent(issuer);
+  const acc = encodeURIComponent(accountLabel);
+  return `otpauth://totp/${iss}:${acc}?secret=${secretBase32}&issuer=${iss}&algorithm=SHA1&digits=6&period=30`;
+}
+
+// Pure-JS ISO/IEC 18004 QR Code (Byte mode, ECC Level L, Versions 1..9)
+export function qrSvg(text, size = 210) {
+  const bytes = new TextEncoder().encode(String(text || ''));
+  // [version, dataCodewords, ecPerBlock, numBlocks, alignCenters]
+  const VSPEC = [
+    null,
+    [1, 19, 7, 1, []],
+    [2, 34, 10, 1, [6, 18]],
+    [3, 55, 15, 1, [6, 22]],
+    [4, 80, 20, 1, [6, 26]],
+    [5, 108, 26, 1, [6, 30]],
+    [6, 136, 18, 2, [6, 34]],
+    [7, 156, 20, 2, [6, 22, 38]],
+    [8, 194, 24, 2, [6, 24, 42]],
+    [9, 232, 30, 2, [6, 26, 46]],
+  ];
+  const spec = VSPEC.slice(1).find(s => bytes.length + 2 <= s[1]);
+  if (!spec) return '';
+  const [ver, totalData, ecLen, numBlocks, aligns] = spec;
+  const N = 17 + 4 * ver;
+
+  // GF(256) tables (poly 0x11D)
+  const EXP = new Uint8Array(512), LOG = new Uint8Array(256);
+  let x = 1;
+  for (let i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11D; }
+  for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+  const gfMul = (a, b) => (a && b) ? EXP[LOG[a] + LOG[b]] : 0;
+  const rsPoly = deg => {
+    let p = [1];
+    for (let i = 0; i < deg; i++) {
+      const next = new Array(p.length + 1).fill(0);
+      for (let j = 0; j < p.length; j++) { next[j] ^= p[j]; next[j + 1] ^= gfMul(p[j], EXP[i]); }
+      p = next;
+    }
+    return p;
+  };
+  const rsEncode = (data, deg) => {
+    const gen = rsPoly(deg);
+    const rem = new Uint8Array(deg);
+    for (let i = 0; i < data.length; i++) {
+      const factor = data[i] ^ rem[0];
+      rem.copyWithin(0, 1); rem[deg - 1] = 0;
+      for (let j = 0; j < deg; j++) rem[j] ^= gfMul(gen[j + 1], factor);
+    }
+    return rem;
+  };
+
+  // Encode byte-mode bit stream
+  const bits = [];
+  const pushBits = (v, n) => { for (let i = n - 1; i >= 0; i--) bits.push((v >>> i) & 1); };
+  pushBits(0b0100, 4); // Byte mode
+  pushBits(bytes.length, 8); // Versions 1..9 use 8-bit length
+  for (let i = 0; i < bytes.length; i++) pushBits(bytes[i], 8);
+  const capBits = totalData * 8;
+  for (let i = 0; i < 4 && bits.length < capBits; i++) bits.push(0);
+  while (bits.length % 8) bits.push(0);
+  const dataCW = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let b = 0; for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j];
+    dataCW.push(b);
+  }
+  const padBytes = [0xEC, 0x11];
+  for (let pi = 0; dataCW.length < totalData; pi++) dataCW.push(padBytes[pi & 1]);
+
+  // Split blocks & interleave
+  const bSize = totalData / numBlocks;
+  const dBlocks = [], eBlocks = [];
+  for (let b = 0; b < numBlocks; b++) {
+    const blk = dataCW.slice(b * bSize, (b + 1) * bSize);
+    dBlocks.push(blk);
+    eBlocks.push(rsEncode(blk, ecLen));
+  }
+  const codewords = [];
+  for (let i = 0; i < bSize; i++) for (let b = 0; b < numBlocks; b++) codewords.push(dBlocks[b][i]);
+  for (let i = 0; i < ecLen; i++) for (let b = 0; b < numBlocks; b++) codewords.push(eBlocks[b][i]);
+
+  // Build function-pattern matrix
+  const mat = Array.from({ length: N }, () => new Int8Array(N).fill(-1));
+  const func = Array.from({ length: N }, () => new Uint8Array(N));
+  const setF = (r, c, v) => { if (r >= 0 && r < N && c >= 0 && c < N) { mat[r][c] = v ? 1 : 0; func[r][c] = 1; } };
+  const drawFinder = (r0, c0) => {
+    for (let dr = -1; dr <= 7; dr++) for (let dc = -1; dc <= 7; dc++) {
+      const r = r0 + dr, c = c0 + dc;
+      if (r < 0 || r >= N || c < 0 || c >= N) continue;
+      const inOuter = dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6;
+      const dark = inOuter && (dr === 0 || dr === 6 || dc === 0 || dc === 6 || (dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4));
+      setF(r, c, dark);
+    }
+  };
+  drawFinder(0, 0); drawFinder(0, N - 7); drawFinder(N - 7, 0);
+  for (let i = 8; i < N - 8; i++) { setF(6, i, (i & 1) === 0); setF(i, 6, (i & 1) === 0); }
+  for (const ar of aligns) for (const ac of aligns) {
+    if ((ar === 6 && ac === 6) || (ar === 6 && ac === N - 7) || (ar === N - 7 && ac === 6)) continue;
+    for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+      setF(ar + dr, ac + dc, Math.max(Math.abs(dr), Math.abs(dc)) !== 1);
+    }
+  }
+  setF(4 * ver + 9, 8, 1); // Dark module
+  // Reserve format info cells
+  for (let i = 0; i < 9; i++) { if (i !== 6) { setF(8, i, 0); setF(i, 8, 0); } }
+  for (let i = 0; i < 8; i++) { setF(8, N - 1 - i, 0); setF(N - 1 - i, 8, 0); }
+  // Version info for V7..V9
+  if (ver >= 7) {
+    let rem = ver;
+    for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1F25);
+    const vBits = (ver << 12) | rem;
+    for (let i = 0; i < 18; i++) {
+      const bit = (vBits >>> i) & 1;
+      const a = Math.floor(i / 3), b = N - 11 + (i % 3);
+      setF(a, b, bit); setF(b, a, bit);
+    }
+  }
+
+  // Place data bits (zigzag upward/downward right-to-left)
+  const allBits = [];
+  for (const cw of codewords) for (let i = 7; i >= 0; i--) allBits.push((cw >>> i) & 1);
+  let bi = 0;
+  for (let col = N - 1; col >= 1; col -= 2) {
+    if (col === 6) col--;
+    const up = (((N - 1 - col) >> 1) & 1) === 0;
+    for (let step = 0; step < N; step++) {
+      const r = up ? N - 1 - step : step;
+      for (let dc = 0; dc < 2; dc++) {
+        const c = col - dc;
+        if (!func[r][c]) mat[r][c] = bi < allBits.length ? allBits[bi++] : 0;
+      }
+    }
+  }
+
+  // Evaluate masks 0..7 and pick lowest penalty
+  const maskFn = [
+    (r, c) => (r + c) % 2 === 0,
+    (r) => r % 2 === 0,
+    (_, c) => c % 3 === 0,
+    (r, c) => (r + c) % 3 === 0,
+    (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0,
+    (r, c) => ((r * c) % 2 + (r * c) % 3) === 0,
+    (r, c) => (((r * c) % 2 + (r * c) % 3) % 2) === 0,
+    (r, c) => (((r + c) % 2 + (r * c) % 3) % 2) === 0,
+  ];
+  const writeFormat = (grid, m) => {
+    const data = (0b01 << 3) | m; // ECC Level L = 01
+    let rem = data;
+    for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+    const fmt = ((data << 10) | rem) ^ 0x5412;
+    const bit = k => (fmt >>> k) & 1;
+    for (let i = 0; i <= 5; i++) grid[8][i] = bit(14 - i);
+    grid[8][7] = bit(8); grid[8][8] = bit(7); grid[7][8] = bit(6);
+    for (let i = 0; i <= 5; i++) grid[5 - i][8] = bit(5 - i);
+    for (let i = 0; i <= 7; i++) grid[8][N - 1 - i] = bit(i);
+    for (let i = 0; i <= 6; i++) grid[N - 1 - i][8] = bit(14 - i);
+  };
+  let bestGrid = null, bestScore = Infinity;
+  for (let m = 0; m < 8; m++) {
+    const g = mat.map((row, r) => row.map((v, c) => func[r][c] ? v : (v ^ (maskFn[m](r, c) ? 1 : 0))));
+    writeFormat(g, m);
+    let score = 0, dark = 0;
+    for (let r = 0; r < N; r++) {
+      let runR = 1, runC = 1;
+      for (let c = 0; c < N; c++) {
+        if (g[r][c]) dark++;
+        if (c > 0) { if (g[r][c] === g[r][c - 1]) { runR++; if (runR === 5) score += 3; else if (runR > 5) score++; } else runR = 1; }
+        if (c > 0) { if (g[c][r] === g[c - 1][r]) { runC++; if (runC === 5) score += 3; else if (runC > 5) score++; } else runC = 1; }
+        if (r > 0 && c > 0 && g[r][c] === g[r - 1][c] && g[r][c] === g[r][c - 1] && g[r][c] === g[r - 1][c - 1]) score += 3;
+      }
+    }
+    score += Math.floor(Math.abs(dark * 100 / (N * N) - 50) / 5) * 10;
+    if (score < bestScore) { bestScore = score; bestGrid = g; }
+  }
+
+  const qz = 4, vb = N + qz * 2;
+  let path = '';
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    if (bestGrid[r][c]) path += `M${c + qz},${r + qz}h1v1h-1z`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${vb} ${vb}" shape-rendering="crispEdges" role="img" aria-label="رمز QR لتطبيق Google Authenticator"><rect width="${vb}" height="${vb}" fill="#FFFFFF"/><path d="${path}" fill="#111827"/></svg>`;
 }
