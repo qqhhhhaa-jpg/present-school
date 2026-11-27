@@ -496,48 +496,25 @@ const attendance = {
         </div>
       </div>
 
-      ${gradesWithSecs.length ? gradesWithSecs.map(({ grade: g, secs }) => `
-        <section class="ap-group">
-          <div class="ap-ghead">
-            <span class="ap-gmark"></span>
-            <h2>${esc(g.name)}</h2>
-            ${g.stage ? `<span class="pill p-quiet">${esc(g.stage)}</span>` : ''}
-            <span class="ap-gcount">${secs.length} شعبة</span>
-          </div>
-          <div class="ap-grid">
-            ${secs.map(s => {
-              const secStus = db.students(s.id);
-              const sm = db.summary(secStus, att.day);
-              const st = isHoliday ? 'var(--brand)' : stColor(sm.rate);
-              return `
-              <button type="button" class="ap-tile" data-open-sec="${s.id}" style="--st:${st}" aria-label="فتح حضور ${esc(g.name)} شعبة ${esc(s.name)}">
-                <div class="ap-top">
-                  <span class="ap-ico"><b>${esc(s.name)}</b><small>${esc(g.short || 'شعبة')}</small></span>
-                  <span class="ap-ttl">
-                    <div>${esc(g.name)} · شعبة ${esc(s.name)}</div>
-                    <p>${s.homeroom ? `المربي: ${esc(s.homeroom)}` : 'لا يوجد مربٍّ معيّن'}${s.room ? ` · قاعة ${esc(s.room)}` : ''}</p>
-                  </span>
-                  ${isHoliday ? '' : `<span class="ap-rate">${sm.rate}<small>%</small></span>`}
-                </div>
-                ${isHoliday ? `<div class="ap-hol">${icon('calendar', 14)} عطلة رسمية · الجميع معفى من البصمة</div>` : `
-                <div class="ap-meter"><i style="width:${sm.rate}%"></i></div>
-                <div class="ap-stats">
-                  <span class="t"><b>${sm.came}</b>حاضر</span>
-                  <span class="r"><b>${sm.absent}</b>غائب</span>
-                  <span class="a"><b>${sm.late}</b>متأخر</span>
-                </div>`}
-                <div class="ap-foot">
-                  <span>${icon('users', 13)} ${secStus.length} طالب</span>
-                  <span class="ap-go">فتح الشعبة ${icon('back', 14)}</span>
-                </div>
-              </button>`;
-            }).join('')}
-          </div>
-        </section>`).join('') : `<div class="empty">لا توجد شعب مطابقة لبحثك</div>`}
+      ${gradesWithSecs.length ? [...new Set(gradesWithSecs.map(x => x.grade.stage))].map(stage => `
+        <h2 style="margin:6px 0 10px">المرحلة ${esc(String(stage || '').replace('ال', ''))}</h2>
+        <div class="tiles" style="margin-bottom:18px">${gradesWithSecs.filter(x => x.grade.stage === stage).map(({ grade: g, secs }) => {
+          const gl = secs.flatMap(s => db.students(s.id)); const gx = db.summary(gl, att.day);
+          const gc = gx.rate >= 90 ? 'teal' : 'amber';
+          return `<div class="tile">
+            <div style="display:flex;gap:12px;align-items:center">
+              <span class="ti">${esc(g.short || g.name.slice(0, 2))}</span>
+              <div style="flex:1;min-width:0"><b style="font-size:17px">${esc(g.name)}</b><div class="muted small">${secs.length} شعبة · ${gl.length} طالباً</div></div>
+              ${isHoliday ? `<span class="pill p-quiet">${icon('calendar', 13)} عطلة</span>` : `<b class="num" style="font-size:20px;color:var(--${gc}-ink)">${gx.rate}%</b>`}
+            </div>
+            ${isHoliday ? '' : `<div class="bar" style="flex:none"><i style="width:${gx.rate}%;background:var(--${gc})"></i></div>`}
+            <div class="secs">${secs.map(s => { const y = db.summary(db.students(s.id), att.day); return `<button type="button" class="sec ${isHoliday ? '' : y.absent ? 'warn' : 'ok'}" data-open-sec="${s.id}" title="فتح حضور ${esc(g.name)} شعبة ${esc(s.name)}"><b>${esc(s.name)}</b><span>${isHoliday ? 'عطلة رسمية' : `${y.came} من ${y.total} حاضر`}</span></button>`; }).join('')}</div>
+          </div>`;
+        }).join('')}</div>`).join('') : `<div class="empty">لا توجد شعب مطابقة لبحثك</div>`}
       `;
 
       $('#day', container).onchange = e => { att.day = +e.target.value; this.update(el); };
-      $('#app-q', container).oninput = e => { att.appQ = e.target.value; this.update(el); };
+      $('#app-q', container).oninput = e => { att.appQ = e.target.value; this.update(el); const i = $('#app-q', el); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } };
       return;
     }
 
