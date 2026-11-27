@@ -808,6 +808,7 @@ function onChromeClick(e) {
   if (e.target.closest('[data-back]')) { goBack(); return; }
   if (e.target.closest('[data-collapse]')) { const a = $('.app'); const on = !a.classList.contains('mini'); a.classList.toggle('mini', on); try { localStorage.setItem('hader-mini', on ? '1' : '0'); } catch { } return; }
   if (e.target.closest('[data-bell]')) { toggleBell(); return; }
+  if (e.target.closest('[data-bell-close]')) { closeBell(); return; }
   if (e.target.closest('#npop a')) { closeBell(); return; }
   const b = e.target.closest('[data-logout],[data-role],[data-clock]'); if (!b) return;
   if (b.dataset.logout !== undefined) { activeRoleKey = null; db.logout(); location.hash = ''; route(); }
@@ -820,18 +821,28 @@ let bellFresh = null;
 function renderBell() {
   const p = $('#npop'); if (!p || p.hidden) return;
   const c = ctx(); const list = db.notes(c.inbox).slice(0, 8);
-  p.innerHTML = `<div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)"><b style="flex:1;font-size:16px">الإشعارات</b><a href="#/notes" class="small" style="color:var(--teal-ink);font-weight:700">كل الإشعارات</a></div>
-    <div style="padding:0 14px">${notesList(list, bellFresh)}</div>`;
+  p.innerHTML = `<div class="npop-head"><b style="flex:1;font-size:16px">الإشعارات</b><a href="#/notes" class="small" style="color:var(--teal-ink);font-weight:700">كل الإشعارات</a><button type="button" class="iconbtn sm npop-close" data-bell-close aria-label="إغلاق" style="width:28px;height:28px;min-height:28px;border-radius:8px">${icon('x', 15)}</button></div>
+    <div style="padding:0 12px">${notesList(list, bellFresh)}</div>`;
 }
 function toggleBell() { const p = $('#npop'); if (!p) return; if (p.hidden) openBell(); else closeBell(); }
 function openBell() {
   const p = $('#npop'), b = $('[data-bell]'); const c = ctx();
   bellFresh = new Set(db.notes(c.inbox).filter(n => !n.read).map(n => n.id));
   p.hidden = false; b.setAttribute('aria-expanded', 'true'); renderBell();
+  if (window.innerWidth <= 760 && b) {
+    const r = b.getBoundingClientRect();
+    const top = Math.max(12, Math.min(r.bottom + 8, window.innerHeight - 280));
+    p.style.top = top + 'px';
+    p.style.maxHeight = Math.max(220, window.innerHeight - top - 82) + 'px';
+  } else {
+    p.style.top = '';
+    p.style.maxHeight = '';
+  }
   if (bellFresh.size) db.readAll(c.inbox); // count goes to zero, new ones stay highlighted in the panel
 }
-function closeBell() { const p = $('#npop'); if (p) p.hidden = true; $('[data-bell]')?.setAttribute('aria-expanded', 'false'); bellFresh = null; }
+function closeBell() { const p = $('#npop'); if (p) { p.hidden = true; p.style.top = ''; p.style.maxHeight = ''; } $('[data-bell]')?.setAttribute('aria-expanded', 'false'); bellFresh = null; }
 document.addEventListener('mousedown', e => { if (!e.target.closest('.bellwrap')) closeBell(); });
+document.addEventListener('click', e => { if (e.target.closest('#npop [data-ev]')) closeBell(); }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeBell(); });
 
 function changePwModal() {
