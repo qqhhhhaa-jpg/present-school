@@ -77,14 +77,13 @@ NAV.admin = NAV.owner;
 const NAV_PERM = { inbox: 'inbox', reports: 'reports', promotion: 'reports', exemptions: 'exemptions' };
 function navFor(c) { const items = NAV[c.role]; if (c.role !== 'teacher') return items; const tid = c.roleInfo.teacherId; return items.filter(([id]) => !NAV_PERM[id] || db.teacherCan(tid, NAV_PERM[id])); }
 const SIDE_GROUPS = [
-  ['', ['dashboard', 'teacher', 'parent', 'me']],
+  ['المتابعة اليومية', ['dashboard', 'teacher', 'parent', 'me']],
   ['حضور الطلاب', ['attendance', 'students', 'classes', 'reports', 'myatt']],
   ['دوام الكادر', ['staffAtt']],
   ['أجهزة واستثناءات البصمة', ['exemptions', 'devices']],
   ['التعليم', ['timetable', 'posts', 'marks', 'promotion']],
-  ['التواصل', ['inbox', 'ask']],
+  ['التواصل والإشعارات', ['inbox', 'ask', 'notes']],
   ['النظام', ['users', 'audit', 'school']],
-  ['', ['notes']],
 ];
 // Phone: four main sections in the bottom bar, everything else in «المزيد» (a sheet that slides up).
 const PRIMARY = { owner: ['dashboard', 'attendance', 'posts', 'inbox'], admin: ['dashboard', 'attendance', 'posts', 'inbox'], teacher: ['teacher', 'attendance', 'posts', 'marks'], parent: ['parent', 'posts', 'marks', 'ask'], student: ['me', 'timetable', 'posts', 'marks'] };
@@ -146,8 +145,8 @@ function badgeFor(c, id) {
 function shell(c, name) {
   const items = navFor(c);
   const link = ([id, label, ic]) => { const n = badgeFor(c, id); return `<a href="#/${id}" class="${id === name ? 'on' : ''}" ${id === name ? 'aria-current="page"' : ''} title="${label}"><i class="ni" style="--ic:${TILE[id] || '#2B428C'}">${icon(ic, 17)}</i><span>${label}</span>${n ? `<span class="cnt">${n}</span>` : ''}</a>`; };
-  // Sidebar: items grouped under small headings (only when the list is long enough to need it).
-  const groups = items.length > 6 ? SIDE_GROUPS.map(([label, ids]) => [label, items.filter(it => ids.includes(it[0]))]).filter(g => g[1].length) : [['', items]];
+  // Sidebar: always group items under clear section headings for every role (including parent).
+  const groups = SIDE_GROUPS.map(([label, ids]) => [label, items.filter(it => ids.includes(it[0]))]).filter(g => g[1].length);
   const placed = new Set(groups.flatMap(g => g[1].map(it => it[0])));
   const rest = items.filter(it => !placed.has(it[0])); if (rest.length) groups.push(['', rest]);
   const navHtml = groups.map(([label, its]) => `${label ? `<div class="nsec">${label}</div>` : ''}${its.map(link).join('')}`).join('');
