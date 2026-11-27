@@ -221,7 +221,7 @@ const SECTION_SEARCH_CONFIG = {
   classes: {
     isGlobal: false,
     badge: 'الصفوف والشعب',
-    placeholder: 'بحث في الصفوف والشعب والمربين...',
+    placeholder: 'بحث في الصفوف والشعب والمشرفين...',
     title: 'بحث في الصفوف والشعب'
   },
   section: {
@@ -489,7 +489,7 @@ function bindSearch(root) {
         const matched = secs.filter(s => norm(db.sectionLabel(s.id)).includes(nq) || norm(s.homeroom || '').includes(nq) || String(s.room || '').includes(q));
         items = matched.map(s => ({
           href: `#/section/${s.id}`,
-          html: `<span class="tip" style="width:42px;height:42px;border-radius:13px">${icon('grade', 16)}<b>${esc(db.grade(s.gradeId).short)}</b></span><div style="flex:1;min-width:0"><b>${mark(db.sectionLabel(s.id))}</b><div class="muted small">مربي الشعبة: ${esc(s.homeroom || '—')} · ${db.students(s.id).length} طالباً · قاعة <span class="num">${s.room}</span></div></div>`
+          html: `<span class="tip" style="width:42px;height:42px;border-radius:13px">${icon('grade', 16)}<b>${esc(db.grade(s.gradeId).short)}</b></span><div style="flex:1;min-width:0"><b>${mark(db.sectionLabel(s.id))}</b><div class="muted small">مشرف الشعبة: ${esc(s.homeroom || '—')} · ${db.students(s.id).length} طالباً · قاعة <span class="num">${s.room}</span></div></div>`
         }));
         $$('#live .card, #live .sec, #live [data-addsec]', current?.el).forEach(el => {
           const text = el.textContent || '';

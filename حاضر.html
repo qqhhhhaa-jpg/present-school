@@ -2796,7 +2796,7 @@ function ruleAnswer(text, studentId, asker) {
   if (!f) return null;
   if (has(t, 'تبرير', 'عذر', 'ابرر', 'مريض', 'مريضه')) {
     if (asker !== 'parent') return { text: 'تبرير الغياب يسويه ولي الأمر من حسابه.' };
-    return f.today.status === 'absent' && !f.today.excuse ? { text: `${f.first} مسجّل غائب اليوم. تكدر تبرر غيابه هسه ويوصل التبرير لمربي الشعبة تلقائياً.`, actions: [{ kind: 'excuse', label: `تبرير غياب ${f.first}` }] }
+    return f.today.status === 'absent' && !f.today.excuse ? { text: `${f.first} مسجّل غائب اليوم. تكدر تبرر غيابه هسه ويوصل التبرير لمشرف الشعبة تلقائياً.`, actions: [{ kind: 'excuse', label: `تبرير غياب ${f.first}` }] }
       : { text: f.today.excuse ? `انسجل تبرير اليوم لـ${f.first}: ${f.today.excuse}.` : `${f.first} مو مسجّل غائب اليوم، فما يحتاج تبرير.` };
   }
   if (has(t, 'حضور', 'حضر', 'وصل', 'غياب', 'غايب', 'غائب', 'تاخر', 'متاخر', 'انصرف', 'طلع', 'اليوم', 'بصم')) {
@@ -2824,7 +2824,7 @@ function ruleAnswer(text, studentId, asker) {
     const today = x.off ? 'اليوم ما بيه دوام.' : `${x.cur >= 0 && x.row[x.cur] ? `هسه ${periodName(x.cur)}: ${x.row[x.cur].subject}. ` : ''}${x.next >= 0 && x.row[x.next] ? `الجاية: ${x.row[x.next].subject} (${x.ps[x.next].label}).` : ''}`;
     return { text: `${today}${wd <= 4 && pub[wd] ? `\nجدول ${WEEK[wd]}: ${listOf(pub[wd])}.` : ''}`, actions: [{ kind: 'link', label: 'الجدول الأسبوعي', href: '#/timetable' }] };
   }
-  if (has(t, 'مدرس', 'استاذ', 'ست', 'مربي', 'شعبه', 'صف')) return { text: `${f.first} بـ${f.section}${f.homeroom ? `، ومربي الشعبة ${f.homeroom}` : ''}. إذا تريد توصل رسالة للمدرس، أحوّلها للإدارة وتوصله.`, actions: [{ kind: 'escalate', label: 'حوّل رسالتي للمدرسة' }] };
+  if (has(t, 'مدرس', 'استاذ', 'ست', 'مربي', 'مشرف', 'شعبه', 'صف')) return { text: `${f.first} بـ${f.section}${f.homeroom ? `، ومشرف الشعبة ${f.homeroom}` : ''}. إذا تريد توصل رسالة للمدرس، أحوّلها للإدارة وتوصله.`, actions: [{ kind: 'escalate', label: 'حوّل رسالتي للمدرسة' }] };
   return null;
 }
 // A question the assistant could not settle goes to the administration (and the homeroom teacher).
@@ -3388,7 +3388,7 @@ const attendance = {
           </select>
         </label>
         <label class="field" style="flex:1;min-width:220px">بحث عن صف أو شعبة
-          <input class="input" id="app-q" value="${esc(att.appQ || '')}" placeholder="اسم الصف، الشعبة أو المربي">
+          <input class="input" id="app-q" value="${esc(att.appQ || '')}" placeholder="اسم الصف، الشعبة أو مشرف الشعبة">
         </label>
         <div class="ap-kpis" aria-label="ملخص المدرسة">
           <div class="ap-kpi"><b>${schoolStudents.length}</b><span>الطلاب</span></div>
@@ -3486,7 +3486,7 @@ const attendance = {
         <div style="min-width:0">
           <h2>${esc(db.sectionLabel(currentSec?.id))}</h2>
           <div class="ap-meta">
-            ${currentSec?.homeroom ? `<span class="ap-chip">المربي: <b>${esc(currentSec.homeroom)}</b></span>` : ''}
+            ${currentSec?.homeroom ? `<span class="ap-chip">مشرف الشعبة: <b>${esc(currentSec.homeroom)}</b></span>` : ''}
             ${currentSec?.room ? `<span class="ap-chip">القاعة: <b>${esc(currentSec.room)}</b></span>` : ''}
             <span class="ap-chip">الطلاب: <b>${list.length}</b></span>
           </div>
@@ -3928,7 +3928,7 @@ function excuseModal(s, onDone) {
   modal(`تبرير غياب: ${s.name}`, `
     <div class="seg" role="group" aria-label="السبب">${['مريض', 'ظرف عائلي', 'سفر', 'سبب آخر'].map(r => `<button data-r="${r}" aria-pressed="${r === reason}">${r}</button>`).join('')}</div>
     <label class="field">ملاحظة (اختياري)<textarea class="input" id="note" rows="3" style="padding:10px;min-height:80px"></textarea></label>
-    <div class="muted small">يُسجَّل في المنصة تلقائياً ويصل لمربي الشعبة.</div>
+    <div class="muted small">يُسجَّل في المنصة تلقائياً ويصل لمشرف الشعبة.</div>
     <button class="btn pr" id="send">إرسال التبرير</button>`, (m, close) => {
     m.addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (b) { reason = b.dataset.r; $$('[data-r]', m).forEach(x => x.setAttribute('aria-pressed', x === b)); } });
     $('#send', m).onclick = () => { db.addExcuse(s.id, reason, $('#note', m).value.trim(), ctx().name); close(); toast('أُرسل التبرير', `${s.name} · ${reason}`); onDone?.(); };
@@ -4317,7 +4317,7 @@ function sectionModal(gradeId) {
     <div class="grid g2" style="gap:12px">
       <label class="field" data-k="name">اسم الشعبة<input class="input" name="name" value="${g0 ? esc(db.nextSectionName(g0.id)) : 'أ'}" placeholder="مثال: ج أو أدبي"><span class="help">الاسم المقترح الحرف الجاي.</span></label>
       <label class="field">رقم القاعة (اختياري)<input class="input num" name="room" type="number" min="1" inputmode="numeric"></label></div>
-    <label class="field">مربي الشعبة (اختياري)<select class="input" name="homeroom"><option value="">بدون</option>${db.teachers().map(t => `<option value="${esc(t.name)}">${esc(t.name)} · ${esc(t.subject || '')}</option>`).join('')}</select></label>
+    <label class="field">مشرف الشعبة (اختياري)<select class="input" name="homeroom"><option value="">بدون</option>${db.teachers().map(t => `<option value="${esc(t.name)}">${esc(t.name)} · ${esc(t.subject || '')}</option>`).join('')}</select></label>
     <button class="btn pr" style="min-height:48px">إضافة الشعبة</button></form>`, (m, close) => {
     const f = $('#sf2', m);
     f.gradeName.oninput = () => { const g = db.gradeByName(f.gradeName.value); f.name.value = g ? db.nextSectionName(g.id) : 'أ'; };
@@ -4336,7 +4336,7 @@ const section = {
     const s = db.section(id); const sc = scope();
     if (!s || (sc.sections && !sc.sections.includes(id))) { el.innerHTML = topbar('غير متاح', '') + '<div class="card empty">هذه الشعبة خارج صلاحيتك.</div>'; return; }
     const canAdd = ['owner', 'admin'].includes(ctx().role);
-    el.innerHTML = topbar(db.sectionLabel(id), `${sub()} · مربي الشعبة: ${esc(s.homeroom || '—')} · القاعة <span class="num">${s.room}</span>`, canAdd ? `<button class="btn" id="imps">${icon('upload', 18)}استيراد من Excel / Word</button><button class="btn pr" id="adds">${icon('plus', 18)}إضافة يدوي</button>` : '') + `<div id="live" style="display:flex;flex-direction:column;gap:16px"></div>`;
+    el.innerHTML = topbar(db.sectionLabel(id), `${sub()} · مشرف الشعبة: ${esc(s.homeroom || '—')} · القاعة <span class="num">${s.room}</span>`, canAdd ? `<button class="btn" id="imps">${icon('upload', 18)}استيراد من Excel / Word</button><button class="btn pr" id="adds">${icon('plus', 18)}إضافة يدوي</button>` : '') + `<div id="live" style="display:flex;flex-direction:column;gap:16px"></div>`;
     $('#imps', el)?.addEventListener('click', () => importModal(id));
     $('#adds', el)?.addEventListener('click', () => addStudentModal(id));
     this.update(el, id);
@@ -4860,7 +4860,7 @@ const reports = {
       el.innerHTML = topbar('تقرير الحضور الشهري', `${sub()} · اختر الشعبة لفتح تقريرها`) + `
       <div class="card ap-bar">
         <label class="field" style="flex:1;min-width:220px">بحث عن صف أو شعبة
-          <input class="input" id="rep-aq" value="${esc(rep.appQ || '')}" placeholder="اسم الصف، الشعبة أو المربي">
+          <input class="input" id="rep-aq" value="${esc(rep.appQ || '')}" placeholder="اسم الصف، الشعبة أو مشرف الشعبة">
         </label>
       </div><div id="rep-apps"></div>`;
       const draw = () => {
@@ -4879,7 +4879,7 @@ const reports = {
               return `<button type="button" class="ap-tile" data-open-sec="${s.id}" style="--st:${stColor(rate)}" aria-label="فتح تقرير ${esc(g.name)} شعبة ${esc(s.name)}">
                 <div class="ap-top">
                   <span class="ap-ico" style="--ic:${secColors[si % 6]}"><b>${esc(s.name)}</b><small>${esc(g.short || 'شعبة')}</small></span>
-                  <span class="ap-ttl"><div>${esc(g.name)} · شعبة ${esc(s.name)}</div><p>${s.homeroom ? `المربي: ${esc(s.homeroom)}` : 'لا يوجد مربٍّ معيّن'}${s.room ? ` · قاعة ${esc(s.room)}` : ''}</p></span>
+                  <span class="ap-ttl"><div>${esc(g.name)} · شعبة ${esc(s.name)}</div><p>${s.homeroom ? `مشرف الشعبة: ${esc(s.homeroom)}` : 'لا يوجد مشرف معيّن'}${s.room ? ` · قاعة ${esc(s.room)}` : ''}</p></span>
                   <span class="ap-rate">${rate}<small>%</small></span>
                 </div>
                 <div class="ap-meter"><i style="width:${rate}%"></i></div>
@@ -4906,7 +4906,7 @@ const reports = {
         <div style="min-width:0">
           <h2>${esc(db.sectionLabel(rep.sec))}</h2>
           <div class="ap-meta">
-            ${cur?.homeroom ? `<span class="ap-chip">المربي: <b>${esc(cur.homeroom)}</b></span>` : ''}
+            ${cur?.homeroom ? `<span class="ap-chip">مشرف الشعبة: <b>${esc(cur.homeroom)}</b></span>` : ''}
             ${cur?.room ? `<span class="ap-chip">القاعة: <b>${esc(cur.room)}</b></span>` : ''}
             <span class="ap-chip">الطلاب: <b>${db.students(rep.sec).length}</b></span>
           </div>
@@ -6020,7 +6020,7 @@ const askView = {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const m = db.chatOf(c.inbox).find(x => x.id === a.dataset.msg); const act = m?.actions?.[+a.dataset.act]; if (!act) return;
       if (act.kind === 'link') location.hash = act.href;
-      if (act.kind === 'excuse') excuseModal(db.student(m.kid || ask.kid), () => { db.chatPush(c.inbox, { from: 'bot', text: 'انسجل التبرير ووصل لمربي الشعبة. ✓' }); this.update(el); });
+      if (act.kind === 'excuse') excuseModal(db.student(m.kid || ask.kid), () => { db.chatPush(c.inbox, { from: 'bot', text: 'انسجل التبرير ووصل لمشرف الشعبة. ✓' }); this.update(el); });
       if (act.kind === 'escalate') { const qq = m.q || [...db.chatOf(c.inbox)].reverse().find(x => x.from === 'user')?.text || ''; m.actions = []; db.escalate(c.inbox, { name: c.name, role, studentId: m.kid || ask.kid, question: qq }); this.update(el); }
     });
     this.update(el);
@@ -7880,7 +7880,7 @@ const SECTION_SEARCH_CONFIG = {
   classes: {
     isGlobal: false,
     badge: 'الصفوف والشعب',
-    placeholder: 'بحث في الصفوف والشعب والمربين...',
+    placeholder: 'بحث في الصفوف والشعب والمشرفين...',
     title: 'بحث في الصفوف والشعب'
   },
   section: {
@@ -8148,7 +8148,7 @@ function bindSearch(root) {
         const matched = secs.filter(s => norm(db.sectionLabel(s.id)).includes(nq) || norm(s.homeroom || '').includes(nq) || String(s.room || '').includes(q));
         items = matched.map(s => ({
           href: `#/section/${s.id}`,
-          html: `<span class="tip" style="width:42px;height:42px;border-radius:13px">${icon('grade', 16)}<b>${esc(db.grade(s.gradeId).short)}</b></span><div style="flex:1;min-width:0"><b>${mark(db.sectionLabel(s.id))}</b><div class="muted small">مربي الشعبة: ${esc(s.homeroom || '—')} · ${db.students(s.id).length} طالباً · قاعة <span class="num">${s.room}</span></div></div>`
+          html: `<span class="tip" style="width:42px;height:42px;border-radius:13px">${icon('grade', 16)}<b>${esc(db.grade(s.gradeId).short)}</b></span><div style="flex:1;min-width:0"><b>${mark(db.sectionLabel(s.id))}</b><div class="muted small">مشرف الشعبة: ${esc(s.homeroom || '—')} · ${db.students(s.id).length} طالباً · قاعة <span class="num">${s.room}</span></div></div>`
         }));
         $$('#live .card, #live .sec, #live [data-addsec]', current?.el).forEach(el => {
           const text = el.textContent || '';

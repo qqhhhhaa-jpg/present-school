@@ -1805,7 +1805,7 @@ export function ruleAnswer(text, studentId, asker) {
   if (!f) return null;
   if (has(t, 'تبرير', 'عذر', 'ابرر', 'مريض', 'مريضه')) {
     if (asker !== 'parent') return { text: 'تبرير الغياب يسويه ولي الأمر من حسابه.' };
-    return f.today.status === 'absent' && !f.today.excuse ? { text: `${f.first} مسجّل غائب اليوم. تكدر تبرر غيابه هسه ويوصل التبرير لمربي الشعبة تلقائياً.`, actions: [{ kind: 'excuse', label: `تبرير غياب ${f.first}` }] }
+    return f.today.status === 'absent' && !f.today.excuse ? { text: `${f.first} مسجّل غائب اليوم. تكدر تبرر غيابه هسه ويوصل التبرير لمشرف الشعبة تلقائياً.`, actions: [{ kind: 'excuse', label: `تبرير غياب ${f.first}` }] }
       : { text: f.today.excuse ? `انسجل تبرير اليوم لـ${f.first}: ${f.today.excuse}.` : `${f.first} مو مسجّل غائب اليوم، فما يحتاج تبرير.` };
   }
   if (has(t, 'حضور', 'حضر', 'وصل', 'غياب', 'غايب', 'غائب', 'تاخر', 'متاخر', 'انصرف', 'طلع', 'اليوم', 'بصم')) {
@@ -1833,7 +1833,7 @@ export function ruleAnswer(text, studentId, asker) {
     const today = x.off ? 'اليوم ما بيه دوام.' : `${x.cur >= 0 && x.row[x.cur] ? `هسه ${periodName(x.cur)}: ${x.row[x.cur].subject}. ` : ''}${x.next >= 0 && x.row[x.next] ? `الجاية: ${x.row[x.next].subject} (${x.ps[x.next].label}).` : ''}`;
     return { text: `${today}${wd <= 4 && pub[wd] ? `\nجدول ${WEEK[wd]}: ${listOf(pub[wd])}.` : ''}`, actions: [{ kind: 'link', label: 'الجدول الأسبوعي', href: '#/timetable' }] };
   }
-  if (has(t, 'مدرس', 'استاذ', 'ست', 'مربي', 'شعبه', 'صف')) return { text: `${f.first} بـ${f.section}${f.homeroom ? `، ومربي الشعبة ${f.homeroom}` : ''}. إذا تريد توصل رسالة للمدرس، أحوّلها للإدارة وتوصله.`, actions: [{ kind: 'escalate', label: 'حوّل رسالتي للمدرسة' }] };
+  if (has(t, 'مدرس', 'استاذ', 'ست', 'مربي', 'مشرف', 'شعبه', 'صف')) return { text: `${f.first} بـ${f.section}${f.homeroom ? `، ومشرف الشعبة ${f.homeroom}` : ''}. إذا تريد توصل رسالة للمدرس، أحوّلها للإدارة وتوصله.`, actions: [{ kind: 'escalate', label: 'حوّل رسالتي للمدرسة' }] };
   return null;
 }
 // A question the assistant could not settle goes to the administration (and the homeroom teacher).
