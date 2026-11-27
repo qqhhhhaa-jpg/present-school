@@ -508,7 +508,7 @@ const attendance = {
               ${isHoliday ? `<span class="pill p-quiet">${icon('calendar', 13)} عطلة</span>` : `<b class="num" style="font-size:20px;color:var(--${gc}-ink)">${gx.rate}%</b>`}
             </div>
             ${isHoliday ? '' : `<div class="bar" style="flex:none"><i style="width:${gx.rate}%;background:var(--${gc})"></i></div>`}
-            <div class="secs">${secs.map(s => { const y = db.summary(db.students(s.id), att.day); return `<button type="button" class="sec ${isHoliday ? '' : y.absent ? 'warn' : 'ok'}" data-open-sec="${s.id}" title="فتح حضور ${esc(g.name)} شعبة ${esc(s.name)}"><b>${esc(s.name)}</b><span>${isHoliday ? 'عطلة رسمية' : `${y.came} من ${y.total} حاضر`}</span></button>`; }).join('')}</div>
+            <div class="secs">${secs.map((s, si) => { const y = db.summary(db.students(s.id), att.day); return `<button type="button" class="sec sc c${si % 6}" data-open-sec="${s.id}" title="فتح حضور ${esc(g.name)} شعبة ${esc(s.name)}"><b>${esc(s.name)}</b><span class="sn"><i>الكل <b>${y.total}</b></i>${isHoliday ? '<i>عطلة رسمية</i>' : `<i>الحضور <b>${y.came}</b></i>`}</span></button>`; }).join('')}</div>
           </div>`;
         }).join('')}</div>`).join('') : `<div class="empty">لا توجد شعب مطابقة لبحثك</div>`}
       `;
