@@ -496,14 +496,14 @@ const attendance = {
         </div>
       </div>
 
-      ${gradesWithSecs.length ? [...new Set(gradesWithSecs.map(x => x.grade.stage))].map(stage => `
-        <h2 style="margin:6px 0 10px">المرحلة ${esc(String(stage || '').replace('ال', ''))}</h2>
+      ${gradesWithSecs.length ? [...new Set(gradesWithSecs.map(x => x.grade.stage))].map((stage, sti) => `
+        <div class="stg-h st${sti % 3}"><span class="stg-i">${icon('grade', 16)}</span><h2>المرحلة ${esc(String(stage || '').replace('ال', ''))}</h2><span class="stg-c">${gradesWithSecs.filter(x => x.grade.stage === stage).length} صف</span></div>
         <div class="tiles" style="margin-bottom:18px">${gradesWithSecs.filter(x => x.grade.stage === stage).map(({ grade: g, secs }) => {
           const gl = secs.flatMap(s => db.students(s.id)); const gx = db.summary(gl, att.day);
           const gc = gx.rate >= 90 ? 'teal' : 'amber';
           return `<div class="tile">
             <div style="display:flex;gap:12px;align-items:center">
-              <span class="ti">${esc(g.short || g.name.slice(0, 2))}</span>
+              <span class="tip st${sti % 3}">${icon('grade', 20)}<b>${esc(g.short || g.name.slice(0, 2))}</b></span>
               <div style="flex:1;min-width:0"><b style="font-size:17px">${esc(g.name)}</b><div class="muted small">${secs.length} شعبة · ${gl.length} طالباً</div></div>
               ${isHoliday ? `<span class="pill p-quiet">${icon('calendar', 13)} عطلة</span>` : `<b class="num" style="font-size:20px;color:var(--${gc}-ink)">${gx.rate}%</b>`}
             </div>
