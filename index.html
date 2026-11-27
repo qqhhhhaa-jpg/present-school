@@ -7621,11 +7621,18 @@ function disableTotp(password, code) {
 }
 function resetUserTotp(phone, by) {
   const p = normalizePhone(phone);
+  if (!p) return { ok: false, error: 'رقم غير صالح.' };
+  if (OWNERS.some(o => o.phone === p) && !OWNERS.some(o => o.phone === session()?.phone)) {
+    return { ok: false, error: 'لا يمكن إعادة ضبط Google Authenticator لحساب الأدمن إلا من الأدمن نفسه.' };
+  }
   saveTotpEntry(p, null);
-  log('إعادة ضبط Google Authenticator', `${rolesFor(p)[0]?.name || p}`, by);
+  const c = (S.creds || {})[p];
+  if (S.smsFails) delete S.smsFails[p];
+  if (S.fails && c?.username) delete S.fails['2fa_' + c.username];
+  log('إعادة ضبط Google Authenticator (QR)', `${rolesFor(p)[0]?.name || p}${c?.username ? ` · ${c.username}` : ''}`, by);
   save();
   emit('creds');
-  return { ok: true };
+  return { ok: true, name: rolesFor(p)[0]?.name || p };
 }
 function verifyLoginTotp(token, code) {
   if (!pending2fa || !safeCompare(pending2fa.token, String(token || '')) || pending2fa.until < Date.now()) {
@@ -11234,7 +11241,12 @@ const users = {
     <div class="card tablewrap" id="live"></div>`;
     $('#nu', el).onclick = () => accountModal();
     $('#uq', el).oninput = e => { usr.q = e.target.value; this.update(el); };
-    el.addEventListener('click', e => { const r = e.target.closest('[data-ur]'); if (r) { usr.role = r.dataset.ur; this.update(el); } const ed = e.target.closest('[data-edit]'); if (ed) accountModal(ed.dataset.edit); const g = e.target.closest('[data-gen]'); if (g) showCreds(g.dataset.gen); });
+    el.addEventListener('click', e => {
+      const r = e.target.closest('[data-ur]'); if (r) { usr.role = r.dataset.ur; this.update(el); return; }
+      const ed = e.target.closest('[data-edit]'); if (ed) { accountModal(ed.dataset.edit); return; }
+      const g = e.target.closest('[data-gen]'); if (g) { showCreds(g.dataset.gen); return; }
+      const rt = e.target.closest('[data-reset-totp]'); if (rt) { resetUserTotpModal(rt.dataset.resetTotp, () => this.update(el)); return; }
+    });
     this.update(el);
   },
   update(el) {
@@ -11243,13 +11255,43 @@ const users = {
     $('#ur', el).innerHTML = [['', 'الكل', all.length], ...Object.entries(ROLE_LABEL).map(([k, l]) => [k, l, counts[k] || 0])].map(([k, l, n]) => `<button data-ur="${k}" aria-pressed="${usr.role === k}">${l} <span class="num">${n}</span></button>`).join('');
     const q = usr.q.trim(); const d = q.replace(/\D/g, '');
     const list = all.filter(a => (!usr.role || a.roles.some(r => r.role === usr.role)) && (!q || a.roles.some(r => r.name.includes(q)) || (d && a.phone.includes(d))));
-    $('#live', el).innerHTML = `<table><thead><tr><th>المستخدم</th><th>الرقم</th><th>الأدوار</th><th>دخول الموقع</th><th>الحالة</th><th></th></tr></thead><tbody>${list.slice(0, 150).map(a => `<tr style="${a.owner ? 'background:var(--surface-300)' : ''}"><td><b>${esc(a.roles[0]?.name || '')}</b></td><td class="num">${fmtPhone(a.phone)}</td>
+    const meIsOwner = ctx()?.role === 'owner';
+    $('#live', el).innerHTML = `<table><thead><tr><th>المستخدم</th><th>الرقم</th><th>الأدوار</th><th>دخول الموقع</th><th>الحالة</th><th></th></tr></thead><tbody>${list.slice(0, 150).map(a => {
+      const tfa = db.totpStatus(a.phone);
+      const canResetQr = !a.owner || meIsOwner;
+      return `<tr style="${a.owner ? 'background:var(--surface-300)' : ''}"><td><b>${esc(a.roles[0]?.name || '')}</b></td><td class="num">${fmtPhone(a.phone)}</td>
       <td>${a.roles.filter(r => !r.viaGuardian).map(r => `<span class="pill ${r.role === 'owner' ? 'p-left' : 'p-quiet'}">${ROLE_LABEL[r.role]}</span>`).join(' ')}${a.owner ? ' <span class="pill p-present">كامل الصلاحيات</span>' : ''}${(() => { const tt = db.teachers().find(x => x.phone === a.phone); return tt ? `<div class="muted small" style="margin-top:3px">${esc(tt.subject)} · ${esc(db.teacherScopeText(tt))}${Object.values(db.teacherPerms(tt.id)).some(v => !v) ? ' · صلاحيات محدودة' : ''}</div>` : ''; })()}</td>
-      <td>${(() => { const cr = db.credOf(a.phone); if (cr) return `<span class="num" dir="ltr" style="font-weight:700">${esc(cr.username)}</span>${cr.pending ? ' <span class="pill p-late">بانتظار التفعيل</span>' : ''}`; return db.isStaff(a.phone) ? `<button class="btn sm pr" data-gen="${a.phone}">توليد يوزر</button>` : '<span class="muted small">برقم الهاتف</span>'; })()}</td>
+      <td>${(() => { const cr = db.credOf(a.phone); const badge = tfa.enabled ? ' <span class="pill p-present" style="font-size:10.5px" title="مربوط بـ Google Authenticator">QR مربوط ✓</span>' : ''; if (cr) return `<span class="num" dir="ltr" style="font-weight:700">${esc(cr.username)}</span>${cr.pending ? ' <span class="pill p-late">بانتظار التفعيل</span>' : ''}${badge}`; return db.isStaff(a.phone) ? `<button class="btn sm pr" data-gen="${a.phone}">توليد يوزر</button>${badge}` : `<span class="muted small">برقم الهاتف</span>${badge}`; })()}</td>
       <td>${a.disabled ? '<span class="pill p-absent">موقوف</span>' : '<span class="pill p-present">فعّال</span>'}</td>
-      <td>${a.owner ? '<span class="muted small">لا يُعدَّل</span>' : `<button class="btn sm" data-edit="${a.phone}">تعديل</button>`}</td></tr>`).join('')}</tbody></table>${list.length > 150 ? `<div class="muted small">يظهر أول 150 من ${list.length}. استخدم البحث.</div>` : ''}`;
+      <td style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap">${canResetQr && tfa.enabled ? `<button type="button" class="btn sm" data-reset-totp="${a.phone}" title="فك ربط Google Authenticator وإظهار رمز QR من جديد">${icon('shield', 13)}تصفير QR</button>` : ''}${a.owner ? '<span class="muted small">لا يُعدَّل</span>' : `<button class="btn sm" data-edit="${a.phone}">تعديل</button>`}</td></tr>`;
+    }).join('')}</tbody></table>${list.length > 150 ? `<div class="muted small">يظهر أول 150 من ${list.length}. استخدم البحث.</div>` : ''}`;
   },
 };
+function resetUserTotpModal(phone, onDone) {
+  const acc = db.accounts().find(a => a.phone === phone);
+  const name = acc?.roles[0]?.name || phone;
+  const cr = db.credOf(phone);
+  const c = ctx();
+  modal('إعادة ضبط Google Authenticator', `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>هل تريد فك ربط <b>Google Authenticator</b> عن حساب <b>${esc(name)}</b> (<span class="num" dir="ltr">${fmtPhone(phone)}</span>${cr ? ` · <span class="num" dir="ltr">${esc(cr.username)}</span>` : ''})؟</div>
+      <div class="card" style="padding:10px 14px;background:var(--amber-soft);border-color:var(--amber);font-size:13px">
+        سيتم إلغاء الربط القديم وفك أي قفل محاولات، وعند تسجيل الدخول القادم <b>سيظهر رمز QR جديد</b> لهذا الشخص ليربط هاتفه من جديد بشكل صحيح.
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="btn" data-close>إلغاء</button>
+        <button type="button" class="btn pr" id="ok-rtfa">${icon('shield', 15)}تأكيد تصفير QR</button>
+      </div>
+    </div>`, (m, close) => {
+    $('#ok-rtfa', m).onclick = () => {
+      const r = db.resetUserTotp(phone, c?.name || 'الأدمن');
+      if (!r.ok) { toast(r.error || 'تعذر إعادة الضبط', '', 'absent'); return; }
+      close();
+      toast('تم تصفير ربط Google Authenticator', `${r.name} · سيظهر له رمز QR جديد بالدخول القادم`);
+      onDone?.();
+    };
+  });
+}
 function accountModal(phone) {
   const acc = phone ? db.accounts().find(a => a.phone === phone) : null;
   const t = acc && db.teachers().find(x => x.phone === phone);
@@ -11275,6 +11317,7 @@ function accountModal(phone) {
         ${Object.entries(db.TEACHER_PERMS).map(([k, l]) => `<div class="row" style="padding:7px 0"><span style="flex:1">${l}</span><button type="button" class="toggle" role="switch" data-perm="${k}" aria-checked="${t ? db.teacherPerms(t.id)[k] : true}" aria-label="${l}"></button></div>`).join('')}
       </details>
     ${acc && db.isStaff(acc.phone) ? (() => { const cr = db.credOf(acc.phone); return `<div class="row"><span style="flex:1"><b>دخول الموقع</b><div class="muted small">${cr ? `اليوزر <b class="num" dir="ltr">${esc(cr.username)}</b> · ${cr.pending ? 'ما فعّل حسابه بعد' : 'إعادة التعيين تلغي رمزه ويضع رمز جديد'}` : 'ما عنده يوزر بعد'}</div></span><button type="button" class="btn sm ${cr ? '' : 'pr'}" data-gen="${acc.phone}">${cr ? 'إعادة تعيين الرمز' : 'توليد يوزر ورمز'}</button></div>`; })() : ''}
+    ${acc ? (() => { const tfa = db.totpStatus(acc.phone); return `<div class="row"><span style="flex:1"><b>ربط Google Authenticator (QR)</b><div class="muted small">${tfa.enabled ? 'مربوط حالياً · إعادة الضبط تفك الربط وتظهر رمز QR جديد بالدخول القادم' : 'غير مربوط بعد (سيظهر له رمز QR عند تفعيل الربط)'}</div></span><button type="button" class="btn sm" data-rtfa-acc="${acc.phone}" ${tfa.enabled ? '' : 'disabled'}>${icon('shield', 13)}تصفير QR</button></div>`; })() : ''}
     <div class="row"><span style="flex:1"><b>إيقاف الحساب</b><div class="muted small">ما يكدر يدخل، والبيانات تبقى</div></span><button type="button" class="toggle" role="switch" data-t="disabled" aria-checked="${!!acc?.disabled}" aria-label="إيقاف الحساب"></button></div>
     <button class="btn pr" style="min-height:48px">حفظ</button></form>`, (m, close) => {
     let scope = t?.scope || 'sections';
@@ -11294,7 +11337,7 @@ function accountModal(phone) {
       const pm = e.target.closest('[data-perm]'); if (pm) { pm.setAttribute('aria-checked', pm.getAttribute('aria-checked') !== 'true'); summary(); return; }
     });
     setTimeout(summary);
-    m.addEventListener('click', e => { const g = e.target.closest('[data-gen]'); if (g) { close(); showCreds(g.dataset.gen); return; } const tg = e.target.closest('[data-t]'); if (tg) { tg.setAttribute('aria-checked', tg.getAttribute('aria-checked') !== 'true'); if (tg.dataset.t === 'teacher') $('#tbox', m).hidden = tg.getAttribute('aria-checked') !== 'true'; } });
+    m.addEventListener('click', e => { const rt = e.target.closest('[data-rtfa-acc]'); if (rt) { close(); resetUserTotpModal(rt.dataset.rtfaAcc); return; } const g = e.target.closest('[data-gen]'); if (g) { close(); showCreds(g.dataset.gen); return; } const tg = e.target.closest('[data-t]'); if (tg) { tg.setAttribute('aria-checked', tg.getAttribute('aria-checked') !== 'true'); if (tg.dataset.t === 'teacher') $('#tbox', m).hidden = tg.getAttribute('aria-checked') !== 'true'; } });
     $('#uf', m).onsubmit = e => {
       e.preventDefault(); const f = new FormData(e.target); const on = k => $(`[data-t="${k}"]`, m).getAttribute('aria-checked') === 'true';
       const perms = Object.fromEntries($$('[data-perm]', m).map(b => [b.dataset.perm, b.getAttribute('aria-checked') === 'true']));

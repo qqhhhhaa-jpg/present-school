@@ -1493,11 +1493,18 @@ export function disableTotp(password, code) {
 }
 export function resetUserTotp(phone, by) {
   const p = normalizePhone(phone);
+  if (!p) return { ok: false, error: 'رقم غير صالح.' };
+  if (OWNERS.some(o => o.phone === p) && !OWNERS.some(o => o.phone === session()?.phone)) {
+    return { ok: false, error: 'لا يمكن إعادة ضبط Google Authenticator لحساب الأدمن إلا من الأدمن نفسه.' };
+  }
   saveTotpEntry(p, null);
-  log('إعادة ضبط Google Authenticator', `${rolesFor(p)[0]?.name || p}`, by);
+  const c = (S.creds || {})[p];
+  if (S.smsFails) delete S.smsFails[p];
+  if (S.fails && c?.username) delete S.fails['2fa_' + c.username];
+  log('إعادة ضبط Google Authenticator (QR)', `${rolesFor(p)[0]?.name || p}${c?.username ? ` · ${c.username}` : ''}`, by);
   save();
   emit('creds');
-  return { ok: true };
+  return { ok: true, name: rolesFor(p)[0]?.name || p };
 }
 export function verifyLoginTotp(token, code) {
   if (!pending2fa || !safeCompare(pending2fa.token, String(token || '')) || pending2fa.until < Date.now()) {
