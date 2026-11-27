@@ -364,7 +364,6 @@ const attendance = {
     $('#day', el).onchange = e => { att.day = +e.target.value; this.update(el); };
     $('#sec', el).onchange = e => { att.sec = e.target.value; this.update(el); };
     $('#aq', el).oninput = e => { att.q = e.target.value; this.update(el); };
-    $('#att-hol-btn', el)?.addEventListener('click', () => officialHolidayModal(att.day, null, () => this.update(el)));
     el.addEventListener('click', e => {
       if (e.target.closest('#att-hol-btn')) {
         officialHolidayModal(att.day, null, () => this.update(el));
