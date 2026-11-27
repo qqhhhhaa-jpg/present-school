@@ -415,6 +415,11 @@ const attendance = {
         this.update(el);
         return;
       }
+      const pickStu = e.target.closest('[data-pick-stu]');
+      if (pickStu) {
+        this.pickStudent(el, pickStu.dataset.pickStu);
+        return;
+      }
       if (e.target.closest('#btn-back-to-apps')) {
         att.sec = '';
         att.q = '';
@@ -465,18 +470,24 @@ const attendance = {
 
     // 1. APPS DASHBOARD VIEW (When no section is selected)
     if (!att.sec || !allowedSecs.some(s => s.id === att.sec)) {
-      const q = (att.appQ || '').trim().toLowerCase();
+      const q = (att.appQ || '').trim();
+      const nq = norm(q);
       const allGrades = db.grades();
       const schoolStudents = sc.sections ? db.students().filter(s => sc.sections.includes(s.sectionId)) : db.students();
       const schoolSummary = db.summary(schoolStudents, att.day);
 
-      // Filter sections based on search
+      // Filter sections based on search (grade name, short code like 5ع/2م, section name, supervisor, stage)
       const filteredSecs = allowedSecs.filter(s => {
-        if (!q) return true;
+        if (!nq) return true;
         const g = db.grade(s.gradeId);
-        const text = `${g?.name || ''} ${s.name} ${s.homeroom || ''} ${g?.stage || ''}`.toLowerCase();
-        return text.includes(q);
+        const text = `${g?.name || ''} ${g?.short || ''} ${s.name} ${s.homeroom || ''} ${g?.stage || ''}`;
+        return norm(text).includes(nq);
       });
+
+      // Also search students by name, number, or deviceId
+      const matchedStudents = nq ? schoolStudents.filter(s =>
+        norm(s.name).includes(nq) || String(s.no || '').includes(q) || String(s.deviceId || '').includes(q)
+      ) : [];
 
       // Group sections by Grade
       const gradesWithSecs = allGrades.map((g, idx) => {
@@ -484,7 +495,38 @@ const attendance = {
         return { grade: g, secs, colorIndex: idx };
       }).filter(g => g.secs.length > 0);
 
-      const stColor = r => r >= 90 ? 'var(--teal)' : r >= 75 ? 'var(--amber)' : 'var(--red)';
+      const stuResultsHtml = matchedStudents.length ? `
+        <div class="card" style="margin-bottom:16px;padding:14px 16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="ki t" style="width:28px;height:28px;border-radius:9px">${icon('users', 14)}</span>
+              <h2 style="margin:0;font-size:15px">نتائج البحث في الطلاب</h2>
+              <span class="pill p-quiet num">${matchedStudents.length}</span>
+            </div>
+            ${matchedStudents.length > 25 ? `<span class="muted small">يُعرض أول 25 نتيجة</span>` : ''}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${matchedStudents.slice(0, 25).map(s => {
+              const x = db.statusOf(s.id, att.day);
+              const isH = x.status === 'holiday';
+              return `<div class="row" style="padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface-100);gap:10px;flex-wrap:wrap">
+                <a href="#/student/${s.id}" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:10px;flex:1;min-width:180px">
+                  ${avatar(s.name, x.status, db.photoOf(s.id))}
+                  <div style="min-width:0">
+                    <b style="display:block">${esc(s.name)}</b>
+                    <div class="muted small">${esc(db.sectionLabel(s.sectionId))} · رقم <span class="num">${s.no}</span>${x.inEv ? ` · وصول <span class="num">${fmtTime(x.inEv.ts)}</span>` : ''}</div>
+                  </div>
+                </a>
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                  ${isH ? '<span class="pill" style="background:#E0E7FF;color:#3730A3;border:1px solid #C7D2FE">عطلة رسمية</span>' : pill(x.status)}
+                  ${!isH && isToday && can('att') && (x.status === 'pending' || x.status === 'absent') ? `<button type="button" class="btn sm pr" data-mark="${s.id}">حضور يدوي</button><button type="button" class="btn sm" data-excuse="${s.id}">عذر</button>` : ''}
+                  <button type="button" class="btn sm" data-pick-stu="${s.id}">فتح الشعبة</button>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>` : '';
+
       container.innerHTML = `
       <div class="card ap-bar">
         <label class="field" style="min-width:190px">اليوم
@@ -492,8 +534,8 @@ const attendance = {
             ${db.days().map((d, i) => `<option value="${d}" ${d === att.day ? 'selected' : ''}>${i === 0 ? 'اليوم · ' : ''}${fmtDay(new Date(d))}</option>`).join('')}
           </select>
         </label>
-        <label class="field" style="flex:1;min-width:220px">بحث عن صف أو شعبة
-          <input class="input" id="app-q" value="${esc(att.appQ || '')}" placeholder="اسم الصف، الشعبة أو مشرف الشعبة">
+        <label class="field" style="flex:1;min-width:220px">بحث عن طالب أو صف أو شعبة
+          <input class="input" id="app-q" value="${esc(att.appQ || '')}" placeholder="اسم الطالب، رقمه، اسم الصف، الشعبة أو مشرف الشعبة">
         </label>
         <div class="ap-kpis" aria-label="ملخص المدرسة">
           <div class="ap-kpi"><b>${schoolStudents.length}</b><span>الطلاب</span></div>
@@ -503,6 +545,8 @@ const attendance = {
           <div class="ap-kpi a"><b>${schoolSummary.late}</b><span>متأخر</span></div>`}
         </div>
       </div>
+
+      ${stuResultsHtml}
 
       ${gradesWithSecs.length ? [...new Set(gradesWithSecs.map(x => x.grade.stage))].map((stage, sti) => `
         <div class="stg-h st${sti % 3}"><span class="stg-i">${icon('grade', 16)}</span><h2>المرحلة ${esc(String(stage || '').replace('ال', ''))}</h2><span class="stg-c">${gradesWithSecs.filter(x => x.grade.stage === stage).length} صف</span></div>
@@ -518,7 +562,7 @@ const attendance = {
             ${isHoliday ? '' : `<div class="bar" style="flex:none"><i style="width:${gx.rate}%;background:var(--${gc})"></i></div>`}
             <div class="secs">${secs.map((s, si) => { const ss = db.students(s.id); const n = ss.length; const y = db.summary(ss, att.day); const pct = n ? Math.round(y.came / n * 100) : 0; return `<button type="button" class="sec sc c${si % 6}" data-open-sec="${s.id}" title="فتح حضور ${esc(g.name)} شعبة ${esc(s.name)}"><span class="sl">${esc(shortSecIcon(s, g))}</span><span class="sb"><span class="sn">الكل <em>${n}</em></span><span class="sp">${isHoliday ? 'عطلة رسمية' : `حاضر <em>${y.came}</em>`}</span><span class="sm"><i style="width:${isHoliday ? 0 : pct}%"></i></span></span></button>`; }).join('')}</div>
           </div>`;
-        }).join('')}</div>`).join('') : `<div class="empty">لا توجد شعب مطابقة لبحثك</div>`}
+        }).join('')}</div>`).join('') : (!matchedStudents.length ? `<div class="empty">لا توجد نتائج مطابقة لبحثك (لا طلاب ولا شعب)</div>` : '')}
       `;
 
       $('#day', container).onchange = e => { att.day = +e.target.value; this.update(el); };
@@ -560,13 +604,14 @@ const attendance = {
     ];
 
     const q = (att.q || '').trim();
+    const nq = norm(q);
     const shown = rows.filter(r => {
       const matchFilter = att.f === 'all'
         ? true
         : att.f === 'exempt'
           ? r.x.exempt
           : (r.x.status === att.f || (att.f === 'late' && r.x.late));
-      return matchFilter && (!q || r.s.name.includes(q));
+      return matchFilter && (!nq || norm(r.s.name).includes(nq) || String(r.s.no || '').includes(q));
     });
 
     const tableNotice = isHoliday ? `
