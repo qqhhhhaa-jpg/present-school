@@ -191,7 +191,8 @@ async function dailyReportPdf() {
     let x = W - M; g.fillStyle = '#F5F7FA'; g.fillRect(M, y, W - 2 * M, rowH); g.fillStyle = NAVY; g.font = F(700, 22);
     cols.forEach(([l, w]) => { g.fillText(l, x - 12, y + rowH * .64); x -= w; }); y += rowH; g.font = F(400, 22);
     data.forEach((r, i) => { x = W - M; if (i % 2) { g.fillStyle = '#FBFCFD'; g.fillRect(M, y, W - 2 * M, rowH); } r.forEach((v, j) => { g.fillStyle = typeof v === 'object' ? v.c : NAVY; g.fillText(String(typeof v === 'object' ? v.t : v), x - 12, y + rowH * .64); x -= cols[j][1]; }); g.strokeStyle = LINE; g.lineWidth = 1.5; g.beginPath(); g.moveTo(M, y + rowH); g.lineTo(W - M, y + rowH); g.stroke(); y += rowH; });
-    return y; };
+    return y;
+  };
   pages.push(await pdfPage(g => {
     header(g, hol ? 'اليوم عطلة، الأرقام من آخر يوم دوام' : '');
     const k = [['إجمالي الطلاب', c.total, NAVY], ['حاضر بالوقت', c.came - late.length, TEAL], ['متأخر', late.length, AMBER], ['غائب', c.absent, RED], ['بعذر', c.excused, '#7A5BB0'], ['نسبة الحضور', c.rate + '%', TEAL]];
@@ -203,17 +204,20 @@ async function dailyReportPdf() {
     const data = rows.map(r => { const ln = lateIn(r.s.id); return [db.sectionLabel(r.s.id), r.y.total, r.y.came - ln, ln, { t: r.y.absent, c: r.y.absent ? RED : NAVY }, r.y.excused, { t: r.y.rate + '%', c: r.y.rate >= 90 ? TEAL : r.y.rate >= 80 ? '#8A5A0B' : RED }]; });
     table(g, 535, [['الشعبة', 330], ['العدد', 130], ['حاضر', 130], ['متأخر', 130], ['غائب', 130], ['بعذر', 120], ['النسبة', 110]], data);
     g.fillStyle = MUTED; g.font = F(400, 22); g.fillText(`الدوام ${st.start} – ${st.end} · التأخير بعد ${st.late} · الغياب يُحسب بعد ${st.absentAt}`, W - M, 1660);
-    footer(g); }));
+    footer(g);
+  }));
   const list = [...absent.map(s => [s.name, db.sectionShort(s.sectionId), { t: 'غائب', c: RED }, '—', db.absentStreak(s.id) > 1 ? `${db.absentStreak(s.id)} أيام متتالية` : '']),
-    ...excused.map(s => [s.name, db.sectionShort(s.sectionId), { t: 'بعذر', c: '#7A5BB0' }, '—', db.statusOf(s.id, day).excuse?.reason || '']),
-    ...late.map(o => [o.s.name, db.sectionShort(o.s.sectionId), { t: 'متأخر', c: '#8A5A0B' }, fmtTime(o.x.inEv.ts), ''])];
+  ...excused.map(s => [s.name, db.sectionShort(s.sectionId), { t: 'بعذر', c: '#7A5BB0' }, '—', db.statusOf(s.id, day).excuse?.reason || '']),
+  ...late.map(o => [o.s.name, db.sectionShort(o.s.sectionId), { t: 'متأخر', c: '#8A5A0B' }, fmtTime(o.x.inEv.ts), ''])];
   const PER = 24;
   for (let i = 0; i < Math.max(1, Math.ceil(list.length / PER)); i++) {
     const chunk = list.slice(i * PER, (i + 1) * PER);
-    pages.push(await pdfPage(g => { header(g, 'الغياب والتأخير'); g.fillStyle = NAVY; g.font = F(700, 30); g.fillText(`الغائبون والمتأخرون${list.length > PER ? ` (${i + 1})` : ''}`, W - M, 250);
+    pages.push(await pdfPage(g => {
+      header(g, 'الغياب والتأخير'); g.fillStyle = NAVY; g.font = F(700, 30); g.fillText(`الغائبون والمتأخرون${list.length > PER ? ` (${i + 1})` : ''}`, W - M, 250);
       if (!chunk.length) { g.fillStyle = MUTED; g.font = F(400, 26); g.fillText('ما أكو غياب ولا تأخير بهذا اليوم.', W - M, 320); }
       else table(g, 280, [['اسم الطالب', 420], ['الشعبة', 160], ['الحالة', 150], ['وقت الوصول', 170], ['ملاحظة', 180]], chunk, 52);
-      footer(g); }));
+      footer(g);
+    }));
   }
   return { blob: jpegsToPdf(pages), name: `تقرير-الحضور-${dt.getDate()}-${dt.getMonth() + 1}-${dt.getFullYear()}.pdf` };
 }
@@ -364,6 +368,7 @@ const attendance = {
     $('#day', el).onchange = e => { att.day = +e.target.value; this.update(el); };
     $('#sec', el).onchange = e => { att.sec = e.target.value; this.update(el); };
     $('#aq', el).oninput = e => { att.q = e.target.value; this.update(el); };
+    $('#att-hol-btn', el)?.addEventListener('click', () => officialHolidayModal(att.day, null, () => this.update(el)));
     el.addEventListener('click', e => {
       if (e.target.closest('#att-hol-btn')) {
         officialHolidayModal(att.day, null, () => this.update(el));
@@ -445,21 +450,45 @@ const attendance = {
     });
     $('#tbl', el).innerHTML = shown.length ? `<table><thead><tr><th>الطالب</th><th>الشعبة</th><th>الوصول</th><th>الانصراف</th><th>الطريقة</th><th>الحالة</th><th></th></tr></thead><tbody>
       ${shown.map(({ s, x }) => {
-        const isH = x.status === 'holiday';
-        return `<tr><td><a href="#/student/${s.id}" style="color:inherit;display:flex;gap:10px;align-items:center;text-decoration:none">${avatar(s.name, x.status, db.photoOf(s.id))}<b>${esc(s.name)}</b></a></td>
+      const isH = x.status === 'holiday';
+      return `<tr><td><a href="#/student/${s.id}" style="color:inherit;display:flex;gap:10px;align-items:center;text-decoration:none">${avatar(s.name, x.status, db.photoOf(s.id))}<b>${esc(s.name)}</b></a></td>
           <td class="muted">${esc(db.sectionShort(s.sectionId))}</td>
           <td class="num">${x.inEv ? `<button class="evlink" data-ev="${x.inEv.id}" title="إثبات الوصول">${fmtTime(x.inEv.ts)} ${icon('eye', 13)}</button>` : (isH ? '<span class="muted small">—</span>' : x.exempt ? '<span class="muted small">مستثنى رسمياً</span>' : '—')}</td>
           <td class="num">${x.outEv ? `<button class="evlink" data-ev="${x.outEv.id}" title="إثبات الانصراف">${fmtTime(x.outEv.ts)} ${icon('eye', 13)}</button>` : (isH ? '<span class="muted small">—</span>' : '—')}</td>
           <td class="muted small">${isH ? '<span style="color:#4338CA;font-weight:600">عطلة معفاة رسمياً</span>' : x.inEv ? esc(x.inEv.method) : x.excuse ? esc(x.excuse.reason) : (x.exempt ? `<span title="${esc(x.exemption?.reason || '')}">حالة خاصة 🛡️</span>` : '—')}</td>
           <td>${isH ? '<span class="pill" style="background:#E0E7FF;color:#3730A3;border:1px solid #C7D2FE">عطلة رسمية 🏖️</span>' : pill(x.status)}${x.status === 'left' && x.late ? ' ' + pill('late') : ''}${x.exempt && !isH ? ` <span class="pill" style="background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE" title="مستثنى بقرار: ${esc(x.exemption?.reason || '')}">مستثنى 🛡️</span>` : ''}</td>
           <td style="white-space:nowrap">${!isH && isToday && can('att') && (x.status === 'pending' || x.status === 'absent') ? `<button class="btn sm" data-mark="${s.id}">حضور يدوي</button> <button class="btn sm" data-excuse="${s.id}">عذر</button>` : ''}</td></tr>`;
-      }).join('')}
+    }).join('')}
       </tbody></table>` : `<div class="empty">لا يوجد طلاب بهذه الحالة</div>`;
   },
 };
 
 function holBannerHtml(holInfo, isHoliday, canManage, day) {
-  if (!isHoliday && !holInfo) return '';
+  const allHols = db.holidays();
+  if (!isHoliday && !holInfo) {
+    if (canManage && allHols.length > 0) {
+      const nearest = allHols.find(h => h.day >= day) || allHols[0];
+      return `
+      <div class="card" style="background:var(--surface-200);border:1px solid var(--border);border-radius:12px;padding:10px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:24px;width:40px;height:40px;background:var(--surface-300);border-radius:10px;display:flex;align-items:center;justify-content:center">${nearest.badge || '🏛️'}</span>
+          <div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-weight:700;color:var(--ink)">عطلة مسجلة في المستودع: ${esc(nearest.name)}</span>
+              ${nearest.status === 'draft' ? `<span class="pill" style="background:#FDE68A;color:#92400E;font-size:11px;font-weight:700">مسودة</span>` : `<span class="pill" style="background:#DCFCE7;color:#166534;font-size:11px;font-weight:700">منشورة</span>`}
+            </div>
+            <div class="muted small">${nearest.day} · ${esc(nearest.category || 'عطلة')} ${nearest.orderNo ? `· ${esc(nearest.orderNo)}` : ''}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${nearest.status === 'draft' ? `<button type="button" class="btn sm pr" data-publish-hol="${nearest.day}">${icon('send', 13)} نشر للكل</button>` : ''}
+          <button type="button" class="btn sm" data-edit-hol="${nearest.day}" style="font-weight:700;border-color:var(--brand);color:var(--brand)">${icon('edit', 13)} تعديل العطلة والشعار</button>
+          <button type="button" class="btn sm danger" data-del-hol="${nearest.day}" style="font-weight:700">${icon('trash', 13)} حذف العطلة</button>
+        </div>
+      </div>`;
+    }
+    return '';
+  }
   if (holInfo) {
     const isDraft = holInfo.status === 'draft';
     return `
@@ -627,30 +656,31 @@ function officialHolidayModal(defaultDay, editDay = null, onDone = null) {
       </div>
     </div>
 
-    <details style="margin-top:4px" ${allHols.length ? 'open' : 'hidden'}>
-      <summary style="cursor:pointer;font-weight:700;padding:6px 0">
-        مستودع وسجل العطلات الرسمية المعلنة (${allHols.length})
-      </summary>
-      <div style="max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-top:6px" id="hol-list-box">
+    <div style="background:var(--surface-200);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:6px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-weight:700;color:var(--ink);font-size:14px">📂 مستودع وسجل كافة العطلات المعلنة (${allHols.length})</span>
+        <span class="muted small">أزرار التعديل والحذف والنشر</span>
+      </div>
+      <div style="max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:6px" id="hol-list-box">
         ${allHols.length ? allHols.map(h => {
           const isD = h.status === 'draft';
           return `
-          <div class="row" style="background:var(--surface-200);padding:8px 12px;border-radius:8px;gap:8px;align-items:center">
-            <span style="font-size:20px;flex:none">${h.badge || '🏛️'}</span>
+          <div class="row" style="background:var(--surface-100);padding:8px 12px;border-radius:8px;gap:8px;align-items:center;border:1px solid var(--border)">
+            <span style="font-size:22px;flex:none">${h.badge || '🏛️'}</span>
             <div style="flex:1">
               <div style="display:flex;gap:6px;align-items:center">
                 <b>${esc(h.name)}</b>
-                ${isD ? `<span class="pill" style="background:#FDE68A;color:#92400E;font-size:11px">مسودة</span>` : `<span class="pill" style="background:#DCFCE7;color:#166534;font-size:11px">منشورة</span>`}
+                ${isD ? `<span class="pill" style="background:#FDE68A;color:#92400E;font-size:11px;font-weight:700">مسودة</span>` : `<span class="pill" style="background:#DCFCE7;color:#166534;font-size:11px;font-weight:700">منشورة</span>`}
               </div>
               <div class="muted small">${h.day} · ${esc(h.category || 'عطلة')} ${h.orderNo ? `· ${esc(h.orderNo)}` : ''}</div>
             </div>
-            ${isD ? `<button type="button" class="btn sm pr" data-pop-pub-hol="${h.day}" title="نشر الآن">${icon('send', 13)} نشر للكل</button>` : ''}
-            <button type="button" class="btn sm" data-pop-edit-hol="${h.day}" title="تعديل">${icon('edit', 13)} تعديل</button>
-            <button type="button" class="btn sm danger" data-pop-del-hol="${h.day}" title="حذف">${icon('trash', 13)} حذف</button>
+            ${isD ? `<button type="button" class="btn sm pr" data-pop-pub-hol="${h.day}" title="نشر للجميع">${icon('send', 13)} نشر</button>` : ''}
+            <button type="button" class="btn sm" data-pop-edit-hol="${h.day}" style="font-weight:700;border-color:var(--brand);color:var(--brand)">${icon('edit', 13)} تعديل</button>
+            <button type="button" class="btn sm danger" data-pop-del-hol="${h.day}" style="font-weight:700">${icon('trash', 13)} حذف</button>
           </div>
-        `}).join('') : '<div class="muted small">لا توجد عطلات مسجلة حالياً.</div>'}
+        `}).join('') : '<div class="muted small" style="text-align:center;padding:10px 0">لا توجد عطلات مسجلة في المستودع حالياً. بمجرد إضافة عطلة من النموذج أعلاه، ستظهر هنا فوراً مع أزرار [تعديل] و [حذف] و [نشر].</div>'}
       </div>
-    </details>
+    </div>
 
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px;align-items:center;flex-wrap:wrap">
       ${isEditing ? `<button type="button" class="btn danger" id="btn-modal-del-active" style="margin-inline-end:auto">${icon('trash', 15)} حذف هذه العطلة</button>` : ''}
@@ -998,13 +1028,15 @@ const student = {
         <div class="card"><h3>ولي الأمر</h3><div class="row"><span style="flex:1"><b>${esc(g.name)}</b>${g.relation ? ` · ${esc(g.relation)}` : ''}</span><span class="num" dir="ltr">${['owner', 'admin'].includes(c.role) ? fmtPhone(g.phone) : maskPhone(g.phone)}</span></div>
           <div class="muted small">أولاده في المدرسة: ${db.childrenOf(g.id).map(k => esc(db.first(k.name))).join('، ')}</div></div>
         <div class="card"><h3>صورة بصمة الوجه</h3>
-          ${(() => { const ph = db.photosOf(s.id); const first = ph[0], last = ph.length > 1 ? ph[ph.length - 1] : null; const canCap = ['owner', 'admin'].includes(c.role);
-            if (!first) return `<div style="display:flex;gap:14px;align-items:center;margin:8px 0"><div class="facebox empty">${icon('child', 44)}</div><div style="flex:1"><div class="small muted">${s.face ? 'البصمة مسجّلة على الجهاز من قبل، بس ما أكو صورة محفوظة بالمنصة.' : 'ما انسجلت بصمة الوجه بعد.'}</div>${canCap ? `<button class="btn sm pr" data-face style="margin-top:8px">${icon('plus', 16)}التقاط الصورة الآن</button>` : ''}</div></div>`;
-            return `<div style="display:flex;gap:14px;align-items:flex-start;margin:8px 0"><figure class="facebox"><img src="${first.data}" alt="صورة ${esc(s.name)} الأولى"><figcaption>الصورة الأولى</figcaption></figure>
+          ${(() => {
+        const ph = db.photosOf(s.id); const first = ph[0], last = ph.length > 1 ? ph[ph.length - 1] : null; const canCap = ['owner', 'admin'].includes(c.role);
+        if (!first) return `<div style="display:flex;gap:14px;align-items:center;margin:8px 0"><div class="facebox empty">${icon('child', 44)}</div><div style="flex:1"><div class="small muted">${s.face ? 'البصمة مسجّلة على الجهاز من قبل، بس ما أكو صورة محفوظة بالمنصة.' : 'ما انسجلت بصمة الوجه بعد.'}</div>${canCap ? `<button class="btn sm pr" data-face style="margin-top:8px">${icon('plus', 16)}التقاط الصورة الآن</button>` : ''}</div></div>`;
+        return `<div style="display:flex;gap:14px;align-items:flex-start;margin:8px 0"><figure class="facebox"><img src="${first.data}" alt="صورة ${esc(s.name)} الأولى"><figcaption>الصورة الأولى</figcaption></figure>
               <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px"><div class="small"><b>انسجلت:</b> ${fmtDay(new Date(first.ts))} · <span class="num">${fmtTime(first.ts)}</span></div>${first.by ? `<div class="small"><b>بواسطة:</b> ${esc(first.by)}</div>` : ''}
                 <div class="small muted">هذي أول صورة انأخذت للطالب وما تتغير أبداً، حتى تقارن بيها وتتأكد إنه نفس الطالب.</div>
                 ${last ? `<div style="display:flex;gap:8px;align-items:center;margin-top:4px"><img src="${last.data}" alt="" style="width:46px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--line)"><span class="small muted">آخر تحديث ${fmtDay(new Date(last.ts))}${last.by ? ' · ' + esc(last.by) : ''} (${ph.length - 1} تحديث)</span></div>` : ''}
-                ${canCap ? `<button class="btn sm" data-face style="align-self:flex-start">تحديث الصورة</button>` : ''}</div></div>`; })()}
+                ${canCap ? `<button class="btn sm" data-face style="align-self:flex-start">تحديث الصورة</button>` : ''}</div></div>`;
+      })()}
           ${db.devices().map(d => { const st = s.sync ? s.sync[d.id] : 'done'; return `<div class="row"><span style="flex:1">${esc(d.name)}</span>${st === 'done' ? '<span class="pill p-present">تمّت المزامنة</span>' : st === 'queued' ? '<span class="pill p-late">بانتظار الاتصال</span>' : '<span class="pill p-pending">جاري الإرسال…</span>'}</div>`; }).join('')}
           <div class="muted small" style="margin-top:6px">صورة الوجه تُرسل للجهاز فيصنع منها البصمة، والبصمة نفسها تبقى داخل الجهاز.</div></div>
       </div></div>`;
@@ -1034,7 +1066,7 @@ function faceModal(s) {
     const vid = $('#vid', m); let stream = null, lvl = -1, iv = null;
     const stop = () => { clearInterval(iv); stream?.getTracks().forEach(t => t.stop()); };
     const watch = setInterval(() => { if (!document.body.contains(m)) { stop(); clearInterval(watch); } }, 500);
-    
+
     const checkBrightness = () => {
       if (!stream || !vid.videoWidth) return 0;
       try {
@@ -1043,7 +1075,7 @@ function faceModal(s) {
         ctx.drawImage(vid, 0, 0, 32, 32);
         const data = ctx.getImageData(0, 0, 32, 32).data;
         let sum = 0;
-        for (let i = 0; i < data.length; i += 4) sum += data[i] + data[i+1] + data[i+2];
+        for (let i = 0; i < data.length; i += 4) sum += data[i] + data[i + 1] + data[i + 2];
         return sum / (32 * 32 * 3);
       } catch { return 50; }
     };
@@ -1148,8 +1180,8 @@ function faceModal(s) {
         if (!document.body.contains(m)) { stop(); return; }
         vid.srcObject = stream;
         vid.style.display = 'block';
-        vid.onloadedmetadata = () => { vid.play().catch(() => {}); };
-        await vid.play().catch(() => {});
+        vid.onloadedmetadata = () => { vid.play().catch(() => { }); };
+        await vid.play().catch(() => { });
         $('#camnote', m).textContent = 'خلي الوجه بالنص، بدون نظارة شمسية أو كمامة';
 
         // Enumerate video devices
@@ -1451,10 +1483,10 @@ const teacher = {
     const myTone = { present: 'var(--teal-soft)', late: 'var(--amber-soft)', left: 'var(--surface-200)', excused: 'var(--amber-soft)', pending: 'var(--surface-200)', absent: 'var(--red-soft)', holiday: 'var(--surface-200)' }[mySt.status];
     const myPill = mySt.status === 'present' ? '<span class="pill p-present">حاضر بالموعد ✓</span>'
       : mySt.status === 'late' ? '<span class="pill p-late">متأخر ⏱</span>'
-      : mySt.status === 'left' ? '<span class="pill p-left">انصرفت ⏏</span>'
-      : mySt.status === 'excused' ? `<span class="pill p-excused">إجازة: ${esc(mySt.excuse?.reason || 'عذر')}</span>`
-      : mySt.status === 'pending' ? '<span class="pill p-quiet">بانتظار البصمة ⌛</span>'
-      : '<span class="pill p-absent">غائب</span>';
+        : mySt.status === 'left' ? '<span class="pill p-left">انصرفت ⏏</span>'
+          : mySt.status === 'excused' ? `<span class="pill p-excused">إجازة: ${esc(mySt.excuse?.reason || 'عذر')}</span>`
+            : mySt.status === 'pending' ? '<span class="pill p-quiet">بانتظار البصمة ⌛</span>'
+              : '<span class="pill p-absent">غائب</span>';
 
     const myAttCard = `
     <div class="card" style="background:${myTone};display:flex;flex-direction:column;gap:10px">
@@ -1475,11 +1507,13 @@ const teacher = {
       </div>
     </div>`;
 
-    box.innerHTML = myAttCard + teacherTasksCard(t) + `<div class="grid g2">${t.sections.map(id => { const list = db.students(id); const x = db.summary(list); const missing = list.filter(s => ['pending', 'absent'].includes(db.statusOf(s.id).status));
+    box.innerHTML = myAttCard + teacherTasksCard(t) + `<div class="grid g2">${t.sections.map(id => {
+      const list = db.students(id); const x = db.summary(list); const missing = list.filter(s => ['pending', 'absent'].includes(db.statusOf(s.id).status));
       return `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><a href="#/section/${id}" style="color:inherit"><h2>${esc(db.sectionLabel(id))}</h2></a><b class="num" style="font-size:22px">${x.came} / ${x.total}</b></div>
         <div class="bar" style="margin:10px 0"><i style="width:${x.rate}%"></i></div>
         <div class="small muted" style="margin-bottom:4px">${missing.length ? 'لم يصلوا بعد / غائبون:' : 'كل الطلاب حاضرون'}</div>
-        ${missing.map(s => `<div class="row">${avatar(s.name, db.statusOf(s.id).status, db.photoOf(s.id))}<span style="flex:1">${esc(s.name)}</span>${pill(db.statusOf(s.id).status)}${can('att') ? `<button class="btn sm" data-mark="${s.id}">حاضر</button>` : ''}</div>`).join('')}</div>`; }).join('')}</div>
+        ${missing.map(s => `<div class="row">${avatar(s.name, db.statusOf(s.id).status, db.photoOf(s.id))}<span style="flex:1">${esc(s.name)}</span>${pill(db.statusOf(s.id).status)}${can('att') ? `<button class="btn sm" data-mark="${s.id}">حاضر</button>` : ''}</div>`).join('')}</div>`;
+    }).join('')}</div>
       ${exc.length ? `<div class="card"><h2>تبريرات غياب وصلتك</h2>${exc.map(n => `<div class="row"><span class="pill p-excused">عذر</span><span style="flex:1"><b>${esc(n.title.replace('تبرير غياب: ', ''))}</b> · ${esc(n.body)}</span></div>`).join('')}</div>` : ''}`;
   },
 };
@@ -1495,7 +1529,8 @@ const parent = {
   update(el) {
     const box = $('#live', el); if (!box) return;
     const kids = db.childrenOf(ctx().roleInfo.guardianId);
-    box.innerHTML = `<div class="grid g2">${kids.map(s => { const x = db.statusOf(s.id); const tone = { present: 'var(--teal-soft)', late: 'var(--amber-soft)', absent: 'var(--red-soft)', excused: 'var(--amber-soft)', left: 'var(--surface-200)', pending: 'var(--surface-200)', holiday: 'var(--surface-200)' }[x.status];
+    box.innerHTML = `<div class="grid g2">${kids.map(s => {
+      const x = db.statusOf(s.id); const tone = { present: 'var(--teal-soft)', late: 'var(--amber-soft)', absent: 'var(--red-soft)', excused: 'var(--amber-soft)', left: 'var(--surface-200)', pending: 'var(--surface-200)', holiday: 'var(--surface-200)' }[x.status];
       const line = { present: `وصل ${fmtTime(x.inEv?.ts)} · ${x.inEv?.method}`, late: `وصل متأخراً ${fmtTime(x.inEv?.ts)}`, left: `وصل ${fmtTime(x.inEv?.ts)} · انصرف ${fmtTime(x.outEv?.ts)}`, absent: 'لم يصل اليوم', excused: `غائب بعذر: ${x.excuse?.reason || ''}`, pending: 'لم يصل بعد', holiday: `عطلة: ${esc(db.holidayName())} · البصمة ما تنحسب` }[x.status];
       return `<div class="card" style="background:${tone};display:flex;flex-direction:column;gap:12px">
         <div style="display:flex;gap:12px;align-items:center">${avatar(s.name, x.status, db.photoOf(s.id))}<div style="flex:1"><h2>${esc(db.first(s.name))}</h2><div class="muted small">${esc(db.sectionLabel(s.sectionId))}</div></div>${pill(x.status)}</div>
@@ -1503,7 +1538,8 @@ const parent = {
         ${x.inEv || x.outEv ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${x.inEv ? `<button class="btn sm" data-ev="${x.inEv.id}">${icon('eye', 14)}إثبات الوصول ${fmtTime(x.inEv.ts)}</button>` : ''}${x.outEv ? `<button class="btn sm" data-ev="${x.outEv.id}">${icon('eye', 14)}إثبات الانصراف ${fmtTime(x.outEv.ts)}</button>` : ''}</div>` : ''}
         ${x.status === 'absent' ? `<button class="btn pr" data-excuse="${s.id}">تبرير الغياب</button>` : ''}
         <div style="display:flex;gap:6px">${db.days().slice(0, 6).reverse().map(d => { const y = db.statusOf(s.id, d); const col = { present: 'var(--teal)', left: 'var(--teal)', late: 'var(--amber)', absent: 'var(--red)', excused: 'var(--amber)', pending: 'var(--surface-300)', none: 'var(--surface-300)', holiday: 'var(--surface-300)' }[y.status]; return `<div style="flex:1;text-align:center"><div style="height:28px;border-radius:8px;background:${col}" title="${db.STATUS[y.status]}"></div><div class="small muted">${dayName(new Date(d))}</div></div>`; }).join('')}</div>
-      </div>`; }).join('')}</div>
+      </div>`;
+    }).join('')}</div>
       ${(() => {
         const gid = ctx().roleInfo.guardianId;
         const nMarks = db.newMarks(gid);
@@ -1777,7 +1813,7 @@ const reports = {
       <div class="card stat"><span class="pill p-late">تأخير</span><div class="n">${tot.l}</div><div class="muted small">مرة خلال الفترة</div></div>
       <div class="card stat"><span class="pill p-absent">غياب</span><div class="n">${tot.ab}</div><div class="muted small">بدون عذر</div></div>
       <div class="card stat"><span class="pill p-excused">بعذر</span><div class="n">${tot.e}</div><div class="muted small">غياب مبرَّر</div></div></div>
-    <div class="card tablewrap"><table class="mtab"><thead><tr><th style="min-width:170px">الطالب</th>${r.days.map(d => { const x = new Date(d); return `<th class="num" style="text-align:center;padding:6px 2px;font-size:11px">${x.getDate()}/${x.getMonth() + 1}<br><span style="font-weight:400">${['أحد','اثن','ثلا','أرب','خمي','جمع','سبت'][x.getDay()]}</span></th>`; }).join('')}<th>حضور</th><th>تأخير</th><th>غياب</th><th>النسبة</th></tr></thead><tbody>
+    <div class="card tablewrap"><table class="mtab"><thead><tr><th style="min-width:170px">الطالب</th>${r.days.map(d => { const x = new Date(d); return `<th class="num" style="text-align:center;padding:6px 2px;font-size:11px">${x.getDate()}/${x.getMonth() + 1}<br><span style="font-weight:400">${['أحد', 'اثن', 'ثلا', 'أرب', 'خمي', 'جمع', 'سبت'][x.getDay()]}</span></th>`; }).join('')}<th>حضور</th><th>تأخير</th><th>غياب</th><th>النسبة</th></tr></thead><tbody>
       ${(rep.q.trim() ? r.rows.filter(x => norm(x.s.name).includes(norm(rep.q))) : r.rows).map(x => `<tr id="rr-${x.s.id}" style="${x.s.id === rep.focus ? 'background:var(--teal-soft);outline:2px solid var(--teal);outline-offset:-2px' : ''}"><td><a href="#/student/${x.s.id}" style="color:inherit;text-decoration:none"><b>${esc(x.s.name)}</b></a></td>${x.cells.map(c => `<td style="padding:4px 2px;text-align:center"><span title="${db.STATUS[c.status]}" style="display:inline-flex;width:22px;height:22px;border-radius:6px;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:${CELL[c.status][0]};color:${c.status === 'excused' ? 'var(--amber-ink)' : c.status === 'late' ? 'var(--on-amber)' : '#fff'}">${CELL[c.status][1]}</span></td>`).join('')}
         <td class="num">${x.c.present}</td><td class="num">${x.c.late}</td><td class="num" style="${x.c.absent >= 3 ? 'color:var(--red-ink);font-weight:700' : ''}">${x.c.absent}</td><td><b class="num">${x.rate}%</b></td></tr>`).join('')}${rep.q.trim() && !r.rows.some(x => norm(x.s.name).includes(norm(rep.q))) ? `<tr><td colspan="${r.days.length + 5}" class="muted" style="text-align:center;padding:18px">ما أكو طالب بهذا الاسم بهاي الشعبة. جرّب البحث العام فوك، يوديك لشعبته.</td></tr>` : ''}
     </tbody></table></div>
@@ -1928,10 +1964,12 @@ function editPostModal(p) {
     <div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn" data-close>إلغاء</button><button class="btn pr">حفظ التعديل</button></div></form>`, (m, close) => {
     const box = $('[data-k="file"]', m);
     $('#rmf', m) && ($('#rmf', m).onclick = () => { removed = true; picked = null; $('#curf', m).hidden = true; $('#fname', m).textContent = 'إضافة صورة أو ملف PDF'; });
-    $('#efile', m).onchange = e => { const f = e.target.files[0]; box.classList.remove('err'); if (!f) return;
+    $('#efile', m).onchange = e => {
+      const f = e.target.files[0]; box.classList.remove('err'); if (!f) return;
       const bad = msg => { picked = null; e.target.value = ''; box.classList.add('err'); $('.help', box).textContent = msg; };
       const why = fileOk(f, fileRule(p.type)); if (why) return bad(why);
-      picked = f; removed = false; $('#fname', m).innerHTML = `<b>${esc(f.name)}</b> · ${fmtSize(f.size)} · راح يحل محل الملف القديم`; $('#fpick', m).classList.add('has'); };
+      picked = f; removed = false; $('#fname', m).innerHTML = `<b>${esc(f.name)}</b> · ${fmtSize(f.size)} · راح يحل محل الملف القديم`; $('#fpick', m).classList.add('has');
+    };
     $('#ef', m).onsubmit = async e => {
       e.preventDefault(); const fd = new FormData(e.target);
       let file; if (picked) { const id = await files.put(picked, picked.name); file = { id, name: picked.name, type: picked.type, size: picked.size }; } else if (removed) file = null;
@@ -1978,8 +2016,10 @@ const postsView = {
       // Filter chips: each type in its own colour, with its icon and how many posts it has.
       const allP = db.posts({ sections: sc.sections });
       const TONE = { '': ['#1E2B5C', '#E9ECF5', 'grid'], hw: ['#B9770E', '#FDF1DA', 'hw'], ann: ['#1E2B5C', '#E6EAF5', 'ann'], pdf: ['#C8453F', '#FBEAE9', 'pdf'], video: ['#0B7F70', '#E8F4F1', 'video'] };
-      $('#ptypes', el).innerHTML = [['', 'الكل'], ...Object.entries(db.POST_TYPES)].map(([k, l]) => { const [fg, bg, ic] = TONE[k] || TONE['']; const n = k ? allP.filter(p => p.type === k).length : allP.length; const on = postState.type === k;
-        return `<button class="tchip${on ? ' on' : ''}" data-pt="${k}" aria-pressed="${on}" style="--fg:${fg};--bg:${bg}"><span class="tci">${icon(ic, 15)}</span>${l}<span class="tcn num">${n}</span></button>`; }).join('');
+      $('#ptypes', el).innerHTML = [['', 'الكل'], ...Object.entries(db.POST_TYPES)].map(([k, l]) => {
+        const [fg, bg, ic] = TONE[k] || TONE['']; const n = k ? allP.filter(p => p.type === k).length : allP.length; const on = postState.type === k;
+        return `<button class="tchip${on ? ' on' : ''}" data-pt="${k}" aria-pressed="${on}" style="--fg:${fg};--bg:${bg}"><span class="tci">${icon(ic, 15)}</span>${l}<span class="tcn num">${n}</span></button>`;
+      }).join('');
       const list = db.posts({ sections: sc.sections, type: postState.type || undefined });
       box.innerHTML = list.length ? list.map(p => postCard(p, c)).join('') : '<div class="card empty">لا منشورات بعد. اضغط «نشر جديد».</div>';
       return;
@@ -2011,11 +2051,13 @@ function composeModal() {
     <div class="seg" role="group" id="aud"><button type="button" data-aud="all" aria-pressed="true">الطلاب وأولياء أمورهم</button><button type="button" data-aud="parents" aria-pressed="false">أولياء الأمور فقط</button></div>
     <button class="btn pr" style="min-height:48px">نشر وإرسال إشعار</button></form>`, (m, close) => {
     let aud = 'all'; let picked = null;
-    $('#pfile', m).onchange = e => { const f = e.target.files[0]; const box = $('[data-k="file"]', m); box.classList.remove('err'); $('.help', box).textContent = '';
+    $('#pfile', m).onchange = e => {
+      const f = e.target.files[0]; const box = $('[data-k="file"]', m); box.classList.remove('err'); $('.help', box).textContent = '';
       const rule = fileRule(type);
       const bad = msg => { picked = null; e.target.value = ''; $('#fname', m).textContent = rule.pick; $('#fpick', m).classList.remove('has'); box.classList.add('err'); $('.help', box).textContent = msg; };
       if (!f) return; const why = fileOk(f, rule); if (why) return bad(why);
-      picked = f; $('#fname', m).innerHTML = `<b>${esc(f.name)}</b> · ${fmtSize(f.size)}`; $('#fpick', m).classList.add('has'); };
+      picked = f; $('#fname', m).innerHTML = `<b>${esc(f.name)}</b> · ${fmtSize(f.size)}`; $('#fpick', m).classList.add('has');
+    };
     m.addEventListener('click', e => {
       const t = e.target.closest('[data-type]'); if (t) { type = t.dataset.type; $$('[data-type]', m).forEach(x => x.style.border = x === t ? '2px solid var(--brand)' : ''); $('#duef', m).hidden = type !== 'hw'; { const rule = fileRule(type); $('#flab', m).textContent = rule.label; $('#pfile', m).accept = rule.accept; if (picked && !rule.kinds.includes(fileKind(picked.name, picked.type))) { picked = null; $('#pfile', m).value = ''; $('#fpick', m).classList.remove('has'); } if (!picked) $('#fname', m).textContent = rule.pick; $('[data-k="file"] .help', m).textContent = rule.hint; } const hf = $('#holf', m); if (hf) hf.hidden = type !== 'ann'; }
       const hg = e.target.closest('[data-t="hol"]'); if (hg) { const on = hg.getAttribute('aria-checked') !== 'true'; hg.setAttribute('aria-checked', on); $('#holbox', m).hidden = !on; if (on && !$('[name=title]', m).value) $('[name=title]', m).value = 'غداً عطلة رسمية'; }
@@ -2151,16 +2193,21 @@ function accountModal(phone) {
     <div class="row"><span style="flex:1"><b>إيقاف الحساب</b><div class="muted small">ما يكدر يدخل، والبيانات تبقى</div></span><button type="button" class="toggle" role="switch" data-t="disabled" aria-checked="${!!acc?.disabled}" aria-label="إيقاف الحساب"></button></div>
     <button class="btn pr" style="min-height:48px">حفظ</button></form>`, (m, close) => {
     let scope = t?.scope || 'sections';
-    const summary = () => { const box = $('#scsum', m); if (!box) return; let ids = [];
+    const summary = () => {
+      const box = $('#scsum', m); if (!box) return; let ids = [];
       if (scope === 'all') ids = db.sections().map(x => x.id); else if (scope === 'grades') { const gs = $$('[name=grade]:checked', m).map(i => i.value); ids = db.sections().filter(x => gs.includes(x.gradeId)).map(x => x.id); } else ids = $$('[name=sec]:checked', m).map(i => i.value);
       box.innerHTML = ids.length ? `يشوف <b>${ids.length}</b> ${ids.length === 1 ? 'شعبة' : 'شعب'}: ${ids.slice(0, 8).map(id => esc(db.sectionShort(id))).join('، ')}${ids.length > 8 ? ' …' : ''}` : '<span style="color:var(--red-ink)">ما اخترت شعب بعد</span>';
-      const off = $$('[data-perm]', m).filter(b => b.getAttribute('aria-checked') !== 'true').length; $('#permsum', m).textContent = off ? `(${off} صلاحية مطفية)` : '(كل الصلاحيات)'; };
+      const off = $$('[data-perm]', m).filter(b => b.getAttribute('aria-checked') !== 'true').length; $('#permsum', m).textContent = off ? `(${off} صلاحية مطفية)` : '(كل الصلاحيات)';
+    };
     m.addEventListener('change', e => {
       const ga = e.target.closest('[data-gall]'); if (ga) $$(`[name=sec][data-g="${ga.dataset.gall}"]`, m).forEach(i => i.checked = ga.checked);
       const sc = e.target.closest('[name=sec]'); if (sc) { const all = $$(`[name=sec][data-g="${sc.dataset.g}"]`, m); $(`[data-gall="${sc.dataset.g}"]`, m).checked = all.every(i => i.checked); }
-      summary(); });
-    m.addEventListener('click', e => { const sp = e.target.closest('[data-scope]'); if (sp) { scope = sp.dataset.scope; $$('[data-scope]', m).forEach(b => b.setAttribute('aria-pressed', b === sp)); ['all', 'grades', 'sections'].forEach(k => $('#sc-' + k, m).hidden = k !== scope); summary(); return; }
-      const pm = e.target.closest('[data-perm]'); if (pm) { pm.setAttribute('aria-checked', pm.getAttribute('aria-checked') !== 'true'); summary(); return; } });
+      summary();
+    });
+    m.addEventListener('click', e => {
+      const sp = e.target.closest('[data-scope]'); if (sp) { scope = sp.dataset.scope; $$('[data-scope]', m).forEach(b => b.setAttribute('aria-pressed', b === sp));['all', 'grades', 'sections'].forEach(k => $('#sc-' + k, m).hidden = k !== scope); summary(); return; }
+      const pm = e.target.closest('[data-perm]'); if (pm) { pm.setAttribute('aria-checked', pm.getAttribute('aria-checked') !== 'true'); summary(); return; }
+    });
     setTimeout(summary);
     m.addEventListener('click', e => { const g = e.target.closest('[data-gen]'); if (g) { close(); showCreds(g.dataset.gen); return; } const tg = e.target.closest('[data-t]'); if (tg) { tg.setAttribute('aria-checked', tg.getAttribute('aria-checked') !== 'true'); if (tg.dataset.t === 'teacher') $('#tbox', m).hidden = tg.getAttribute('aria-checked') !== 'true'; } });
     $('#uf', m).onsubmit = e => {
@@ -2252,11 +2299,13 @@ const auditView = {
     // grouped by day, newest first
     const days = []; list.forEach(a => { const k = fmtDay(new Date(a.ts)); let d = days.find(x => x.k === k); if (!d) days.push(d = { k, items: [] }); d.items.push(a); });
     box.innerHTML = days.map(d => `<div class="card" style="padding:6px 18px 10px"><div class="row" style="border-bottom:1px solid var(--line)"><b style="flex:1">${d.k}</b><span class="muted small">${d.items.length} عملية</span></div>
-      ${d.items.map(a => { const c = audCat(a); const sens = AUD_SENSITIVE.test(a.action); return `<div class="row" style="align-items:flex-start;${sens ? 'background:var(--amber-soft);margin:0 -18px;padding:10px 18px' : ''}">
+      ${d.items.map(a => {
+      const c = audCat(a); const sens = AUD_SENSITIVE.test(a.action); return `<div class="row" style="align-items:flex-start;${sens ? 'background:var(--amber-soft);margin:0 -18px;padding:10px 18px' : ''}">
         <span class="ti" style="width:36px;height:36px;border-radius:10px;flex:none;${sens ? 'background:var(--amber);color:var(--on-amber)' : ''}">${icon(c[3], 18)}</span>
         <div style="flex:1;min-width:0"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b>${esc(a.action)}</b>${sens ? '<span class="pill p-late" style="font-size:10px;padding:0 7px">حساسة</span>' : ''}<span class="pill p-quiet" style="font-size:10px;padding:0 7px">${c[1]}</span></div>
           <div class="small" style="margin-top:2px">${esc(a.detail)}</div><div class="muted small" style="margin-top:2px">بواسطة <b>${esc(a.by)}</b></div></div>
-        <span class="num small muted" style="white-space:nowrap">${fmtTime(a.ts)}</span></div>`; }).join('')}</div>`).join('');
+        <span class="num small muted" style="white-space:nowrap">${fmtTime(a.ts)}</span></div>`;
+    }).join('')}</div>`).join('');
   },
 };
 
@@ -2365,8 +2414,10 @@ const marksView = {
 };
 // Who is acting right now, as it gets written next to every change.
 function actor() { const c = ctx(); return { role: c.role, teacherId: c.roleInfo.teacherId, name: c.name, username: db.credOf(c.phone)?.username || '', roleLabel: c.roleInfo.label.split(' · ')[0] }; }
-const histLine = (h, withName = true) => { const st = db.student(h.studentId); const what = h.action === 'delete' ? `حذف الدرجة (كانت <b class="num">${h.from}</b>)` : h.action === 'add' ? `أضاف <b class="num">${h.to}</b>` : `عدّل من <b class="num">${h.from}</b> إلى <b class="num">${h.to}</b>`;
-  return `<div class="row" style="align-items:flex-start"><span class="pill ${h.action === 'delete' ? 'p-absent' : 'p-late'}">${h.action === 'delete' ? 'حذف' : 'تعديل'}</span><div style="flex:1;min-width:0"><div>${withName ? `<b>${esc(st?.name || '')}</b>: ` : ''}${what}</div><div class="muted small">السبب: ${esc(h.reason)}</div><div class="small" style="margin-top:2px"><b>${esc(h.by)}</b>${h.byUser ? ` · <span class="num" dir="ltr" style="font-weight:700">${esc(h.byUser)}</span>` : ''}${h.role ? ` · ${esc(h.role)}` : ''}</div></div><span class="num small muted" style="white-space:nowrap">${fmtDay(new Date(h.ts))} · ${fmtTime(h.ts)}</span></div>`; };
+const histLine = (h, withName = true) => {
+  const st = db.student(h.studentId); const what = h.action === 'delete' ? `حذف الدرجة (كانت <b class="num">${h.from}</b>)` : h.action === 'add' ? `أضاف <b class="num">${h.to}</b>` : `عدّل من <b class="num">${h.from}</b> إلى <b class="num">${h.to}</b>`;
+  return `<div class="row" style="align-items:flex-start"><span class="pill ${h.action === 'delete' ? 'p-absent' : 'p-late'}">${h.action === 'delete' ? 'حذف' : 'تعديل'}</span><div style="flex:1;min-width:0"><div>${withName ? `<b>${esc(st?.name || '')}</b>: ` : ''}${what}</div><div class="muted small">السبب: ${esc(h.reason)}</div><div class="small" style="margin-top:2px"><b>${esc(h.by)}</b>${h.byUser ? ` · <span class="num" dir="ltr" style="font-weight:700">${esc(h.byUser)}</span>` : ''}${h.role ? ` · ${esc(h.role)}` : ''}</div></div><span class="num small muted" style="white-space:nowrap">${fmtDay(new Date(h.ts))} · ${fmtTime(h.ts)}</span></div>`;
+};
 
 function sheetModal(m) {
   const me = actor(); const can = db.canEditSheet(m, me.role, me.teacherId);
@@ -2857,12 +2908,14 @@ const inboxView = {
     const box = $('#live', el); if (!box) return;
     const all = db.tickets(scope());
     const list = all.filter(t => inb.f === 'all' || (inb.f === 'open' ? t.status === 'open' : t.status !== 'open'));
-    box.innerHTML = list.length ? list.map(t => { const s = t.studentId && db.student(t.studentId); return `<div class="card ticket ${t.status}">
+    box.innerHTML = list.length ? list.map(t => {
+      const s = t.studentId && db.student(t.studentId); return `<div class="card ticket ${t.status}">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${avatar(t.name)}<div style="flex:1;min-width:160px"><b>${esc(t.name)}</b><div class="muted small">${t.role === 'parent' ? 'ولي أمر' : 'طالب'}${s ? ` · <a href="#/student/${s.id}">${esc(s.name)}</a> · ${esc(db.sectionShort(s.sectionId))}` : ''}</div></div><span class="muted small">${esc(dayName(new Date(t.ts)))} · <span class="num">${fmtTime(t.ts)}</span></span>${t.status === 'open' ? '<span class="pill p-late">بانتظار الرد</span>' : t.status === 'closed' ? '<span class="pill p-pending">مغلقة</span>' : '<span class="pill p-present">تم الرد</span>'}</div>
       <div class="q">${esc(t.question)}</div>
       ${t.replies.map(r => `<div class="rep"><b>${esc(r.by)}</b> <span class="muted small num">${fmtTime(r.ts)}</span><div>${esc(r.text)}</div></div>`).join('')}
       ${t.status !== 'closed' ? `<form data-reply="${t.id}" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><textarea class="input" rows="2" style="flex:1;min-width:220px;padding:10px;min-height:48px" placeholder="اكتب ردك…" required></textarea><button class="btn pr">${icon('send', 16)}رد</button>${t.status === 'answered' ? `<button type="button" class="btn" data-close-t="${t.id}">إغلاق</button>` : ''}</form>` : ''}
-    </div>`; }).join('') : `<div class="card empty">${inb.f === 'open' ? 'ما أكو رسائل بانتظار الرد 👌' : 'ما أكو رسائل'}</div>`;
+    </div>`;
+    }).join('') : `<div class="card empty">${inb.f === 'open' ? 'ما أكو رسائل بانتظار الرد 👌' : 'ما أكو رسائل'}</div>`;
   },
 };
 
@@ -2944,9 +2997,11 @@ const cellHtml = (c, t, extra = '') => c ? `<b>${esc(c.subject)}</b>${t && c.tea
 function ttGrid(grid, { editable = false, diff = null, today = -1, cur = -1, showTeacher = true, side = '' } = {}) {
   const ps = db.periods(); const chg = new Map((diff || []).map(x => [x.d + ':' + x.p, x]));
   return `<div class="ttwrap"><table class="tt"><thead><tr><th></th>${ps.map((p, i) => `<th><b>${db.periodName(i).replace('الحصة ', '')}</b><span class="num">${p.label}</span></th>`).join('')}</tr></thead><tbody>
-    ${db.WEEK.map((w, d) => `<tr class="${d === today ? 'today' : ''}"><th>${w}${d === today ? '<small>اليوم</small>' : ''}</th>${grid[d].map((c, p) => { const x = chg.get(d + ':' + p); const isCur = d === today && p === cur;
-      const was = x && side === 'draft' ? `<i class="was">كانت: ${x.from ? esc(x.from.subject) : 'فارغة'}</i>` : '';
-      return `<td class="${x ? (side === 'pub' ? 'old' : 'chg') : ''} ${isCur ? 'cur' : ''} ${c ? '' : 'empty'}">${editable ? `<button type="button" class="ttc" data-cell="${d}:${p}" aria-label="${w} ${db.periodName(p)}">${cellHtml(c, showTeacher, was)}</button>` : `<div class="ttc">${cellHtml(c, showTeacher, was)}${isCur ? '<i class="now">هسه</i>' : ''}</div>`}</td>`; }).join('')}</tr>`).join('')}
+    ${db.WEEK.map((w, d) => `<tr class="${d === today ? 'today' : ''}"><th>${w}${d === today ? '<small>اليوم</small>' : ''}</th>${grid[d].map((c, p) => {
+    const x = chg.get(d + ':' + p); const isCur = d === today && p === cur;
+    const was = x && side === 'draft' ? `<i class="was">كانت: ${x.from ? esc(x.from.subject) : 'فارغة'}</i>` : '';
+    return `<td class="${x ? (side === 'pub' ? 'old' : 'chg') : ''} ${isCur ? 'cur' : ''} ${c ? '' : 'empty'}">${editable ? `<button type="button" class="ttc" data-cell="${d}:${p}" aria-label="${w} ${db.periodName(p)}">${cellHtml(c, showTeacher, was)}</button>` : `<div class="ttc">${cellHtml(c, showTeacher, was)}${isCur ? '<i class="now">هسه</i>' : ''}</div>`}</td>`;
+  }).join('')}</tr>`).join('')}
   </tbody></table></div>`;
 }
 function ttCellModal(secId, d, p, onDone) {
@@ -2980,10 +3035,12 @@ const timetableView = {
     el.addEventListener('click', e => {
       const m = e.target.closest('[data-mode]'); if (m) { tts.mode = m.dataset.mode; $$('[data-mode]', el).forEach(b => b.setAttribute('aria-pressed', b === m)); this.update(el); }
       const cell = e.target.closest('[data-cell]'); if (cell) { const [d, p] = cell.dataset.cell.split(':').map(Number); ttCellModal(tts.sec, d, p, () => this.update(el)); }
-      if (e.target.closest('[data-pub]')) { const n = db.ttDiff(tts.sec).length; const first = !db.ttOf(tts.sec).pub;
+      if (e.target.closest('[data-pub]')) {
+        const n = db.ttDiff(tts.sec).length; const first = !db.ttOf(tts.sec).pub;
         modal('نشر الجدول', `<div style="display:flex;flex-direction:column;gap:12px"><div>${first ? `راح ينتشر جدول <b>${esc(db.sectionLabel(tts.sec))}</b> لأول مرة.` : `راح تنتشر <b>${n}</b> تغييرات على جدول <b>${esc(db.sectionLabel(tts.sec))}</b>.`}</div><div class="muted small">يوصل إشعار لكل طلاب الشعبة وأولياء أمورهم، ويصير الجدول الجديد هو اللي يشوفوه.</div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-close>إلغاء</button><button class="btn pr" id="okpub">${icon('send', 16)}نشر الآن</button></div></div>`, (mm, close) => {
           $('#okpub', mm).onclick = () => { const r = db.ttPublish(tts.sec, ctx().name); close(); if (r.ok) { toast('انتشر الجدول', `${r.changes} تغيير · إشعار لـ ${r.sent} ولي أمر`); this.render(el); } };
-        }); }
+        });
+      }
       if (e.target.closest('[data-revert]')) { db.ttRevert(tts.sec, ctx().name); toast('رجعت المسودة مثل المنشور'); this.update(el); }
     });
     this.update(el);
@@ -3371,23 +3428,23 @@ const staffAtt = {
         </thead>
         <tbody>
           ${rows.map(({ t, st }) => {
-            const inTime = st.inEv ? fmtTime(st.inEv.ts) : (st.exempt ? '<span class="muted small">مستثنى رسمياً</span>' : '—');
-            const inDev = st.inEv ? (st.inEv.deviceId ? db.device(st.inEv.deviceId)?.name.split(' · ')[0] : 'يدوي') : (st.exempt ? 'إعفاء بقرار' : '');
-            const inMethod = st.inEv?.method || (st.exempt ? 'حالة خاصة' : '');
-            const outTime = st.outEv ? fmtTime(st.outEv.ts) : '—';
-            const outDev = st.outEv ? (st.outEv.deviceId ? db.device(st.outEv.deviceId)?.name.split(' · ')[0] : 'يدوي') : '';
+        const inTime = st.inEv ? fmtTime(st.inEv.ts) : (st.exempt ? '<span class="muted small">مستثنى رسمياً</span>' : '—');
+        const inDev = st.inEv ? (st.inEv.deviceId ? db.device(st.inEv.deviceId)?.name.split(' · ')[0] : 'يدوي') : (st.exempt ? 'إعفاء بقرار' : '');
+        const inMethod = st.inEv?.method || (st.exempt ? 'حالة خاصة' : '');
+        const outTime = st.outEv ? fmtTime(st.outEv.ts) : '—';
+        const outDev = st.outEv ? (st.outEv.deviceId ? db.device(st.outEv.deviceId)?.name.split(' · ')[0] : 'يدوي') : '';
 
-            let pillHtml = '';
-            if (st.exempt) pillHtml = `<span class="pill" style="background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE" title="مستثنى بقرار: ${esc(st.exemption?.reason || '')}">مستثنى (حالة خاصة) 🛡️</span>`;
-            else if (st.status === 'present') pillHtml = '<span class="pill p-present">حاضر في الموعد ✓</span>';
-            else if (st.status === 'late') pillHtml = '<span class="pill p-late">متأخر ⏱</span>';
-            else if (st.status === 'left') pillHtml = '<span class="pill p-left">انصرف ⏏</span>';
-            else if (st.status === 'excused') pillHtml = `<span class="pill p-excused" title="${esc(st.excuse?.note || '')}">إجازة: ${esc(st.excuse?.reason || 'عذر')}</span>`;
-            else if (st.status === 'pending') pillHtml = '<span class="pill p-quiet">لم يبصم بعد ⌛</span>';
-            else if (st.status === 'holiday') pillHtml = '<span class="pill p-quiet">عطلة رسمية</span>';
-            else pillHtml = '<span class="pill p-absent">غائب ✕</span>';
+        let pillHtml = '';
+        if (st.exempt) pillHtml = `<span class="pill" style="background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE" title="مستثنى بقرار: ${esc(st.exemption?.reason || '')}">مستثنى (حالة خاصة) 🛡️</span>`;
+        else if (st.status === 'present') pillHtml = '<span class="pill p-present">حاضر في الموعد ✓</span>';
+        else if (st.status === 'late') pillHtml = '<span class="pill p-late">متأخر ⏱</span>';
+        else if (st.status === 'left') pillHtml = '<span class="pill p-left">انصرف ⏏</span>';
+        else if (st.status === 'excused') pillHtml = `<span class="pill p-excused" title="${esc(st.excuse?.note || '')}">إجازة: ${esc(st.excuse?.reason || 'عذر')}</span>`;
+        else if (st.status === 'pending') pillHtml = '<span class="pill p-quiet">لم يبصم بعد ⌛</span>';
+        else if (st.status === 'holiday') pillHtml = '<span class="pill p-quiet">عطلة رسمية</span>';
+        else pillHtml = '<span class="pill p-absent">غائب ✕</span>';
 
-            return `<tr>
+        return `<tr>
               <td>
                 <div style="display:flex;gap:10px;align-items:center">
                   ${avatar(t.name)}
@@ -3420,7 +3477,7 @@ const staffAtt = {
                 </div>
               </td>` : ''}
             </tr>`;
-          }).join('')}
+      }).join('')}
         </tbody>
       </table>` : '<div class="empty">لا توجد سجلات مطابقة للبحث أو التصفية الحالية.</div>';
     }
@@ -3437,10 +3494,10 @@ const staffAtt = {
       </div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${recents.length ? recents.map(e => {
-          const t = db.teacher(e.teacherId);
-          const dev = e.deviceId ? db.device(e.deviceId) : null;
-          const isIn = e.type === 'in';
-          return `<div class="row" style="background:var(--surface-200);border-radius:10px;padding:8px 12px">
+        const t = db.teacher(e.teacherId);
+        const dev = e.deviceId ? db.device(e.deviceId) : null;
+        const isIn = e.type === 'in';
+        return `<div class="row" style="background:var(--surface-200);border-radius:10px;padding:8px 12px">
             <span class="ti" style="width:34px;height:34px;background:${isIn ? 'var(--teal-soft)' : 'var(--brand-soft)'};color:${isIn ? 'var(--teal)' : 'var(--brand)'}">
               ${icon(isIn ? 'check' : 'logout', 16)}
             </span>
@@ -3453,7 +3510,7 @@ const staffAtt = {
               <div class="muted small">${ago(e.ts, db.now())}</div>
             </div>
           </div>`;
-        }).join('') : '<div class="small muted">لا توجد حركات بصمة مسجلة للكادر حتى الآن اليوم.</div>'}
+      }).join('') : '<div class="small muted">لا توجد حركات بصمة مسجلة للكادر حتى الآن اليوم.</div>'}
       </div>`;
     }
   }
@@ -3467,10 +3524,10 @@ function simulateTeacherScanModal(onDone) {
     <label class="field">المدرس
       <select class="input" name="teacherId">
         ${tList.map(t => {
-          const st = db.teacherStatusOf(t.id);
-          const nextAction = st.inEv && !st.outEv ? 'انصراف' : 'دخول';
-          return `<option value="${t.id}">${esc(t.name)} (${esc(t.subject || 'عام')}) - البصمة التالية: ${nextAction}</option>`;
-        }).join('')}
+    const st = db.teacherStatusOf(t.id);
+    const nextAction = st.inEv && !st.outEv ? 'انصراف' : 'دخول';
+    return `<option value="${t.id}">${esc(t.name)} (${esc(t.subject || 'عام')}) - البصمة التالية: ${nextAction}</option>`;
+  }).join('')}
       </select>
     </label>
     <div class="grid g2" style="gap:10px">
@@ -3618,26 +3675,26 @@ function teacherHistoryModal(teacherId) {
         </thead>
         <tbody>
           ${ds.map(d => {
-            const st = db.teacherStatusOf(t.id, d);
-            const inTime = st.inEv ? fmtTime(st.inEv.ts) : '—';
-            const inDev = st.inEv ? (st.inEv.deviceId ? db.device(st.inEv.deviceId)?.name.split(' · ')[0] : 'يدوي') : '';
-            const outTime = st.outEv ? fmtTime(st.outEv.ts) : '—';
-            let pillHtml = '';
-            if (st.status === 'present') pillHtml = '<span class="pill p-present">حاضر ✓</span>';
-            else if (st.status === 'late') pillHtml = '<span class="pill p-late">متأخر ⏱</span>';
-            else if (st.status === 'left') pillHtml = '<span class="pill p-left">انصرف ⏏</span>';
-            else if (st.status === 'excused') pillHtml = `<span class="pill p-excused">إجازة: ${esc(st.excuse?.reason || '')}</span>`;
-            else if (st.status === 'holiday') pillHtml = '<span class="pill p-quiet">عطلة</span>';
-            else if (st.status === 'pending') pillHtml = '<span class="pill p-quiet">لم يبصم</span>';
-            else pillHtml = '<span class="pill p-absent">غائب</span>';
+    const st = db.teacherStatusOf(t.id, d);
+    const inTime = st.inEv ? fmtTime(st.inEv.ts) : '—';
+    const inDev = st.inEv ? (st.inEv.deviceId ? db.device(st.inEv.deviceId)?.name.split(' · ')[0] : 'يدوي') : '';
+    const outTime = st.outEv ? fmtTime(st.outEv.ts) : '—';
+    let pillHtml = '';
+    if (st.status === 'present') pillHtml = '<span class="pill p-present">حاضر ✓</span>';
+    else if (st.status === 'late') pillHtml = '<span class="pill p-late">متأخر ⏱</span>';
+    else if (st.status === 'left') pillHtml = '<span class="pill p-left">انصرف ⏏</span>';
+    else if (st.status === 'excused') pillHtml = `<span class="pill p-excused">إجازة: ${esc(st.excuse?.reason || '')}</span>`;
+    else if (st.status === 'holiday') pillHtml = '<span class="pill p-quiet">عطلة</span>';
+    else if (st.status === 'pending') pillHtml = '<span class="pill p-quiet">لم يبصم</span>';
+    else pillHtml = '<span class="pill p-absent">غائب</span>';
 
-            return `<tr>
+    return `<tr>
               <td><b>${fmtDay(new Date(d))}</b></td>
               <td>${inTime} ${inDev ? `<small class="muted">(${inDev})</small>` : ''}</td>
               <td>${outTime}</td>
               <td>${pillHtml}</td>
             </tr>`;
-          }).join('')}
+  }).join('')}
         </tbody>
       </table>
     </div>
@@ -4006,20 +4063,20 @@ const exemptionsView = {
         </thead>
         <tbody>
           ${rows.map(ex => {
-            const isStu = ex.targetType === 'student';
-            const person = isStu ? db.student(ex.targetId) : db.teacher(ex.targetId);
-            const name = person?.name || (isStu ? 'طالب غير متوفر' : 'مدرس غير متوفر');
-            const subText = isStu ? (person ? db.sectionLabel(person.sectionId) : 'طالب') : (person ? `${person.subject || 'عام'} · ${person.phone}` : 'كادر');
-            const photo = isStu ? db.photoOf(ex.targetId) : null;
-            const isYear = ex.mode === 'year' || (!ex.startDate && !ex.endDate);
-            const durationText = isYear ? 'طوال العام الدراسي الحالي' : `من ${ex.startDate || '—'} إلى ${ex.endDate || '—'}`;
-            const isAuto = (ex.attPolicy || 'auto_present') === 'auto_present';
-            const policyBadge = isAuto
-              ? '<span class="pill p-present" title="يُحسب حاضر تلقائياً في موعد الحضور ولا يُرسل غياب لولي الأمر">حاضر تلقائياً ✓</span>'
-              : '<span class="pill" style="background:#EDE9FE;color:#5B21B6" title="يُسجّل كحالة مستثنى رسمياً">حالة خاصة 🛡️</span>';
-            const isActive = ex.active !== false;
+        const isStu = ex.targetType === 'student';
+        const person = isStu ? db.student(ex.targetId) : db.teacher(ex.targetId);
+        const name = person?.name || (isStu ? 'طالب غير متوفر' : 'مدرس غير متوفر');
+        const subText = isStu ? (person ? db.sectionLabel(person.sectionId) : 'طالب') : (person ? `${person.subject || 'عام'} · ${person.phone}` : 'كادر');
+        const photo = isStu ? db.photoOf(ex.targetId) : null;
+        const isYear = ex.mode === 'year' || (!ex.startDate && !ex.endDate);
+        const durationText = isYear ? 'طوال العام الدراسي الحالي' : `من ${ex.startDate || '—'} إلى ${ex.endDate || '—'}`;
+        const isAuto = (ex.attPolicy || 'auto_present') === 'auto_present';
+        const policyBadge = isAuto
+          ? '<span class="pill p-present" title="يُحسب حاضر تلقائياً في موعد الحضور ولا يُرسل غياب لولي الأمر">حاضر تلقائياً ✓</span>'
+          : '<span class="pill" style="background:#EDE9FE;color:#5B21B6" title="يُسجّل كحالة مستثنى رسمياً">حالة خاصة 🛡️</span>';
+        const isActive = ex.active !== false;
 
-            return `<tr>
+        return `<tr>
               <td>
                 <div style="display:flex;gap:10px;align-items:center">
                   ${avatar(name, '', photo)}
@@ -4049,7 +4106,7 @@ const exemptionsView = {
               <td>
                 ${canManage ? `
                 <button type="button" class="toggle" role="switch" data-ex-tog="${ex.id}" aria-checked="${isActive}" title="${isActive ? 'انقر للتعطيل' : 'انقر للتفعيل'}"></button>`
-                : `<span class="pill ${isActive ? 'p-present' : 'p-absent'}">${isActive ? 'ساري' : 'متوقف'}</span>`}
+            : `<span class="pill ${isActive ? 'p-present' : 'p-absent'}">${isActive ? 'ساري' : 'متوقف'}</span>`}
               </td>
               ${canManage ? `
               <td>
@@ -4059,7 +4116,7 @@ const exemptionsView = {
                 </div>
               </td>` : ''}
             </tr>`;
-          }).join('')}
+      }).join('')}
         </tbody>
       </table>` : '<div class="empty">لا توجد استثناءات مسجلة مطابقة لخيارات البحث.</div>';
     }
@@ -4362,7 +4419,7 @@ function deleteExemptionModal(ex, onDone) {
 export const views = { staffAtt, exemptions: exemptionsView, promotion: promotionView, timetable: timetableView, ask: askView, inbox: inboxView, login, me, myatt, users, audit: auditView, dashboard, attendance, reports, posts: postsView, marks: marksView, students, student, classes, section, devices, school: settings, teacher, parent, notes };
 
 // Full screen for protected videos keeps the watermark: the wrapper goes full screen, not the bare video.
-document.addEventListener('click', e => { const b = e.target.closest('.vfs'); if (!b) return; const w = b.closest('.vwrap'); if (document.fullscreenElement) document.exitFullscreen(); else w.requestFullscreen?.().catch(() => {}); });
+document.addEventListener('click', e => { const b = e.target.closest('.vfs'); if (!b) return; const w = b.closest('.vwrap'); if (document.fullscreenElement) document.exitFullscreen(); else w.requestFullscreen?.().catch(() => { }); });
 
 /* ============ SCAN PROOF (إثبات البصمة) ============ */
 const EVIMG = new Map();
@@ -4376,12 +4433,13 @@ async function captureImage(e) {
   const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#3B4660'); bg.addColorStop(1, '#1B2235'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
   if (ph) { const sc = Math.max(W / ph.width, H / ph.height) * (1.05 + (h % 7) / 100); const dw = ph.width * sc, dh = ph.height * sc; g.filter = 'saturate(.75) contrast(1.08) brightness(1.04)'; g.drawImage(ph, (W - dw) / 2 + (h % 13) - 6, (H - dh) / 2 + (h % 9) - 4, dw, dh); g.filter = 'none'; }
   else { // silhouette when the school has no reference photo yet
-    g.fillStyle = '#5E6A86'; g.beginPath(); g.arc(W / 2, H * .38, 96, 0, 7); g.fill(); g.beginPath(); g.ellipse(W / 2, H * .9, 190, 150, 0, Math.PI, 0); g.fill(); }
+    g.fillStyle = '#5E6A86'; g.beginPath(); g.arc(W / 2, H * .38, 96, 0, 7); g.fill(); g.beginPath(); g.ellipse(W / 2, H * .9, 190, 150, 0, Math.PI, 0); g.fill();
+  }
   // camera noise and scanlines
   const id = g.getImageData(0, 0, W, H), dd = id.data; let r = h; for (let i = 0; i < dd.length; i += 4) { r = (r * 1103515245 + 12345) >>> 0; const n = ((r >>> 16) % 24) - 12; dd[i] += n; dd[i + 1] += n; dd[i + 2] += n; } g.putImageData(id, 0, 0);
   g.fillStyle = 'rgba(0,0,0,.06)'; for (let y = 0; y < H; y += 3) g.fillRect(0, y, W, 1);
   // face box
-  if (e.kind === 'face' || ph) { g.strokeStyle = '#34C3AE'; g.lineWidth = 3; const bx = W / 2 - 110, by = H * .38 - 130, bw = 220, bh = 260, c = 26; [[bx, by, 1, 1], [bx + bw, by, -1, 1], [bx, by + bh, 1, -1], [bx + bw, by + bh, -1, -1]].forEach(([x, y, sx, sy]) => { g.beginPath(); g.moveTo(x, y + c * sy); g.lineTo(x, y); g.lineTo(x + c * sx, y); g.stroke(); }); }
+  if (e.kind === 'face' || ph) { g.strokeStyle = '#34C3AE'; g.lineWidth = 3; const bx = W / 2 - 110, by = H * .38 - 130, bw = 220, bh = 260, c = 26;[[bx, by, 1, 1], [bx + bw, by, -1, 1], [bx, by + bh, 1, -1], [bx + bw, by + bh, -1, -1]].forEach(([x, y, sx, sy]) => { g.beginPath(); g.moveTo(x, y + c * sy); g.lineTo(x, y); g.lineTo(x + c * sx, y); g.stroke(); }); }
   // overlay
   g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 0, W, 44); g.fillRect(0, H - 70, W, 70);
   g.fillStyle = '#FF4D4D'; g.beginPath(); g.arc(20, 22, 7, 0, 7); g.fill();
@@ -4415,7 +4473,7 @@ async function evidenceModal(evId) {
     $('#evb', m).innerHTML = `
       <div class="evgrid">
         ${e.manual ? `<div class="evmanual">${icon('key', 40)}<b>تسجيل يدوي</b><span>سجّله: ${esc(e.by)}</span><span class="muted small">ما بيه صورة لأن الطالب ما بصم على الجهاز. التسجيل اليدوي ينحفظ باسم اللي سجّله بسجل العمليات.</span></div>`
-          : `<figure class="evfig"><img src="${cap}" alt="صورة كاميرا الجهاز لحظة البصمة"><figcaption>صورة كاميرا الجهاز لحظة البصمة</figcaption></figure>`}
+        : `<figure class="evfig"><img src="${cap}" alt="صورة كاميرا الجهاز لحظة البصمة"><figcaption>صورة كاميرا الجهاز لحظة البصمة</figcaption></figure>`}
         ${ref ? `<figure class="evfig"><img src="${ref}" alt="الصورة المرجعية"><figcaption>الصورة المرجعية بالمنصة (أول بصمة وجه)</figcaption></figure>` : ''}
         ${fp ? `<figure class="evfig fp"><img src="${fp}" alt="مطابقة بصمة الإصبع"><figcaption>مطابقة بصمة الإصبع · ${esc(e.template)}</figcaption></figure>` : ''}
       </div>
