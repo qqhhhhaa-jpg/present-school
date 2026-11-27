@@ -50,10 +50,10 @@ const login = {
       $$('[data-u]', step).forEach(b => b.onclick = () => { un.value = b.dataset.u; pw.value = 'hader2026'; });
       $('#forgot', step).onclick = () => forgotStep('', un.value);
       $('#resetlog', step).onclick = () => modal('إعادة تهيئة حسابات التجربة', `<div style="display:flex;flex-direction:column;gap:12px"><div>كل اليوزرات والرموز ترجع مثل البداية، وينفتح أي حساب مقفول، وتطلع كل الأجهزة المسجّل دخولها.</div>
-        <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز للكل: <b class="num">hader2026</b> + Google Authenticator)<br>مدير المدرسة: <b class="num">m1001</b> · المدرس: <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (التحقق عبر Google Authenticator)<br>ولي الأمر: <b class="num" dir="ltr">0770 000 0003</b> · الطالب أحمد: <b class="num" dir="ltr">0770 000 0004</b></div>
-        <div class="muted small">بيانات الطلاب والمنشورات والدرجات تبقى مثل ما هي. سيتم فك ربط Google Authenticator حتى تعيد ربطه من جديد.</div>
+        <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز للكل: <b class="num">hader2026</b>${db.REQUIRE_TOTP_ON_LOGIN ? ' + Google Authenticator' : ''})<br>مدير المدرسة: <b class="num">m1001</b> · المدرس: <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (${db.REQUIRE_TOTP_ON_LOGIN ? 'التحقق عبر Google Authenticator' : 'رمز SMS: <b class="num">123456</b>'})<br>ولي الأمر: <b class="num" dir="ltr">0770 000 0003</b> · الطالب أحمد: <b class="num" dir="ltr">0770 000 0004</b></div>
+        <div class="muted small">بيانات الطلاب والمنشورات والدرجات تبقى مثل ما هي.${db.REQUIRE_TOTP_ON_LOGIN ? ' سيتم فك ربط Google Authenticator حتى تعيد ربطه من جديد.' : ''}</div>
         <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-close>إلغاء</button><button class="btn pr" id="okreset">إعادة التهيئة</button></div></div>`, (m, close) => {
-        $('#okreset', m).onclick = () => { db.resetLogins(); close(); toast('رجعت حسابات التجربة للبداية', 'الرمز hader2026 · التحقق عبر Google Authenticator'); userStep(); };
+        $('#okreset', m).onclick = () => { db.resetLogins(); close(); toast('رجعت حسابات التجربة للبداية', db.REQUIRE_TOTP_ON_LOGIN ? 'الرمز hader2026 · التحقق عبر Google Authenticator' : 'الرمز hader2026 · رمز SMS 123456'); userStep(); };
       });
       $('#fu', step).onsubmit = e => {
         e.preventDefault();
@@ -1965,14 +1965,14 @@ const settings = {
         <h2 style="margin-top:8px">العطل الرسمية</h2>
         <div class="muted small">الجمعة والسبت عطلة دائماً. العطل الرسمية تنضاف من «نشر تبليغ» بتفعيل «عطلة رسمية».</div>
         <div id="hols">${db.holidays().length ? db.holidays().map(h => `<div class="row"><span class="num" style="font-weight:700">${h.day}</span><span style="flex:1">${esc(h.name)}</span><button type="button" class="btn sm dg" data-unhol="${h.day}">إلغاء</button></div>`).join('') : '<div class="small muted">ما أكو عطل رسمية مسجّلة.</div>'}</div>
-        <h2 style="margin-top:8px">المصادقة الثنائية (Google Authenticator)</h2>
+        ${db.REQUIRE_TOTP_ON_LOGIN ? `<h2 style="margin-top:8px">المصادقة الثنائية (Google Authenticator)</h2>
         ${(() => {
         const ts = db.totpStatus();
         return `<div class="muted small">${ts.enabled ? `حسابك (<b class="num" dir="ltr">${esc(ts.username)}</b>) مربوط بتطبيق Google Authenticator ومفعّل ✓ · رموز الاسترداد المتبقية: <b class="num">${ts.backupsLeft}</b>.` : 'اربط حسابك بتطبيق Google Authenticator لتأمين تسجيل الدخول برمز مؤقت يتجدد كل 30 ثانية.'}</div>
           <button type="button" class="btn ${ts.enabled ? '' : 'pr'}" data-totp style="align-self:flex-start">${icon('shield', 16)}${ts.enabled ? 'إدارة / تعطيل Google Authenticator' : 'ربط تطبيق Google Authenticator'}</button>`;
-      })()}
+      })()}` : ''}
         <h2 style="margin-top:8px">حسابات الدخول</h2>
-        <div class="muted small">ترجع اليوزرات والرموز مثل البداية (hader2026)، وينفك ربط Google Authenticator حتى تعيد ربطه من جديد، وتنفتح الحسابات المقفولة والموقوفة.</div>
+        <div class="muted small">${db.REQUIRE_TOTP_ON_LOGIN ? 'ترجع اليوزرات والرموز مثل البداية (hader2026)، وينفك ربط Google Authenticator حتى تعيد ربطه من جديد، وتنفتح الحسابات المقفولة والموقوفة.' : 'ترجع اليوزرات والرموز مثل البداية (hader2026)، وتنفتح الحسابات المقفولة والموقوفة، وتطلع كل الأجهزة المسجّل دخولها.'}</div>
         <button class="btn" id="resetlogins">${icon('key', 16)}إعادة تهيئة اليوزرات وأرقام الموبايل</button>
         <h2 style="margin-top:8px">صور وبصمات إثبات الوصول (الحذف التلقائي)</h2>
         ${(() => {
@@ -2001,7 +2001,7 @@ const settings = {
         this.render(el);
       }
       if (e.target.closest('#resetlogins')) modal('إعادة تهيئة حسابات الدخول', `<div style="display:flex;flex-direction:column;gap:12px"><div>كل اليوزرات والرموز ترجع مثل البداية، وتنفتح الحسابات المقفولة والموقوفة، وتطلع كل الأجهزة المسجّل دخولها (حتى جهازك، فترجع تسجل دخول).</div>
-        <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز: <b class="num">hader2026</b> + Google Authenticator)<br>مدير المدرسة <b class="num">m1001</b> · المدرس <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (التحقق عبر Google Authenticator)<br>ولي الأمر <b class="num" dir="ltr">0770 000 0003</b> · الطالب <b class="num" dir="ltr">0770 000 0004</b></div>
+        <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز: <b class="num">hader2026</b>${db.REQUIRE_TOTP_ON_LOGIN ? ' + Google Authenticator' : ''})<br>مدير المدرسة <b class="num">m1001</b> · المدرس <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (${db.REQUIRE_TOTP_ON_LOGIN ? 'التحقق عبر Google Authenticator' : 'رمز SMS <b class="num">123456</b>'})<br>ولي الأمر <b class="num" dir="ltr">0770 000 0003</b> · الطالب <b class="num" dir="ltr">0770 000 0004</b></div>
         <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-close>إلغاء</button><button class="btn pr" id="okrl">إعادة التهيئة</button></div></div>`, (m, close) => { $('#okrl', m).onclick = () => { db.resetLogins(); close(); toast('رجعت حسابات الدخول للبداية', 'سجّل دخول من جديد'); setTimeout(() => { db.logout?.(); location.hash = '#/'; location.reload(); }, 900); }; });
       const pt = e.target.closest('[data-prot]'); if (pt) { const on = pt.getAttribute('aria-checked') !== 'true'; pt.setAttribute('aria-checked', on); db.setProtection({ [pt.dataset.prot]: on }, ctx().name); toast(on ? 'تفعّلت الحماية' : 'انطفت الحماية', pt.closest('.row').querySelector('b').textContent); }
     });

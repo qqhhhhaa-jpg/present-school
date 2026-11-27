@@ -1412,12 +1412,11 @@ export function loginWithPassword(username, password) {
   delete S.fails[username];
   if (S.disabled.includes(phone)) return { ok: false, error: 'هذا الحساب موقوف. تواصل مع إدارة المنصة.' };
   if (!isStaff(phone)) return { ok: false, error: 'هذا الحساب ما عنده دخول باليوزر.' };
-  // Google Authenticator verification: mandatory for all when REQUIRE_TOTP_ON_LOGIN=true,
-  // or optional per-account (only if this account manually enabled it) during demo/sharing mode.
-  const existing = getTotpEntry(phone);
-  if (!REQUIRE_TOTP_ON_LOGIN && !existing?.secret) {
+  // Google Authenticator verification: completely paused for ALL accounts while REQUIRE_TOTP_ON_LOGIN=false.
+  if (!REQUIRE_TOTP_ON_LOGIN) {
     return startSession(phone);
   }
+  const existing = getTotpEntry(phone);
   const token = 'tfa_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
   if (existing?.secret) {
     pending2fa = { token, phone, username, needBind: false, until: Date.now() + 5 * 60000 };
