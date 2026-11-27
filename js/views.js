@@ -4962,42 +4962,53 @@ async function evidenceModal(evId) {
   const isViewerRestricted = c && ['parent', 'student'].includes(c.role) && db.protection().noDownload;
 
   modal(`إثبات ${e.ev.type === 'in' ? 'الوصول' : 'الانصراف'}: ${e.student.name}`, `<div id="evb" class="evb"><div class="empty">جاري تجهيز الإثبات…</div></div>`, async (m) => {
-    m.classList.add('wide');
+    m.classList.add('ev-compact');
     const cap = !e.expired ? (e.proofImg || (!e.manual ? await captureImage(e) : null)) : null;
     const fp = !e.expired && e.kind === 'finger' && !(e.proofImg && e.proofKind === 'finger') ? fingerImage(e) : null;
+    const tabs = [];
+    if (cap) tabs.push({ k: 'cap', lbl: e.ev.type === 'in' ? 'صورة الوصول' : 'صورة الانصراف', src: cap, fp: false });
+    if (fp) tabs.push({ k: 'fp', lbl: 'البصمة', src: fp, fp: true });
+    if (ref && !e.manual && !e.expired) tabs.push({ k: 'ref', lbl: 'المرجعية', src: ref, fp: false });
+
+    const mediaHtml = e.manual
+      ? `<div class="evmanual ev-side-box">${icon('key', 32)}<b>تسجيل يدوي</b><span class="small">سجّله: ${esc(e.by)}</span></div>`
+      : e.expired
+        ? `<div class="ev-expired ev-side-box">${icon('trash', 28)}<b>تم حذف الصورة بعد مرور 30 يوم</b></div>`
+        : `<div class="ev-photo-col">
+            <img id="ev-main-img" class="${tabs[0]?.fp ? 'fp' : ''}" src="${tabs[0]?.src || ''}" alt="صورة جهاز البصمة">
+            ${tabs.length > 1 ? `<div class="ev-tabs">${tabs.map((t, i) => `<button type="button" class="ev-tab ${i === 0 ? 'on' : ''}" data-evtab="${i}">${t.lbl}</button>`).join('')}</div>` : ''}
+          </div>`;
 
     $('#evb', m).innerHTML = `
-      ${!e.manual ? `
-        <div class="ev-ttl ${e.expired ? 'exp' : ''}">
-          ${icon('clock', 16)}
-          <b>${e.expired ? 'تم حذف الصورة بعد مرور 30 يوم' : 'تبقى الصورة لمدة 30 يوم'}</b>
+      <div class="ev-split">
+        <div class="ev-info-col">
+          ${!e.manual ? `
+            <div class="ev-ttl ${e.expired ? 'exp' : ''}">
+              ${icon('clock', 15)}
+              <b>${e.expired ? 'تم حذف الصورة بعد مرور 30 يوم' : 'تبقى الصورة لمدة 30 يوم'}</b>
+            </div>
+          ` : ''}
+          <div class="evfacts">
+            <div><span>النوع</span><b>${e.ev.type === 'in' ? 'وصول' : 'انصراف'}</b></div>
+            <div><span>الوقت</span><b class="num">${fmtDay(dt)} · ${dt.toLocaleTimeString('en-GB')}</b></div>
+            <div><span>طريقة التحقق</span><b>${KIND[e.kind]}${e.template && e.kind !== 'finger' ? ` · ${esc(e.template)}` : ''}</b></div>
+            ${e.score ? `<div><span>نسبة التطابق</span><b class="num" style="color:var(--teal-ink)">${e.score}%</b></div>` : ''}
+            <div><span>الجهاز</span><b>${esc(e.gate)}${e.device ? ` · <span class="num" dir="ltr">${esc(e.device.serial)}</span>` : ''}</b></div>
+            <div><span>رقم السجل</span><b class="num" dir="ltr">${esc(e.ref)}</b></div>
+          </div>
+          ${cap && !e.expired && !isViewerRestricted ? `<div style="display:flex;gap:8px;margin-top:auto"><button class="btn sm" id="evdl">${icon('download', 14)}حفظ الصورة</button></div>` : ''}
         </div>
-      ` : ''}
+        ${mediaHtml}
+      </div>`;
 
-      ${e.expired && !e.manual ? `
-        <div class="ev-expired">
-          ${icon('trash', 30)}
-          <b>تم حذف الصورة بعد مرور 30 يوم</b>
-        </div>
-      ` : `
-        <div class="evgrid">
-          ${e.manual ? `<div class="evmanual">${icon('key', 40)}<b>تسجيل يدوي</b><span>سجّله: ${esc(e.by)}</span><span class="muted small">ما بيه صورة لأن الطالب ما بصم على الجهاز.</span></div>`
-          : `<figure class="evfig"><img src="${cap}" alt="صورة جهاز البصمة لحظة الوصول"><figcaption>صورة جهاز البصمة لحظة ${e.ev.type === 'in' ? 'الوصول' : 'الانصراف'}</figcaption></figure>`}
-          ${ref && !e.manual ? `<figure class="evfig"><img src="${ref}" alt="الصورة المرجعية"><figcaption>الصورة المرجعية بالمنصة</figcaption></figure>` : ''}
-          ${fp ? `<figure class="evfig fp"><img src="${fp}" alt="مطابقة بصمة الإصبع"><figcaption>مطابقة بصمة الإصبع · ${esc(e.template)}</figcaption></figure>` : ''}
-        </div>
-      `}
-
-      <div class="evfacts">
-        <div><span>النوع</span><b>${e.ev.type === 'in' ? 'وصول' : 'انصراف'}</b></div>
-        <div><span>الوقت</span><b class="num">${fmtDay(dt)} · ${dt.toLocaleTimeString('en-GB')}</b></div>
-        <div><span>طريقة التحقق</span><b>${KIND[e.kind]}${e.template && e.kind !== 'finger' ? ` · ${esc(e.template)}` : ''}</b></div>
-        ${e.score ? `<div><span>نسبة التطابق</span><b class="num" style="color:var(--teal-ink)">${e.score}%</b></div>` : ''}
-        <div><span>الجهاز</span><b>${esc(e.gate)}${e.device ? ` · <span class="num" dir="ltr">${esc(e.device.serial)}</span>` : ''}</b></div>
-        <div><span>رقم السجل</span><b class="num" dir="ltr">${esc(e.ref)}</b></div>
-      </div>
-      ${cap && !e.expired && !isViewerRestricted ? `<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn sm" id="evdl">${icon('download', 14)}حفظ الصورة</button></div>` : ''}`;
-
+    $$('[data-evtab]', m).forEach(btn => {
+      btn.onclick = () => {
+        const t = tabs[+btn.dataset.evtab]; if (!t) return;
+        const im = $('#ev-main-img', m);
+        if (im) { im.src = t.src; im.classList.toggle('fp', !!t.fp); }
+        $$('[data-evtab]', m).forEach(b => b.classList.toggle('on', b === btn));
+      };
+    });
     $('#evdl', m) && ($('#evdl', m).onclick = async () => { const b = await (await fetch(cap)).blob(); saveBlob(b, `إثبات-${e.student.name}-${e.ev.type === 'in' ? 'وصول' : 'انصراف'}-${dt.getDate()}-${dt.getMonth() + 1}.jpg`); });
   });
 }
