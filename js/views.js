@@ -1,5 +1,5 @@
 import * as db from './store.js';
-import { $, $$, esc, icon, fmtTime, fmtDay, dayKey, dayName, ago, maskPhone, fmtPhone, normalizePhone, atTime, norm, readTable, files, fmtSize, fileKind, saveBlob, docxText, openPdf, sampleHandout, pdfPage, jpegsToPdf } from './util.js';
+import { $, $$, esc, icon, fmtTime, fmtDay, dayKey, dayName, ago, maskPhone, fmtPhone, normalizePhone, atTime, norm, readTable, files, fmtSize, fileKind, saveBlob, docxText, openPdf, sampleHandout, pdfPage, jpegsToPdf, qrSvg } from './util.js';
 import { pill, avatar, topbar, toast, modal, ctx, scope, logo, wordmark, protectedViewer, watermarkText, watermarkTile } from './app.js';
 // Staff permission check: the administration can do everything; a teacher only what the school allowed.
 const can = perm => { const c = ctx(); return !c ? false : c.role !== 'teacher' ? ['owner', 'admin'].includes(c.role) : db.teacherCan(c.roleInfo.teacherId, perm); };
@@ -50,10 +50,10 @@ const login = {
       $$('[data-u]', step).forEach(b => b.onclick = () => { un.value = b.dataset.u; pw.value = 'hader2026'; });
       $('#forgot', step).onclick = () => forgotStep('', un.value);
       $('#resetlog', step).onclick = () => modal('إعادة تهيئة حسابات التجربة', `<div style="display:flex;flex-direction:column;gap:12px"><div>كل اليوزرات والرموز ترجع مثل البداية، وينفتح أي حساب مقفول، وتطلع كل الأجهزة المسجّل دخولها.</div>
-        <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز للكل: <b class="num">hader2026</b>)<br>مدير المدرسة: <b class="num">m1001</b> · المدرس: <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (رمز SMS: <b class="num">123456</b>)<br>ولي الأمر: <b class="num" dir="ltr">0770 000 0003</b> · الطالب أحمد: <b class="num" dir="ltr">0770 000 0004</b></div>
-        <div class="muted small">بيانات الطلاب والمنشورات والدرجات تبقى مثل ما هي. اليوزرات اللي ولّدتها لمدرسين جدد تنمسح وتحتاج تولّدها من جديد.</div>
+        <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز للكل: <b class="num">hader2026</b> + Google Authenticator)<br>مدير المدرسة: <b class="num">m1001</b> · المدرس: <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (التحقق عبر Google Authenticator)<br>ولي الأمر: <b class="num" dir="ltr">0770 000 0003</b> · الطالب أحمد: <b class="num" dir="ltr">0770 000 0004</b></div>
+        <div class="muted small">بيانات الطلاب والمنشورات والدرجات تبقى مثل ما هي. سيتم فك ربط Google Authenticator حتى تعيد ربطه من جديد.</div>
         <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-close>إلغاء</button><button class="btn pr" id="okreset">إعادة التهيئة</button></div></div>`, (m, close) => {
-        $('#okreset', m).onclick = () => { db.resetLogins(); close(); toast('رجعت حسابات التجربة للبداية', 'الرمز hader2026 · رمز SMS 123456'); userStep(); };
+        $('#okreset', m).onclick = () => { db.resetLogins(); close(); toast('رجعت حسابات التجربة للبداية', 'الرمز hader2026 · التحقق عبر Google Authenticator'); userStep(); };
       });
       $('#fu', step).onsubmit = e => {
         e.preventDefault();
@@ -62,27 +62,60 @@ const login = {
       };
       (un.value ? pw : un).focus();
     };
+    const showBoundBackups = (backups, sessionRoles) => {
+      step.innerHTML = `<div style="display:flex;gap:10px;align-items:center">${wordmark(46)}</div>
+        <div class="card" style="background:var(--teal-soft);border-color:var(--teal);padding:12px 14px">
+          <b style="color:var(--teal-ink)">تم ربط Google Authenticator بنجاح ✓</b>
+          <div class="small" style="margin-top:4px">من الآن فصاعداً، سيطلب منك التطبيق رمز الـ 6 أرقام من Google Authenticator في كل مرة تسجل دخولك.</div>
+        </div>
+        <div>
+          <b>رموز الاسترداد الاحتياطية (تُعرض مرة واحدة فقط):</b>
+          <div class="muted small" style="margin:3px 0 8px">احفظها بمكان آمن للدخول إذا بدّلت هاتفك.</div>
+          <div class="tfa-backups num" dir="ltr">${backups.map(b => `<span>${esc(b)}</span>`).join('')}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn" id="bk-copy" style="flex:1">${icon('book', 15)}نسخ الرموز</button>
+          <button type="button" class="btn pr" id="bk-go" style="flex:1;min-height:48px">متابعة للدخول</button>
+        </div>`;
+      $('#bk-copy', step).onclick = async () => { try { await navigator.clipboard.writeText(backups.join('\n')); toast('تم نسخ رموز الاسترداد', ''); } catch { toast('انسخ الرموز يدوياً', ''); } };
+      $('#bk-go', step).onclick = () => { if (sessionRoles.length > 1) whoStep(sessionRoles); else go(); };
+    };
     const totpStep = (info, err = '') => {
+      const fKey = info.secret ? info.secret.replace(/(.{4})/g, '$1 ').trim() : '';
       step.innerHTML = `<div style="display:flex;gap:10px;align-items:center">${wordmark(46)}</div>
         <div style="display:flex;align-items:center;gap:12px">
           <span class="ki t" style="width:44px;height:44px;border-radius:13px">${icon('shield', 22)}</span>
-          <div><h1 style="font-size:20px;margin:0">Google Authenticator</h1><div class="muted small">التحقق بخطوتين لحساب <b class="num" dir="ltr">${esc(info.username)}</b></div></div>
+          <div>
+            <h1 style="font-size:19px;margin:0">${info.needBind ? 'ربط Google Authenticator' : 'رمز Google Authenticator'}</h1>
+            <div class="muted small">${info.needBind ? 'الربط مرة واحدة فقط لحساب' : 'التحقق الإلزامي لحساب'} <b class="num" dir="ltr">${esc(info.username)}</b></div>
+          </div>
         </div>
-        <form id="ftfa" style="display:flex;flex-direction:column;gap:14px" novalidate>
-          <label class="field ${err ? 'err' : ''}">رمز التحقق (6 أرقام من التطبيق أو رمز استرداد)
+        ${info.needBind ? `
+          <div class="tfa-qr-box" style="flex-direction:column;gap:10px;padding:10px">
+            <div class="tfa-qr">${qrSvg(info.uri, 176)}</div>
+            <div style="width:100%;display:flex;flex-direction:column;gap:6px">
+              <div class="small muted" style="text-align:center">امسح الرمز بتطبيق <b>Google Authenticator</b> أو انسخ المفتاح:</div>
+              <div class="tfa-secret num" dir="ltr" style="font-size:12px;padding:6px 8px">${esc(fKey)}</div>
+              <button type="button" class="btn sm" id="tfa-copy-s" style="align-self:center">${icon('book', 13)}نسخ المفتاح السري</button>
+            </div>
+          </div>` : ''}
+        <form id="ftfa" style="display:flex;flex-direction:column;gap:12px" novalidate>
+          <label class="field ${err ? 'err' : ''}">${info.needBind ? 'أدخل رمز الـ 6 أرقام من التطبيق لتأكيد الربط' : 'رمز التحقق (6 أرقام من Google Authenticator أو رمز استرداد)'}
             <input class="input num tfa-code" id="tfa-in" dir="ltr" inputmode="numeric" autocomplete="one-time-code" placeholder="000 000" maxlength="10">
-            <span class="help">${esc(err || 'افتح تطبيق Google Authenticator واكتب الرمز الظاهر حالياً.')}</span>
+            <span class="help">${esc(err || 'افتح تطبيق Google Authenticator واكتب الرمز الظاهر حالياً (يتجدد كل 30 ثانية).')}</span>
           </label>
-          <button class="btn pr" style="min-height:50px">${icon('shield', 18)}تحقق ودخول</button>
+          <button class="btn pr" style="min-height:50px">${icon('shield', 18)}${info.needBind ? 'تأكيد الربط والدخول' : 'تحقق ودخول'}</button>
           <button type="button" class="btn" id="tfa-back">رجوع لتسجيل الدخول</button>
         </form>`;
       const inp = $('#tfa-in', step);
       inp.focus();
+      $('#tfa-copy-s', step) && ($('#tfa-copy-s', step).onclick = async () => { try { await navigator.clipboard.writeText(info.secret); toast('تم نسخ المفتاح السري', 'الصقه في Google Authenticator'); } catch { toast('انسخ المفتاح يدوياً', ''); } });
       $('#tfa-back', step).onclick = () => userStep('', info.username);
       $('#ftfa', step).onsubmit = e => {
         e.preventDefault();
         const r = db.verifyLoginTotp(info.token, inp.value);
         if (!r.ok) { if (r.expired) userStep(r.error, info.username); else totpStep(info, r.error); return; }
+        if (r.boundNow && r.backups?.length) { showBoundBackups(r.backups, r.session.roles); return; }
         if (r.usedBackup) toast('تم الدخول برمز استرداد احتياطي', 'ننصح بحفظ ما تبقى من رموزك');
         if (r.session.roles.length > 1) whoStep(r.session.roles); else go();
       };
@@ -142,12 +175,12 @@ const login = {
     };
     const phoneStep = (err = '') => {
       step.innerHTML = `<div style="display:flex;gap:10px;align-items:center">${wordmark(46)}</div>
-        <div><h1>تسجيل الدخول</h1><div class="muted">رقم هاتف واحد = حساب واحد</div></div>
+        <div><h1>تسجيل الدخول</h1><div class="muted">التحقق عبر تطبيق Google Authenticator</div></div>
         ${tabs('phone')}${err ? '' : kickNote()}
         <form id="f1" style="display:flex;flex-direction:column;gap:14px" novalidate>
-          <label class="field ${err ? 'err' : ''}">رقم الهاتف المسجّل<input class="input num" id="ph" dir="ltr" placeholder="07XXXXXXXXX" data-phone inputmode="numeric" value="${esc(phone)}" autocomplete="tel"><span class="help">${esc(err || 'يصل الرمز إلى الرقم المسجّل لدى المدرسة فقط.')}</span></label>
-          <button class="btn pr" style="min-height:50px">إرسال الرمز عبر SMS</button></form>
-        <div class="card" style="padding:12px 14px;font-size:13px"><b>التحقق برمز SMS إلزامي.</b> الحساب يشتغل على جهاز واحد: الدخول من جهاز جديد يطلّع الجهاز القديم.</div>
+          <label class="field ${err ? 'err' : ''}">رقم الهاتف المسجّل<input class="input num" id="ph" dir="ltr" placeholder="07XXXXXXXXX" data-phone inputmode="numeric" value="${esc(phone)}" autocomplete="tel"><span class="help">${esc(err || 'الدخول برقمك المسجّل لدى المدرسة + رمز Google Authenticator.')}</span></label>
+          <button class="btn pr" style="min-height:50px">${icon('shield', 18)}المتابعة عبر Google Authenticator</button></form>
+        <div class="card" style="padding:12px 14px;font-size:13px"><b>التحقق بـ Google Authenticator إلزامي في كل دخول.</b> يشتغل الحساب على جهاز واحد فقط.</div>
         <div class="demo"><b>نسخة تجريبية:</b> اضغط على رقم لتجربة الحساب<br>
           ولي الأمر: <button data-p="07700000003">0770 000 0003</button><br>
           الطالب (أحمد): <button data-p="07700000004">0770 000 0004</button></div>`;
@@ -157,32 +190,70 @@ const login = {
       $('#f1', step).onsubmit = e => {
         e.preventDefault(); phone = ph.value;
         const r = db.requestCode(phone);
-        if (!r.ok) phoneStep(r.error); else codeStep();
+        if (!r.ok) phoneStep(r.error); else codeStep(r);
       };
       ph.focus();
     };
-    const codeStep = (err = '') => {
-      step.innerHTML = `<div><h1>أدخل الرمز</h1><div class="muted">أرسلنا رمزاً من 6 أرقام إلى <span class="num" dir="ltr">${maskPhone(phone)}</span></div></div>
-        <form id="f2" style="display:flex;flex-direction:column;gap:14px" novalidate>
-          <div class="otp">${Array.from({ length: 6 }, (_, i) => `<input inputmode="numeric" maxlength="1" aria-label="الرقم ${i + 1}">`).join('')}</div>
-          ${err ? `<div class="small" style="color:var(--red-ink);font-weight:700;text-align:center">${esc(err)}</div>` : ''}
-          <button class="btn pr" style="min-height:50px">تأكيد</button>
-          <button type="button" class="btn" id="back">تغيير الرقم</button></form>
-        <div class="demo">الرمز في النسخة التجريبية: <b class="num">123456</b> · <button id="fill">املأه لي</button></div>`;
-      const boxes = $$('.otp input', step);
-      boxes.forEach((b, i) => {
-        b.addEventListener('input', () => { b.value = b.value.replace(/\D/g, '').slice(-1); if (b.value && boxes[i + 1]) boxes[i + 1].focus(); });
-        b.addEventListener('keydown', e => { if (e.key === 'Backspace' && !b.value && boxes[i - 1]) boxes[i - 1].focus(); });
-        b.addEventListener('paste', e => { const t = (e.clipboardData.getData('text') || '').replace(/\D/g, ''); if (t.length >= 6) { e.preventDefault(); boxes.forEach((x, j) => x.value = t[j] || ''); } });
-      });
-      boxes[0].focus();
+    const codeStep = (req, err = '') => {
+      const fKey = req?.secret ? req.secret.replace(/(.{4})/g, '$1 ').trim() : '';
+      step.innerHTML = `<div style="display:flex;gap:10px;align-items:center">${wordmark(46)}</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="ki t" style="width:44px;height:44px;border-radius:13px">${icon('shield', 22)}</span>
+          <div>
+            <h1 style="font-size:19px;margin:0">${req?.needBind ? 'ربط Google Authenticator' : 'رمز Google Authenticator'}</h1>
+            <div class="muted small">${req?.needBind ? 'الربط لأول مرة للرقم' : 'أدخل الرمز المتجدد للرقم'} <span class="num" dir="ltr">${maskPhone(phone)}</span></div>
+          </div>
+        </div>
+        ${req?.needBind ? `
+          <div class="tfa-qr-box" style="flex-direction:column;gap:10px;padding:10px">
+            <div class="tfa-qr">${qrSvg(req.uri, 176)}</div>
+            <div style="width:100%;display:flex;flex-direction:column;gap:6px">
+              <div class="small muted" style="text-align:center">افتح <b>Google Authenticator</b> وامسح الرمز (أو انسخ المفتاح):</div>
+              <div class="tfa-secret num" dir="ltr" style="font-size:12px;padding:6px 8px">${esc(fKey)}</div>
+              <button type="button" class="btn sm" id="ph-copy-s" style="align-self:center">${icon('book', 13)}نسخ المفتاح السري</button>
+            </div>
+          </div>` : ''}
+        <form id="f2" style="display:flex;flex-direction:column;gap:12px" novalidate>
+          ${req?.needBind ? `
+            <label class="field ${err ? 'err' : ''}">أدخل الـ 6 أرقام من التطبيق لتأكيد الربط
+              <input class="input num tfa-code" id="ph-tfa-in" dir="ltr" inputmode="numeric" autocomplete="one-time-code" placeholder="000 000" maxlength="7">
+              <span class="help">${esc(err || 'اكتب الـ 6 أرقام الظاهرة حالياً في Google Authenticator.')}</span>
+            </label>` : `
+            <div class="otp">${Array.from({ length: 6 }, (_, i) => `<input inputmode="numeric" maxlength="1" aria-label="الرقم ${i + 1}">`).join('')}</div>
+            <div class="small muted" style="text-align:center">افتح تطبيق <b>Google Authenticator</b> واكتب الرمز المكوّن من 6 أرقام</div>
+            ${err ? `<div class="small" style="color:var(--red-ink);font-weight:700;text-align:center">${esc(err)}</div>` : ''}`}
+          <button class="btn pr" style="min-height:50px">${icon('shield', 18)}${req?.needBind ? 'تأكيد الربط والدخول' : 'تحقق ودخول'}</button>
+          <button type="button" class="btn" id="back">تغيير الرقم</button>
+        </form>`;
+      $('#ph-copy-s', step) && ($('#ph-copy-s', step).onclick = async () => { try { await navigator.clipboard.writeText(req.secret); toast('تم نسخ المفتاح السري', 'الصقه في Google Authenticator'); } catch { toast('انسخ المفتاح يدوياً', ''); } });
       $('#back', step).onclick = () => phoneStep();
-      $('#fill', step).onclick = () => { '123456'.split('').forEach((d, j) => boxes[j].value = d); };
-      $('#f2', step).onsubmit = e => {
-        e.preventDefault();
-        const r = db.verifyCode(phone, boxes.map(b => b.value).join(''));
-        if (!r.ok) codeStep(r.error); else if (r.session.roles.length > 1) whoStep(r.session.roles); else go();
-      };
+      if (req?.needBind) {
+        const inp = $('#ph-tfa-in', step);
+        inp.focus();
+        $('#f2', step).onsubmit = e => {
+          e.preventDefault();
+          const r = db.verifyCode(phone, inp.value, req.secret);
+          if (!r.ok) codeStep(req, r.error);
+          else if (r.boundNow && r.backups?.length) showBoundBackups(r.backups, r.session.roles);
+          else if (r.session.roles.length > 1) whoStep(r.session.roles);
+          else go();
+        };
+      } else {
+        const boxes = $$('.otp input', step);
+        boxes.forEach((b, i) => {
+          b.addEventListener('input', () => { b.value = b.value.replace(/\D/g, '').slice(-1); if (b.value && boxes[i + 1]) boxes[i + 1].focus(); });
+          b.addEventListener('keydown', e => { if (e.key === 'Backspace' && !b.value && boxes[i - 1]) boxes[i - 1].focus(); });
+          b.addEventListener('paste', e => { const t = (e.clipboardData.getData('text') || '').replace(/\D/g, ''); if (t.length >= 6) { e.preventDefault(); boxes.forEach((x, j) => x.value = t[j] || ''); } });
+        });
+        boxes[0].focus();
+        $('#f2', step).onsubmit = e => {
+          e.preventDefault();
+          const r = db.verifyCode(phone, boxes.map(b => b.value).join(''));
+          if (!r.ok) codeStep(req, r.error);
+          else if (r.session.roles.length > 1) whoStep(r.session.roles);
+          else go();
+        };
+      }
     };
     const go = () => { location.hash = ''; window.dispatchEvent(new HashChangeEvent('hashchange')); };
     // One number, several people or roles (a parent and the children without phones): pick who is using the app now.
@@ -535,9 +606,9 @@ const attendance = {
           </div>
           <div style="display:flex;flex-direction:column;gap:6px">
             ${matchedStudents.slice(0, 25).map(s => {
-              const x = db.statusOf(s.id, att.day);
-              const isH = x.status === 'holiday';
-              return `<div class="row" style="padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface-100);gap:10px;flex-wrap:wrap">
+        const x = db.statusOf(s.id, att.day);
+        const isH = x.status === 'holiday';
+        return `<div class="row" style="padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface-100);gap:10px;flex-wrap:wrap">
                 <a href="#/student/${s.id}" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:10px;flex:1;min-width:180px">
                   ${avatar(s.name, x.status, db.photoOf(s.id))}
                   <div style="min-width:0">
@@ -551,7 +622,7 @@ const attendance = {
                   <button type="button" class="btn sm" data-pick-stu="${s.id}">فتح الشعبة</button>
                 </div>
               </div>`;
-            }).join('')}
+      }).join('')}
           </div>
         </div>` : '';
 
@@ -579,9 +650,9 @@ const attendance = {
       ${gradesWithSecs.length ? [...new Set(gradesWithSecs.map(x => x.grade.stage))].map((stage, sti) => `
         <div class="stg-h st${sti % 3}"><span class="stg-i">${icon('grade', 16)}</span><h2>المرحلة ${esc(String(stage || '').replace('ال', ''))}</h2><span class="stg-c">${gradesWithSecs.filter(x => x.grade.stage === stage).length} صف</span></div>
         <div class="tiles" style="margin-bottom:18px">${gradesWithSecs.filter(x => x.grade.stage === stage).map(({ grade: g, secs }) => {
-          const gl = secs.flatMap(s => db.students(s.id)); const gx = db.summary(gl, att.day);
-          const gc = gx.rate >= 90 ? 'teal' : 'amber';
-          return `<div class="tile">
+        const gl = secs.flatMap(s => db.students(s.id)); const gx = db.summary(gl, att.day);
+        const gc = gx.rate >= 90 ? 'teal' : 'amber';
+        return `<div class="tile">
             <div style="display:flex;gap:12px;align-items:center">
               <span class="tip st${sti % 3}">${icon('grade', 20)}<b>${esc(g.short || g.name.slice(0, 2))}</b></span>
               <div style="flex:1;min-width:0"><b style="font-size:17px">${esc(g.name)}</b><div class="muted small">${secs.length} شعبة · ${gl.length} طالباً</div></div>
@@ -590,7 +661,7 @@ const attendance = {
             ${isHoliday ? '' : `<div class="bar" style="flex:none"><i style="width:${gx.rate}%;background:var(--${gc})"></i></div>`}
             <div class="secs">${secs.map((s, si) => { const ss = db.students(s.id); const n = ss.length; const y = db.summary(ss, att.day); const pct = n ? Math.round(y.came / n * 100) : 0; return `<button type="button" class="sec sc c${si % 6}" data-open-sec="${s.id}" title="فتح حضور ${esc(g.name)} شعبة ${esc(s.name)}"><span class="sl">${esc(shortSecIcon(s, g))}</span><span class="sb"><span class="sn">الكل <em>${n}</em></span><span class="sp">${isHoliday ? 'عطلة رسمية' : `حاضر <em>${y.came}</em>`}</span><span class="sm"><i style="width:${isHoliday ? 0 : pct}%"></i></span></span></button>`; }).join('')}</div>
           </div>`;
-        }).join('')}</div>`).join('') : (!matchedStudents.length ? `<div class="empty">لا توجد نتائج مطابقة لبحثك (لا طلاب ولا شعب)</div>` : '')}
+      }).join('')}</div>`).join('') : (!matchedStudents.length ? `<div class="empty">لا توجد نتائج مطابقة لبحثك (لا طلاب ولا شعب)</div>` : '')}
       `;
 
       $('#day', container).onchange = e => { att.day = +e.target.value; this.update(el); };
@@ -705,8 +776,8 @@ const attendance = {
           </thead>
           <tbody>
             ${shown.map(({ s, x }) => {
-              const isH = x.status === 'holiday';
-              return `<tr>
+      const isH = x.status === 'holiday';
+      return `<tr>
                 <td><a href="#/student/${s.id}" style="color:inherit;display:flex;gap:10px;align-items:center;text-decoration:none">${avatar(s.name, x.status, db.photoOf(s.id))}<b>${esc(s.name)}</b></a></td>
                 <td class="muted">${esc(db.sectionShort(s.sectionId))}</td>
                 <td class="num">${x.inEv ? `<button class="evlink" data-ev="${x.inEv.id}" title="إثبات الوصول">${fmtTime(x.inEv.ts)} ${icon('eye', 13)}</button>` : (isH ? '<span class="muted small">—</span>' : x.exempt ? '<span class="muted small">مستثنى رسمياً</span>' : '—')}</td>
@@ -715,7 +786,7 @@ const attendance = {
                 <td>${isH ? '<span class="pill" style="background:#E0E7FF;color:#3730A3;border:1px solid #C7D2FE">عطلة رسمية 🏖️</span>' : pill(x.status)}${x.status === 'left' && x.late ? ' ' + pill('late') : ''}${x.exempt && !isH ? ` <span class="pill" style="background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE" title="مستثنى بقرار: ${esc(x.exemption?.reason || '')}">مستثنى 🛡️</span>` : ''}</td>
                 <td style="white-space:nowrap">${!isH && isToday && can('att') && (x.status === 'pending' || x.status === 'absent') ? `<button class="btn sm" data-mark="${s.id}">حضور يدوي</button> <button class="btn sm" data-excuse="${s.id}">عذر</button>` : ''}</td>
               </tr>`;
-            }).join('')}
+    }).join('')}
           </tbody>
         </table>
       ` : `<div class="empty">لا يوجد طلاب بهذه الحالة في شعبة (${esc(currentSec?.name || '')})</div>`}
@@ -928,8 +999,8 @@ function officialHolidayModal(defaultDay, editDay = null, onDone = null) {
       </div>
       <div style="max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:6px" id="hol-list-box">
         ${allHols.length ? allHols.map(h => {
-          const isD = h.status === 'draft';
-          return `
+    const isD = h.status === 'draft';
+    return `
           <div class="row" style="background:var(--surface-100);padding:8px 12px;border-radius:8px;gap:8px;align-items:center;border:1px solid var(--border)">
             <span style="font-size:22px;flex:none">${h.badge || '🏛️'}</span>
             <div style="flex:1">
@@ -1495,11 +1566,11 @@ const classes = {
     box.innerHTML = stages.map((stage, sti) => {
       const stageGrades = db.grades().filter(g => g.stage === stage);
       return `<div class="stg-h st${sti % 3}"><span class="stg-i">${icon('grade', 16)}</span><h2>المرحلة ${esc(stage.replace('ال', ''))}</h2><span class="stg-c">${stageGrades.length} صف</span></div><div class="tiles">${stageGrades.map(g => {
-      const list = db.students().filter(s => db.section(s.sectionId)?.gradeId === g.id); const x = db.summary(list);
-      return `<div class="tile"><div style="display:flex;gap:12px;align-items:center"><span class="tip st${sti % 3}">${icon('grade', 20)}<b>${esc(g.short || g.name.slice(0, 2))}</b></span><div style="flex:1"><b style="font-size:17px">${esc(g.name)}</b><div class="muted small">${db.sections(g.id).length} شعبة · ${list.length} طالباً</div></div>${hol ? `<span class="pill p-quiet">${icon('calendar', 13)} عطلة</span>` : `<b class="num" style="font-size:20px;color:${x.rate >= 90 ? 'var(--teal-ink)' : 'var(--amber-ink)'}">${x.rate}%</b>`}</div>
+        const list = db.students().filter(s => db.section(s.sectionId)?.gradeId === g.id); const x = db.summary(list);
+        return `<div class="tile"><div style="display:flex;gap:12px;align-items:center"><span class="tip st${sti % 3}">${icon('grade', 20)}<b>${esc(g.short || g.name.slice(0, 2))}</b></span><div style="flex:1"><b style="font-size:17px">${esc(g.name)}</b><div class="muted small">${db.sections(g.id).length} شعبة · ${list.length} طالباً</div></div>${hol ? `<span class="pill p-quiet">${icon('calendar', 13)} عطلة</span>` : `<b class="num" style="font-size:20px;color:${x.rate >= 90 ? 'var(--teal-ink)' : 'var(--amber-ink)'}">${x.rate}%</b>`}</div>
         ${hol ? '' : `<div class="bar" style="flex:none"><i style="width:${x.rate}%;background:${x.rate >= 90 ? 'var(--teal)' : 'var(--amber)'}"></i></div>`}
         <div class="secs">${db.sections(g.id).map((s, si) => { const ss = db.students(s.id); const n = ss.length; const y = db.summary(ss); const pct = n ? Math.round(y.came / n * 100) : 0; return `<div class="sec-box"><a class="sec sc c${si % 6}" href="#/section/${s.id}" title="${esc(g.name)} · شعبة ${esc(s.name)}"><span class="sl">${esc(shortSecIcon(s, g))}</span><span class="sb"><span class="sn">الكل <em>${n}</em></span><span class="sp">${hol ? 'عطلة رسمية' : `حاضر <em>${y.came}</em>`}</span><span class="sm"><i style="width:${hol ? 0 : pct}%"></i></span></span></a>${canManage ? `<div class="sec-acts"><button type="button" class="sec-act" data-editsec="${s.id}" title="تعديل الشعبة">${icon('edit', 12)} تعديل</button><button type="button" class="sec-act del" data-delsec="${s.id}" title="حذف الشعبة">${icon('trash', 12)} حذف</button></div>` : ''}</div>`; }).join('')}${canManage ? `<button type="button" class="sec add" data-addsec="${g.id}">${icon('plus', 16)}شعبة</button>` : ''}</div></div>`;
-    }).join('')}</div>`;
+      }).join('')}</div>`;
     }).join('');
   },
 };
@@ -1876,14 +1947,14 @@ const settings = {
           <button type="button" class="btn ${ts.enabled ? '' : 'pr'}" data-totp style="align-self:flex-start">${icon('shield', 16)}${ts.enabled ? 'إدارة / تعطيل Google Authenticator' : 'ربط تطبيق Google Authenticator'}</button>`;
         })()}
         <h2 style="margin-top:8px">حسابات الدخول</h2>
-        <div class="muted small">ترجع اليوزرات والرموز مثل البداية (hader2026)، وتنفتح الحسابات المقفولة والموقوفة، وتطلع كل الأجهزة المسجّل دخولها. أرقام أولياء الأمور والطلاب تبقى تدخل برمز SMS.</div>
+        <div class="muted small">ترجع اليوزرات والرموز مثل البداية (hader2026)، وينفك ربط Google Authenticator حتى تعيد ربطه من جديد، وتنفتح الحسابات المقفولة والموقوفة.</div>
         <button class="btn" id="resetlogins">${icon('key', 16)}إعادة تهيئة اليوزرات وأرقام الموبايل</button>
         <h2 style="margin-top:8px">صور وبصمات إثبات الوصول (الحذف التلقائي)</h2>
         ${(() => {
-          const ps = db.proofStorageStats();
-          return `<div class="muted small">صور وبصمات إثبات الوصول المرسلة لأولياء الأمور تُحذف تلقائياً بعد <b>${ps.retentionDays} يوماً</b> لمنع ثقل المنصة (تبقى أوقات الحضور فقط). الصور المرفوعة النشطة حالياً: <b class="num">${ps.uploadedActive}</b>.</div>
+        const ps = db.proofStorageStats();
+        return `<div class="muted small">صور وبصمات إثبات الوصول المرسلة لأولياء الأمور تُحذف تلقائياً بعد <b>${ps.retentionDays} يوماً</b> لمنع ثقل المنصة (تبقى أوقات الحضور فقط). الصور المرفوعة النشطة حالياً: <b class="num">${ps.uploadedActive}</b>.</div>
           <button type="button" class="btn sm" id="prune-proofs" style="align-self:flex-start">${icon('trash', 14)}تنظيف الصور المنتهية (أقدم من ${ps.retentionDays} يوماً) الآن</button>`;
-        })()}
+      })()}
         <h2 style="margin-top:8px">السيرفر</h2>
         <div class="muted small">كل البيانات الآن داخل المتصفح فقط. عند ربط السيرفر يتبدّل ملف واحد (store.js) وتبقى الواجهات كما هي.</div>
       </div>
@@ -1905,7 +1976,7 @@ const settings = {
         this.render(el);
       }
       if (e.target.closest('#resetlogins')) modal('إعادة تهيئة حسابات الدخول', `<div style="display:flex;flex-direction:column;gap:12px"><div>كل اليوزرات والرموز ترجع مثل البداية، وتنفتح الحسابات المقفولة والموقوفة، وتطلع كل الأجهزة المسجّل دخولها (حتى جهازك، فترجع تسجل دخول).</div>
-        <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز: <b class="num">hader2026</b>)<br>مدير المدرسة <b class="num">m1001</b> · المدرس <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (رمز SMS <b class="num">123456</b>)<br>ولي الأمر <b class="num" dir="ltr">0770 000 0003</b> · الطالب <b class="num" dir="ltr">0770 000 0004</b></div>
+        <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز: <b class="num">hader2026</b> + Google Authenticator)<br>مدير المدرسة <b class="num">m1001</b> · المدرس <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (التحقق عبر Google Authenticator)<br>ولي الأمر <b class="num" dir="ltr">0770 000 0003</b> · الطالب <b class="num" dir="ltr">0770 000 0004</b></div>
         <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-close>إلغاء</button><button class="btn pr" id="okrl">إعادة التهيئة</button></div></div>`, (m, close) => { $('#okrl', m).onclick = () => { db.resetLogins(); close(); toast('رجعت حسابات الدخول للبداية', 'سجّل دخول من جديد'); setTimeout(() => { db.logout?.(); location.hash = '#/'; location.reload(); }, 900); }; });
       const pt = e.target.closest('[data-prot]'); if (pt) { const on = pt.getAttribute('aria-checked') !== 'true'; pt.setAttribute('aria-checked', on); db.setProtection({ [pt.dataset.prot]: on }, ctx().name); toast(on ? 'تفعّلت الحماية' : 'انطفت الحماية', pt.closest('.row').querySelector('b').textContent); }
     });
@@ -2001,10 +2072,10 @@ const parent = {
           ${nMarks ? `<div class="pill p-late" style="align-self:flex-start;font-weight:700">يوجد ${nMarks} درجات جديدة غير مقروءة</div>` : ''}
           <div style="display:flex;flex-direction:column;gap:8px">
             ${kidMarks.slice(0, 4).map(({ m, kid }) => {
-              const scVal = m.scores[kid.id];
-              const pct = scVal == null ? null : (scVal / m.max) * 100;
-              const isWarn = pct != null && pct >= 50 && pct <= 65;
-              return `
+          const scVal = m.scores[kid.id];
+          const pct = scVal == null ? null : (scVal / m.max) * 100;
+          const isWarn = pct != null && pct >= 50 && pct <= 65;
+          return `
               <div class="row" style="background:var(--surface-200);border-radius:10px;padding:8px 12px;flex-wrap:wrap">
                 <div style="flex:1;min-width:160px">
                   <b>${esc(db.first(kid.name))} · ${esc(m.subject)}</b>
@@ -2013,7 +2084,7 @@ const parent = {
                 </div>
                 ${scoreChip(scVal, m.max)}
               </div>`;
-            }).join('')}
+        }).join('')}
           </div>
         </div>`;
       })()}
@@ -2235,11 +2306,11 @@ const reports = {
           <section class="ap-group">
             <div class="stg-h st${gi % 3}"><span class="stg-i">${icon('grade', 16)}</span><h2>${esc(g.name)}</h2>${g.stage ? `<span class="pill p-quiet">${esc(g.stage)}</span>` : ''}<span class="stg-c">${ss.length} شعبة</span></div>
             <div class="ap-grid">${ss.map((s, si) => {
-              const r = db.monthReport(s.id);
-              const t = r.rows.reduce((a, x) => ({ p: a.p + x.c.present, l: a.l + x.c.late, ab: a.ab + x.c.absent, e: a.e + x.c.excused }), { p: 0, l: 0, ab: 0, e: 0 });
-              const all = t.p + t.l + t.ab + t.e; const rate = all ? Math.round((t.p + t.l) / all * 100) : 0;
-              const secColors = ['#1E2B5C', '#0B7F70', '#C08A2E', '#2F5592', '#6A5A9E', '#A44A55'];
-              return `<button type="button" class="ap-tile" data-open-sec="${s.id}" style="--st:${stColor(rate)}" aria-label="فتح تقرير ${esc(g.name)} شعبة ${esc(s.name)}">
+          const r = db.monthReport(s.id);
+          const t = r.rows.reduce((a, x) => ({ p: a.p + x.c.present, l: a.l + x.c.late, ab: a.ab + x.c.absent, e: a.e + x.c.excused }), { p: 0, l: 0, ab: 0, e: 0 });
+          const all = t.p + t.l + t.ab + t.e; const rate = all ? Math.round((t.p + t.l) / all * 100) : 0;
+          const secColors = ['#1E2B5C', '#0B7F70', '#C08A2E', '#2F5592', '#6A5A9E', '#A44A55'];
+          return `<button type="button" class="ap-tile" data-open-sec="${s.id}" style="--st:${stColor(rate)}" aria-label="فتح تقرير ${esc(g.name)} شعبة ${esc(s.name)}">
                 <div class="ap-top">
                   <span class="ap-ico" style="--ic:${secColors[si % 6]}">${icon('grade', 18)}<b>${esc(g.short || shortSecIcon(s, g))}</b></span>
                   <span class="ap-ttl"><div>${esc(g.name)} · شعبة ${esc(s.name)}</div><p>${s.homeroom ? `مشرف الشعبة: ${esc(s.homeroom)}` : 'لا يوجد مشرف معيّن'}${s.room ? ` · قاعة ${esc(s.room)}` : ''}</p></span>
@@ -2253,7 +2324,7 @@ const reports = {
                 </div>
                 <div class="ap-foot"><span>${icon('users', 13)} ${r.rows.length} طالب · ${r.days.length} يوم</span><span class="ap-go">فتح التقرير ${icon('back', 14)}</span></div>
               </button>`;
-            }).join('')}</div>
+        }).join('')}</div>
           </section>`).join('') : '<div class="empty">لا توجد شعب مطابقة لبحثك</div>';
       };
       $('#rep-aq', el).oninput = e => { rep.appQ = e.target.value; draw(); };
@@ -2926,10 +2997,10 @@ const marksView = {
     const perSub = subjects.map(s => { const ms = all.filter(m => m.subject === s && m.scores[kid.id] != null); const p = ms.length ? Math.round(ms.reduce((a, m) => a + m.scores[kid.id] / m.max * 100, 0) / ms.length) : null; return { s, p, n: ms.length }; });
     box.innerHTML = `${kids.length > 1 ? `<div class="seg" role="group">${kids.map(k => `<button data-kid="${k.id}" aria-pressed="${k.id === kid.id}">${esc(db.first(k.name))}</button>`).join('')}</div>` : ''}
       <div class="grid g4">${perSub.map(x => {
-        const t = x.p == null ? null : markTone(x.p, 100);
-        const tier = t ? t[3] : '';
-        const isSel = markState.subj === x.s;
-        return `<button class="card mk-card ${tier ? 'mk-' + tier : ''} ${isSel ? 'mk-sel' : ''}" data-subj="${esc(x.s)}">
+      const t = x.p == null ? null : markTone(x.p, 100);
+      const tier = t ? t[3] : '';
+      const isSel = markState.subj === x.s;
+      return `<button class="card mk-card ${tier ? 'mk-' + tier : ''} ${isSel ? 'mk-sel' : ''}" data-subj="${esc(x.s)}">
           <div class="mk-top">
             <b>${esc(x.s)}</b>
             ${t ? `<span class="mk-badge">${t[2]}</span>` : ''}
@@ -2939,14 +3010,14 @@ const marksView = {
           <span class="small muted">${x.n} امتحان</span>
           ${tier === 'warn' ? '<div class="mk-note">أرجو الاهتمام بالطالب لتحسين الدرجة إلى الأفضل</div>' : ''}
         </button>`;
-      }).join('') || '<div class="card empty">لا درجات بعد</div>'}</div>
+    }).join('') || '<div class="card empty">لا درجات بعد</div>'}</div>
       <div class="card"><h2 style="margin-bottom:4px">${markState.subj ? esc(markState.subj) : 'كل الدرجات'} · ${esc(db.first(kid.name))}</h2>
       ${list.length ? list.map(m => {
-        const scVal = m.scores[kid.id];
-        const pct = scVal == null ? null : (scVal / m.max) * 100;
-        const isWarn = pct != null && pct >= 50 && pct <= 65;
-        return `<div class="row" style="${this.fresh?.has(m.id) ? 'background:var(--surface-300);margin:0 -10px;padding:10px' : ''}"><div style="flex:1;min-width:0"><b>${esc(m.subject)} · ${esc(m.exam)}</b>${this.fresh?.has(m.id) ? ' <span class="pill p-absent" style="font-size:10px;padding:0 6px">جديد</span>' : ''}<div class="muted small">${esc(m.lesson)} · ${esc(m.byName)} · ${fmtDay(new Date(m.ts))}</div>${isWarn ? '<div class="mk-note-inline">أرجو الاهتمام بالطالب لتحسين الدرجة إلى الأفضل</div>' : ''}</div>${(m.history || []).some(h => h.studentId === kid.id) ? '<span class="pill p-late" style="font-size:10px;padding:0 6px" title="هذه الدرجة تعدّلت بعد النشر">معدّلة</span>' : ''}${scoreChip(scVal, m.max)}</div>`;
-      }).join('') : '<div class="empty">لا درجات</div>'}</div>`;
+      const scVal = m.scores[kid.id];
+      const pct = scVal == null ? null : (scVal / m.max) * 100;
+      const isWarn = pct != null && pct >= 50 && pct <= 65;
+      return `<div class="row" style="${this.fresh?.has(m.id) ? 'background:var(--surface-300);margin:0 -10px;padding:10px' : ''}"><div style="flex:1;min-width:0"><b>${esc(m.subject)} · ${esc(m.exam)}</b>${this.fresh?.has(m.id) ? ' <span class="pill p-absent" style="font-size:10px;padding:0 6px">جديد</span>' : ''}<div class="muted small">${esc(m.lesson)} · ${esc(m.byName)} · ${fmtDay(new Date(m.ts))}</div>${isWarn ? '<div class="mk-note-inline">أرجو الاهتمام بالطالب لتحسين الدرجة إلى الأفضل</div>' : ''}</div>${(m.history || []).some(h => h.studentId === kid.id) ? '<span class="pill p-late" style="font-size:10px;padding:0 6px" title="هذه الدرجة تعدّلت بعد النشر">معدّلة</span>' : ''}${scoreChip(scVal, m.max)}</div>`;
+    }).join('') : '<div class="empty">لا درجات</div>'}</div>`;
   },
 };
 // Who is acting right now, as it gets written next to every change.
@@ -3544,10 +3615,10 @@ function ttGrid(grid, { editable = false, diff = null, today = -1, cur = -1, sho
       ? `<button type="button" class="tt-dh d${d % 5}" data-day="${d}" title="اضغط لتعديل اسم اليوم">${dayInner}</button>`
       : `<div class="tt-dh d${d % 5}">${dayInner}</div>`;
     return `<tr class="${d === today ? 'today' : ''}"><th>${dayHead}</th>${grid[d].map((c, p) => {
-    const x = chg.get(d + ':' + p); const isCur = d === today && p === cur;
-    const was = x && side === 'draft' ? `<i class="was">كانت: ${x.from ? esc(x.from.subject) : 'فارغة'}</i>` : '';
-    return `<td class="${x ? (side === 'pub' ? 'old' : 'chg') : ''} ${isCur ? 'cur' : ''} ${c ? '' : 'empty'}">${editable ? `<button type="button" class="ttc" data-cell="${d}:${p}" aria-label="${esc(w)} ${db.periodName(p)}">${cellHtml(c, showTeacher, was)}</button>` : `<div class="ttc">${cellHtml(c, showTeacher, was)}${isCur ? '<i class="now">هسه</i>' : ''}</div>`}</td>`;
-  }).join('')}</tr>`;
+      const x = chg.get(d + ':' + p); const isCur = d === today && p === cur;
+      const was = x && side === 'draft' ? `<i class="was">كانت: ${x.from ? esc(x.from.subject) : 'فارغة'}</i>` : '';
+      return `<td class="${x ? (side === 'pub' ? 'old' : 'chg') : ''} ${isCur ? 'cur' : ''} ${c ? '' : 'empty'}">${editable ? `<button type="button" class="ttc" data-cell="${d}:${p}" aria-label="${esc(w)} ${db.periodName(p)}">${cellHtml(c, showTeacher, was)}</button>` : `<div class="ttc">${cellHtml(c, showTeacher, was)}${isCur ? '<i class="now">هسه</i>' : ''}</div>`}</td>`;
+    }).join('')}</tr>`;
   }).join('')}
   </tbody></table></div>`;
 }

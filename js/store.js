@@ -40,8 +40,8 @@ function rebase() { S.clock.virtual = now(); S.clock.real = Date.now(); }
 export const clock = () => ({ ...S.clock, now: now() });
 export function setSpeed(x) { rebase(); S.clock.speed = x; emit('clock'); }
 export function setPaused(p) { rebase(); S.clock.paused = p; emit('clock'); }
-export function resetDemo() { const m = S?.clock?.mode || 'real'; storage.del(KEY); const keepCreds = S?.creds; S = seed(m); S.marks = seedMarks(); S.markReads = {}; S.chats = {}; S.tickets = []; S.creds = keepCreds || seedCreds(); IDX = null; emit('reset'); }
-export function setMode(m) { storage.del(KEY); const keepCreds = S?.creds; S = seed(m); S.marks = seedMarks(); S.markReads = {}; S.chats = {}; S.tickets = []; S.creds = keepCreds || seedCreds(); IDX = null; emit('reset'); }
+export function resetDemo() { const m = S?.clock?.mode || 'real'; storage.del(KEY); const keepCreds = S?.creds, keepTotp = S?.totp; S = seed(m); S.marks = seedMarks(); S.markReads = {}; S.chats = {}; S.tickets = []; S.creds = keepCreds || seedCreds(); S.totp = keepTotp || {}; IDX = null; emit('reset'); }
+export function setMode(m) { storage.del(KEY); const keepCreds = S?.creds, keepTotp = S?.totp; S = seed(m); S.marks = seedMarks(); S.markReads = {}; S.chats = {}; S.tickets = []; S.creds = keepCreds || seedCreds(); S.totp = keepTotp || {}; IDX = null; emit('reset'); }
 // Off days: Friday and Saturday (real clock), plus official holidays announced by the administration.
 // On an off day no scan counts and nobody is marked absent.
 export const holidays = () => (S.holidays || []).slice().sort((a, b) => a.day.localeCompare(b.day));
@@ -399,6 +399,7 @@ export function init() {
   S.chats = S.chats || {}; S.tickets = S.tickets || [];
   if (!S.marks) { S.marks = seedMarks(); S.markReads = {}; }
   if (!S.creds) S.creds = saved?.creds || seedCreds(); // generated logins survive a new demo day
+  if (!S.totp) S.totp = saved?.totp || {};
   // Migrate owner/admin credential from old demo password to the new private password automatically
   if (S.creds['07700000000'] && S.creds['07700000000'].hash === hashPw('hader2026')) {
     S.creds['07700000000'].hash = '4of9nz';
@@ -453,7 +454,7 @@ function addEvent(ev, quiet) {
 }
 
 function tick(quiet) {
-  if (S.clock.mode === 'real' && dayKey(new Date()) !== S.day) { const keep = { students: S.students, guardians: S.guardians, teachers: S.teachers, admins: S.admins, disabled: S.disabled, posts: S.posts, reads: S.reads, settings: S.settings, audit: S.audit, notes: S.notes, excuses: S.excuses, events: S.events, eid: S.eid, seen: S.seen, marks: S.marks, markReads: S.markReads, creds: S.creds, holidays: S.holidays, chats: S.chats, tickets: S.tickets, tt: S.tt, ttSeen: S.ttSeen, promotions: S.promotions, graduates: S.graduates, graduatedStore: S.graduatedStore, finalsSeeded: S.finalsSeeded, teacherEvents: S.teacherEvents, teacherExcuses: S.teacherExcuses, exemptions: S.exemptions };
+  if (S.clock.mode === 'real' && dayKey(new Date()) !== S.day) { const keep = { students: S.students, guardians: S.guardians, teachers: S.teachers, admins: S.admins, disabled: S.disabled, posts: S.posts, reads: S.reads, settings: S.settings, audit: S.audit, notes: S.notes, excuses: S.excuses, events: S.events, eid: S.eid, seen: S.seen, marks: S.marks, markReads: S.markReads, creds: S.creds, totp: S.totp, holidays: S.holidays, chats: S.chats, tickets: S.tickets, tt: S.tt, ttSeen: S.ttSeen, promotions: S.promotions, graduates: S.graduates, graduatedStore: S.graduatedStore, finalsSeeded: S.finalsSeeded, teacherEvents: S.teacherEvents, teacherExcuses: S.teacherExcuses, exemptions: S.exemptions };
     S = Object.assign(seed('real'), keep); IDX = null; pruneExpiredProofs(Date.now()); emit('reset'); return; }
   const t = now();
   const base = S.today;
@@ -1192,11 +1193,34 @@ export function rolesFor(phone) {
   if (st) roles.push({ role: 'student', name: st.name, label: 'طالب', studentId: st.id });
   return roles;
 }
+function getTotpEntry(phone) {
+  const p = normalizePhone(phone);
+  return (S.totp && S.totp[p]) || (S.creds && S.creds[p]?.totp) || null;
+}
+function saveTotpEntry(phone, entry) {
+  const p = normalizePhone(phone);
+  S.totp = S.totp || {};
+  if (entry) {
+    S.totp[p] = entry;
+    if (S.creds && S.creds[p]) S.creds[p].totp = entry;
+  } else {
+    delete S.totp[p];
+    if (S.creds && S.creds[p]) delete S.creds[p].totp;
+  }
+}
 export function requestCode(phone) {
   if (!validPhone(phone)) return { ok: false, error: 'اكتب رقماً عراقياً من 11 رقماً يبدأ بـ 07.' };
-  if (!rolesFor(phone).length) return { ok: false, error: 'هذا الرقم غير مسجّل في المدرسة. تواصل مع الإدارة لإضافته.' };
-  if (S.disabled.includes(normalizePhone(phone))) return { ok: false, error: 'هذا الحساب موقوف. تواصل مع إدارة المنصة.' };
-  return { ok: true, demoCode: '123456' }; // the server sends a real SMS here
+  const p = normalizePhone(phone);
+  const roles = rolesFor(p);
+  if (!roles.length) return { ok: false, error: 'هذا الرقم غير مسجّل في المدرسة. تواصل مع الإدارة لإضافته.' };
+  if (S.disabled.includes(p)) return { ok: false, error: 'هذا الحساب موقوف. تواصل مع إدارة المنصة.' };
+  const existing = getTotpEntry(p);
+  if (existing?.secret) {
+    return { ok: true, needBind: false, phone: p, name: roles[0]?.name || '' };
+  }
+  const secret = totpGenerateSecret(20);
+  const uri = totpUri(secret, p, 'Hader');
+  return { ok: true, needBind: true, secret, uri, phone: p, name: roles[0]?.name || '' };
 }
 export function safeCompare(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
@@ -1207,7 +1231,7 @@ export function safeCompare(a, b) {
   return diff === 0;
 }
 
-export function verifyCode(phone, code) {
+export function verifyCode(phone, code, bindSecret = '') {
   phone = normalizePhone(phone);
   if (!phone) return { ok: false, error: 'رقم الهاتف غير صالح.' };
   S.smsFails = S.smsFails || {};
@@ -1215,15 +1239,42 @@ export function verifyCode(phone, code) {
   if (f && f.until > Date.now()) {
     return { ok: false, error: `محاولات كثيرة خاطئة. حاول بعد ${Math.ceil((f.until - Date.now()) / 60000)} دقيقة.` };
   }
-  if (!safeCompare(String(code).trim(), '123456')) {
+  const clean = String(code || '').replace(/[\s-]/g, '').toUpperCase();
+  const existing = getTotpEntry(phone);
+  if (existing?.secret) {
+    const okTotp = totpVerify(existing.secret, clean, 1);
+    const bIdx = !okTotp ? (existing.backups || []).findIndex(h => safeCompare(h, hashPw(clean))) : -1;
+    if (!okTotp && bIdx < 0) {
+      const n = (f?.n || 0) + 1;
+      S.smsFails[phone] = { n, until: n >= 5 ? Date.now() + 5 * 60000 : 0 };
+      if (n >= 5) S.smsFails[phone].n = 0;
+      save();
+      return { ok: false, error: n >= 5 ? 'خمس محاولات خاطئة. انقفل الدخول 5 دقائق.' : `رمز Google Authenticator غير صحيح. بقت ${5 - n} محاولات.` };
+    }
+    delete S.smsFails[phone];
+    if (bIdx >= 0) {
+      existing.backups.splice(bIdx, 1);
+      log('دخول برمز استرداد 2FA', `${rolesFor(phone)[0]?.name || phone}`);
+    } else {
+      log('دخول عبر Google Authenticator', `${rolesFor(phone)[0]?.name || phone}`);
+    }
+    save();
+    return { ...startSession(phone), usedBackup: bIdx >= 0 };
+  }
+  // First-time binding with Google Authenticator QR
+  if (!bindSecret || !totpVerify(bindSecret, clean, 1)) {
     const n = (f?.n || 0) + 1;
     S.smsFails[phone] = { n, until: n >= 5 ? Date.now() + 5 * 60000 : 0 };
+    if (n >= 5) S.smsFails[phone].n = 0;
     save();
-    return { ok: false, error: n >= 5 ? 'خمس محاولات خاطئة. انقفل الدخول 5 دقائق.' : `الرمز غير صحيح. تبقى لديك ${5 - n} محاولات.` };
+    return { ok: false, error: 'الرمز غير صحيح. امسح رمز QR بتطبيق Google Authenticator واكتب الـ 6 أرقام الظاهرة حالياً.' };
   }
   delete S.smsFails[phone];
+  const backups = genBackupCodes(6);
+  saveTotpEntry(phone, { secret: bindSecret, enabledAt: Date.now(), backups: backups.map(b => hashPw(b.replace(/-/g, '').toUpperCase())) });
+  log('ربط Google Authenticator', `${rolesFor(phone)[0]?.name || phone} · تفعيل التحقق الدائم`);
   save();
-  return startSession(phone);
+  return { ...startSession(phone), boundNow: true, backups };
 }
 
 /* ---------------- username + password (website login for staff) ----------------
@@ -1243,7 +1294,7 @@ function seedCreds() {
 // Demo: put every login back to the starting accounts (admin, m1001, t1001 with hader2026),
 // clear lockouts and signed-in devices. Data (students, posts, marks) is kept.
 export function resetLogins() {
-  S.creds = seedCreds(); S.fails = {}; S.disabled = [];
+  S.creds = seedCreds(); S.totp = {}; S.fails = {}; S.smsFails = {}; S.disabled = [];
   try { localStorage.removeItem(ACTIVE_KEY); } catch { }
   dev.del('hader-kicked');
   log('إعادة تهيئة حسابات الدخول', 'اليوزرات والرموز رجعت للبداية'); save(); emit('creds');
@@ -1341,12 +1392,17 @@ export function loginWithPassword(username, password) {
   delete S.fails[username];
   if (S.disabled.includes(phone)) return { ok: false, error: 'هذا الحساب موقوف. تواصل مع إدارة المنصة.' };
   if (!isStaff(phone)) return { ok: false, error: 'هذا الحساب ما عنده دخول باليوزر.' };
-  if (S.creds[phone]?.totp?.secret) {
-    const token = 'tfa_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-    pending2fa = { token, phone, username, until: Date.now() + 5 * 60000 };
-    return { ok: true, needTotp: true, token, username, name: rolesFor(phone)[0]?.name || username };
+  // Mandatory Google Authenticator verification on every staff/teacher/admin login
+  const existing = getTotpEntry(phone);
+  const token = 'tfa_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  if (existing?.secret) {
+    pending2fa = { token, phone, username, needBind: false, until: Date.now() + 5 * 60000 };
+    return { ok: true, needTotp: true, needBind: false, token, username, name: rolesFor(phone)[0]?.name || username };
   }
-  return startSession(phone);
+  const secret = totpGenerateSecret(20);
+  const uri = totpUri(secret, username, 'Hader');
+  pending2fa = { token, phone, username, needBind: true, secret, until: Date.now() + 10 * 60000 };
+  return { ok: true, needTotp: true, needBind: true, token, secret, uri, username, name: rolesFor(phone)[0]?.name || username };
 }
 let pending2fa = null;
 function genBackupCodes(n = 6) {
@@ -1363,34 +1419,34 @@ function genBackupCodes(n = 6) {
 }
 export function totpStatus(phone) {
   const p = normalizePhone(phone || session()?.phone || '');
+  const t = getTotpEntry(p);
   const c = (S.creds || {})[p];
   return {
-    enabled: !!c?.totp?.secret,
-    enabledAt: c?.totp?.enabledAt || null,
-    backupsLeft: (c?.totp?.backups || []).length,
-    username: c?.username || '',
+    enabled: !!t?.secret,
+    enabledAt: t?.enabledAt || null,
+    backupsLeft: (t?.backups || []).length,
+    username: c?.username || p,
   };
 }
 export function beginTotpSetup() {
   const s = session();
   if (!s) return { ok: false, error: 'سجّل دخولك أولاً.' };
   const c = (S.creds || {})[s.phone];
-  if (!c) return { ok: false, error: 'المصادقة الثنائية متاحة لحسابات الإدارة والمدرسين.' };
+  const label = c?.username || s.phone;
   const secret = totpGenerateSecret(20);
-  const uri = totpUri(secret, c.username, 'Hader');
-  return { ok: true, secret, uri, username: c.username };
+  const uri = totpUri(secret, label, 'Hader');
+  return { ok: true, secret, uri, username: label };
 }
 export function confirmTotpSetup(secret, code) {
   const s = session();
   if (!s) return { ok: false, error: 'انتهت الجلسة. سجّل دخولك من جديد.' };
-  const c = (S.creds || {})[s.phone];
-  if (!c) return { ok: false, error: 'الحساب غير موجود.' };
   if (!secret || !totpVerify(secret, code, 1)) {
     return { ok: false, error: 'الرمز غير صحيح. تأكد من كتابة الـ 6 أرقام الظاهرة حالياً في Google Authenticator.' };
   }
+  const c = (S.creds || {})[s.phone];
   const backups = genBackupCodes(6);
-  c.totp = { secret, enabledAt: Date.now(), backups: backups.map(b => hashPw(b.replace(/-/g, '').toUpperCase())) };
-  log('تفعيل Google Authenticator', `${c.username} · تم ربط التحقق بخطوتين (2FA)`);
+  saveTotpEntry(s.phone, { secret, enabledAt: Date.now(), backups: backups.map(b => hashPw(b.replace(/-/g, '').toUpperCase())) });
+  log('تفعيل Google Authenticator', `${c?.username || s.phone} · تم ربط التحقق بخطوتين (2FA)`);
   save();
   emit('creds');
   return { ok: true, backups };
@@ -1398,15 +1454,24 @@ export function confirmTotpSetup(secret, code) {
 export function disableTotp(password, code) {
   const s = session();
   if (!s) return { ok: false, error: 'انتهت الجلسة.' };
+  const t = getTotpEntry(s.phone);
   const c = (S.creds || {})[s.phone];
-  if (!c || !c.totp?.secret) return { ok: false, error: 'المصادقة الثنائية غير مفعّلة أصلاً.' };
-  if (!password || !safeCompare(c.hash, hashPw(password))) return { ok: false, error: 'كلمة المرور الحالية غير صحيحة.' };
+  if (!t?.secret) return { ok: false, error: 'المصادقة الثنائية غير مفعّلة أصلاً.' };
+  if (c && (!password || !safeCompare(c.hash, hashPw(password)))) return { ok: false, error: 'كلمة المرور الحالية غير صحيحة.' };
   const cleanCode = String(code || '').replace(/[\s-]/g, '').toUpperCase();
-  const validTotp = totpVerify(c.totp.secret, cleanCode, 1);
-  const bIdx = (c.totp.backups || []).findIndex(h => safeCompare(h, hashPw(cleanCode)));
+  const validTotp = totpVerify(t.secret, cleanCode, 1);
+  const bIdx = (t.backups || []).findIndex(h => safeCompare(h, hashPw(cleanCode)));
   if (!validTotp && bIdx < 0) return { ok: false, error: 'أدخل رمز Google Authenticator الصحيح (أو رمز استرداد) لتأكيد الإلغاء.' };
-  delete c.totp;
-  log('تعطيل Google Authenticator', `${c.username} · تم فك ربط التحقق بخطوتين`);
+  saveTotpEntry(s.phone, null);
+  log('إعادة ربط Google Authenticator', `${c?.username || s.phone} · تم فك الربط القديم`);
+  save();
+  emit('creds');
+  return { ok: true };
+}
+export function resetUserTotp(phone, by) {
+  const p = normalizePhone(phone);
+  saveTotpEntry(p, null);
+  log('إعادة ضبط Google Authenticator', `${rolesFor(p)[0]?.name || p}`, by);
   save();
   emit('creds');
   return { ok: true };
@@ -1416,27 +1481,43 @@ export function verifyLoginTotp(token, code) {
     pending2fa = null;
     return { ok: false, expired: true, error: 'انتهت مهلة التحقق. أعد إدخال اليوزر والرمز.' };
   }
-  const { phone, username } = pending2fa;
-  const c = (S.creds || {})[phone];
-  if (!c?.totp?.secret) { pending2fa = null; return startSession(phone); }
+  const { phone, username, needBind, secret } = pending2fa;
   S.fails = S.fails || {};
   const fk = '2fa_' + username;
   const f = S.fails[fk];
   if (f && f.until > Date.now()) return { ok: false, error: `محاولات خاطئة كثيرة. حاول بعد ${Math.ceil((f.until - Date.now()) / 60000)} دقيقة.` };
   const clean = String(code || '').replace(/[\s-]/g, '').toUpperCase();
-  const okTotp = totpVerify(c.totp.secret, clean, 1);
-  const bIdx = !okTotp ? (c.totp.backups || []).findIndex(h => safeCompare(h, hashPw(clean))) : -1;
+  if (needBind) {
+    if (!secret || !totpVerify(secret, clean, 1)) {
+      const n = (f?.n || 0) + 1;
+      S.fails[fk] = { n, until: n >= 5 ? Date.now() + 5 * 60000 : 0 };
+      if (n >= 5) S.fails[fk].n = 0;
+      save();
+      return { ok: false, error: 'الرمز غير صحيح. امسح رمز QR بتطبيق Google Authenticator واكتب الـ 6 أرقام الظاهرة حالياً.' };
+    }
+    delete S.fails[fk];
+    const backups = genBackupCodes(6);
+    saveTotpEntry(phone, { secret, enabledAt: Date.now(), backups: backups.map(b => hashPw(b.replace(/-/g, '').toUpperCase())) });
+    log('ربط ودخول عبر Google Authenticator', username);
+    save();
+    pending2fa = null;
+    return { ...startSession(phone), boundNow: true, backups };
+  }
+  const existing = getTotpEntry(phone);
+  if (!existing?.secret) { pending2fa = null; return startSession(phone); }
+  const okTotp = totpVerify(existing.secret, clean, 1);
+  const bIdx = !okTotp ? (existing.backups || []).findIndex(h => safeCompare(h, hashPw(clean))) : -1;
   if (!okTotp && bIdx < 0) {
     const n = (f?.n || 0) + 1;
     S.fails[fk] = { n, until: n >= 5 ? Date.now() + 5 * 60000 : 0 };
     if (n >= 5) S.fails[fk].n = 0;
     save();
-    return { ok: false, error: n >= 5 ? 'خمس محاولات خاطئة. انقفل التحقق 5 دقائق.' : `رمز التحقق غير صحيح. بقت ${5 - n} محاولات.` };
+    return { ok: false, error: n >= 5 ? 'خمس محاولات خاطئة. انقفل التحقق 5 دقائق.' : `رمز Google Authenticator غير صحيح. بقت ${5 - n} محاولات.` };
   }
   delete S.fails[fk];
   if (bIdx >= 0) {
-    c.totp.backups.splice(bIdx, 1);
-    log('دخول برمز استرداد 2FA', `${username} · المتبقي ${c.totp.backups.length} رموز استرداد`);
+    existing.backups.splice(bIdx, 1);
+    log('دخول برمز استرداد 2FA', `${username} · المتبقي ${existing.backups.length} رموز استرداد`);
     save();
   } else {
     log('دخول عبر Google Authenticator', username);
