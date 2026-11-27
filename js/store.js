@@ -411,20 +411,33 @@ export function init() {
 
 function addEvent(ev, quiet) {
   ev.id = S.eid++;
-  ev.proofExpiresAt = ev.ts + PROOF_TTL_MS;
+  if (ev.deviceId) {
+    ev.fromDevice = true;
+    ev.proofExpiresAt = ev.ts + PROOF_TTL_MS;
+  }
   S.events.push(ev);
   const st = student(ev.studentId);
-  // Catch-up on page load (quiet) still files the notifications; only live scans pop a toast.
+  // Catch-up on page load (quiet) still files the notifications; only live scans notify staff directly.
   if (st) {
     const g = guardian(st.guardianId);
+    const devName = device(ev.deviceId)?.name.split(' · ')[0] ?? '';
     const late = ev.type === 'in' && new Date(ev.ts).getHours() * 60 + new Date(ev.ts).getMinutes() > minutesOf(S.settings.late);
+    const kind = ev.type === 'in' ? (late ? 'late' : 'in') : 'out';
+    const title = ev.type === 'in' ? `${late ? 'وصل متأخراً' : 'وصل إلى المدرسة'}: ${first(st.name)}` : `غادر المدرسة: ${first(st.name)}`;
     notify(g.phone, {
-      kind: ev.type === 'in' ? (late ? 'late' : 'in') : 'out',
-      title: ev.type === 'in' ? `${late ? 'وصل متأخراً' : 'وصل إلى المدرسة'}: ${first(st.name)}` : `غادر المدرسة: ${first(st.name)}`,
-      body: `${fmtTime(ev.ts)} · ${ev.method} · ${device(ev.deviceId)?.name.split(' · ')[0] ?? ''}`,
+      kind, title,
+      body: `${fmtTime(ev.ts)} · ${ev.method}${devName ? ' · ' + devName : ''}`,
       ts: ev.ts, studentId: st.id, evId: ev.id,
     });
-    if (st.phone) notify(st.phone, { kind: ev.type === 'in' ? (late ? 'late' : 'in') : 'out', title: ev.type === 'in' ? `سُجّل حضورك ${fmtTime(ev.ts)}` : `سُجّل انصرافك ${fmtTime(ev.ts)}`, body: `${ev.method}`, ts: ev.ts, studentId: st.id, evId: ev.id });
+    if (ev.deviceId && !quiet) {
+      notifyStaff({
+        kind,
+        title: `${ev.type === 'in' ? 'إثبات وصول' : 'إثبات انصراف'}: ${st.name}`,
+        body: `${sectionShort(st.sectionId)} · ${fmtTime(ev.ts)} · ${ev.method}${devName ? ' · ' + devName : ''}`,
+        ts: ev.ts, studentId: st.id, evId: ev.id,
+      });
+    }
+    if (st.phone) notify(st.phone, { kind, title: ev.type === 'in' ? `سُجّل حضورك ${fmtTime(ev.ts)}` : `سُجّل انصرافك ${fmtTime(ev.ts)}`, body: `${ev.method}`, ts: ev.ts, studentId: st.id, evId: ev.id });
   }
 }
 

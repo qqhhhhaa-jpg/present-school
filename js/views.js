@@ -1949,11 +1949,7 @@ const parent = {
       return `<div class="card" style="background:${tone};display:flex;flex-direction:column;gap:12px">
         <div style="display:flex;gap:12px;align-items:center">${avatar(s.name, x.status, db.photoOf(s.id))}<div style="flex:1"><h2>${esc(db.first(s.name))}</h2><div class="muted small">${esc(db.sectionLabel(s.sectionId))}</div></div>${pill(x.status)}</div>
         <div style="font-weight:700">${esc(line)}</div>
-        ${x.inEv || x.outEv ? (() => {
-          const inProof = x.inEv ? db.evidenceOf(x.inEv) : null;
-          return `${inProof?.proofImg && !inProof.expired ? `<button type="button" class="ev-thumb" data-ev="${x.inEv.id}" title="اضغط لتكبير إثبات الوصول"><img src="${inProof.proofImg}" alt="إثبات الوصول"><span><b>${inProof.proofKind === 'finger' ? 'بصمة الوصول' : 'صورة الوصول'}</b><small>تُحذف تلقائياً بعد ${inProof.daysLeft} يوماً</small></span>${icon('eye', 16)}</button>` : ''}
-          <div style="display:flex;gap:8px;flex-wrap:wrap">${x.inEv ? `<button class="btn sm" data-ev="${x.inEv.id}">${icon('eye', 14)}إثبات الوصول (صورة / بصمة) ${fmtTime(x.inEv.ts)}</button>` : ''}${x.outEv ? `<button class="btn sm" data-ev="${x.outEv.id}">${icon('eye', 14)}إثبات الانصراف ${fmtTime(x.outEv.ts)}</button>` : ''}</div>`;
-        })() : ''}
+        ${x.inEv || x.outEv ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${x.inEv ? `<button class="btn sm" data-ev="${x.inEv.id}">${icon('eye', 14)}إثبات الوصول ${fmtTime(x.inEv.ts)}</button>` : ''}${x.outEv ? `<button class="btn sm" data-ev="${x.outEv.id}">${icon('eye', 14)}إثبات الانصراف ${fmtTime(x.outEv.ts)}</button>` : ''}</div>` : ''}
         ${x.status === 'absent' ? `<button class="btn pr" data-excuse="${s.id}">تبرير الغياب</button>` : ''}
         <div style="display:flex;gap:6px">${db.days().slice(0, 6).reverse().map(d => { const y = db.statusOf(s.id, d); const col = { present: 'var(--teal)', left: 'var(--teal)', late: 'var(--amber)', absent: 'var(--red)', excused: 'var(--amber)', pending: 'var(--surface-300)', none: 'var(--surface-300)', holiday: 'var(--surface-300)' }[y.status]; return `<div style="flex:1;text-align:center"><div style="height:28px;border-radius:8px;background:${col}" title="${db.STATUS[y.status]}"></div><div class="small muted">${dayName(new Date(d))}</div></div>`; }).join('')}</div>
       </div>`;
@@ -4957,120 +4953,52 @@ function fingerImage(e) {
   for (let i = 0; i < 14; i++) { r = (r * 1103515245 + 12345) >>> 0; const a = (r % 628) / 100, d = 20 + (r >> 8) % 110; const x = cx + Math.cos(a) * d * .8, y = cy + Math.sin(a) * d; g.beginPath(); g.arc(x, y, 5, 0, 7); g.stroke(); g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a * 2) * 12, y + Math.sin(a * 2) * 12); g.stroke(); }
   const url = cv.toDataURL('image/png'); EVIMG.set(key, url); return url;
 }
-function compressProofImage(file, maxW = 640, quality = 0.72) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('تعذر قراءة الصورة'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('الملف ليس صورة صالحة'));
-      img.onload = () => {
-        const scale = Math.min(1, maxW / Math.max(img.width, img.height, 1));
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const cv = document.createElement('canvas');
-        cv.width = w; cv.height = h;
-        cv.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(cv.toDataURL('image/jpeg', quality));
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
 async function evidenceModal(evId) {
   db.pruneExpiredProofs();
   const e = db.evidenceOf(db.eventById(evId)); if (!e) return toast('ما لكينا هذي البصمة', '', 'absent');
   const ref = db.photoOf(e.student.id); const dt = new Date(e.ev.ts);
   const KIND = { face: 'بصمة الوجه', finger: 'بصمة الإصبع', card: 'البطاقة', palm: 'بصمة الكف', manual: 'تسجيل يدوي' };
   const c = ctx();
-  const canUpload = c && (['owner', 'admin'].includes(c.role) || can('att'));
   const isViewerRestricted = c && ['parent', 'student'].includes(c.role) && db.protection().noDownload;
 
   modal(`إثبات ${e.ev.type === 'in' ? 'الوصول' : 'الانصراف'}: ${e.student.name}`, `<div id="evb" class="evb"><div class="empty">جاري تجهيز الإثبات…</div></div>`, async (m) => {
     m.classList.add('wide');
-    const renderBody = async () => {
-      const cur = db.evidenceOf(db.eventById(evId));
-      if (!cur) return;
-      const cap = !cur.expired ? (cur.proofImg || (!cur.manual ? await captureImage(cur) : null)) : null;
-      const fp = !cur.expired && cur.kind === 'finger' && !(cur.proofImg && cur.proofKind === 'finger') ? fingerImage(cur) : null;
-      const expDateStr = fmtDay(new Date(cur.expiresAt));
-      const uploadCaption = cur.proofKind === 'finger' ? 'بصمة الطالب المرفوعة للمنصة (ظاهرة لولي الأمر)' : 'صورة الطالب لحظة الوصول (مرفوعة لولي الأمر)';
+    const cap = !e.expired ? (e.proofImg || (!e.manual ? await captureImage(e) : null)) : null;
+    const fp = !e.expired && e.kind === 'finger' && !(e.proofImg && e.proofKind === 'finger') ? fingerImage(e) : null;
 
-      $('#evb', m).innerHTML = `
-        <div class="ev-ttl ${cur.expired ? 'exp' : ''}">
+    $('#evb', m).innerHTML = `
+      ${!e.manual ? `
+        <div class="ev-ttl ${e.expired ? 'exp' : ''}">
           ${icon('clock', 16)}
-          <div style="flex:1">
-            ${cur.expired
-              ? `<b>تم حذف صورة/بصمة الإثبات تلقائياً بعد مرور ${cur.retentionDays} يوماً</b> — حفاظاً على سرعة وخفة المنصة. بيانات وقت الوصول والسجل تبقى محفوظة.`
-              : `<b>سياسة الاحتفاظ (${cur.retentionDays} يوماً):</b> تُحذف الصورة والبصمة تلقائياً بعد <b class="num">${cur.daysLeft}</b> ${cur.daysLeft === 1 ? 'يوم' : 'يوماً'} (بتاريخ <b class="num">${expDateStr}</b>) لمنع ثقل المنصة.`}
-          </div>
+          <b>${e.expired ? 'تم حذف الصورة بعد مرور 30 يوم' : 'تبقى الصورة لمدة 30 يوم'}</b>
         </div>
+      ` : ''}
 
-        ${cur.expired ? `
-          <div class="ev-expired">
-            ${icon('trash', 32)}
-            <b>الصورة والبصمة محذوفة تلقائياً</b>
-            <span class="muted small">مرّ أكثر من ${cur.retentionDays} يوماً على هذا السجل فتم تفريغ وسائط الإثبات تلقائياً لتخفيف المنصة، مع بقاء سجل الحضور والوقت محفوظاً.</span>
-          </div>
-        ` : `
-          <div class="evgrid">
-            ${cur.proofImg ? `<figure class="evfig ${cur.proofKind === 'finger' ? 'fp' : ''}"><img src="${cur.proofImg}" alt="${uploadCaption}"><figcaption>${uploadCaption}</figcaption></figure>`
-              : cur.manual ? `<div class="evmanual">${icon('key', 36)}<b>تسجيل يدوي</b><span>سجّله: ${esc(cur.by)}</span><span class="muted small">لم تُرفع صورة أو بصمة لهذا السجل بعد.${canUpload ? ' يمكنك رفع صورة الطالب أو بصمته من الأسفل لتظهر لولي الأمر.' : ''}</span></div>`
-              : `<figure class="evfig"><img src="${cap}" alt="صورة كاميرا الجهاز لحظة البصمة"><figcaption>صورة كاميرا الجهاز لحظة البصمة (ظاهرة لولي الأمر)</figcaption></figure>`}
-            ${ref ? `<figure class="evfig"><img src="${ref}" alt="الصورة المرجعية"><figcaption>الصورة المرجعية بالمنصة (أول بصمة وجه)</figcaption></figure>` : ''}
-            ${fp ? `<figure class="evfig fp"><img src="${fp}" alt="مطابقة بصمة الإصبع"><figcaption>مطابقة بصمة الإصبع · ${esc(cur.template)}</figcaption></figure>` : ''}
-          </div>
-        `}
-
-        ${canUpload && !cur.expired ? `
-          <div class="ev-upbar">
-            <div style="flex:1;min-width:180px">
-              <b>رفع إثبات وصول لولي الأمر</b>
-              <div class="muted small">ارفع صورة الطالب أو صورة بصمته — تُضغط تلقائياً وتُرسل لولي الأمر وتُحذف بعد ${cur.retentionDays} يوماً.</div>
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <label class="btn sm pr" style="cursor:pointer">${icon('upload', 14)}رفع صورة الطالب<input type="file" id="ev-up-photo" accept="image/*" capture="environment" hidden></label>
-              <label class="btn sm" style="cursor:pointer">${icon('device', 14)}رفع صورة البصمة<input type="file" id="ev-up-finger" accept="image/*" hidden></label>
-            </div>
-          </div>
-        ` : ''}
-
-        <div class="evfacts">
-          <div><span>النوع</span><b>${cur.ev.type === 'in' ? 'وصول' : 'انصراف'}</b></div>
-          <div><span>الوقت</span><b class="num">${fmtDay(dt)} · ${dt.toLocaleTimeString('en-GB')}</b></div>
-          <div><span>طريقة التحقق</span><b>${KIND[cur.kind]}${cur.template && cur.kind !== 'finger' ? ` · ${esc(cur.template)}` : ''}</b></div>
-          ${cur.score ? `<div><span>نسبة التطابق</span><b class="num" style="color:var(--teal-ink)">${cur.score}%</b></div>` : ''}
-          <div><span>الجهاز</span><b>${esc(cur.gate)}${cur.device ? ` · <span class="num" dir="ltr">${esc(cur.device.serial)}</span>` : ''}</b></div>
-          <div><span>رقم السجل</span><b class="num" dir="ltr">${esc(cur.ref)}</b></div>
+      ${e.expired && !e.manual ? `
+        <div class="ev-expired">
+          ${icon('trash', 30)}
+          <b>تم حذف الصورة بعد مرور 30 يوم</b>
         </div>
-        <div class="muted small">بيانات وقت الحضور محفوظة دائماً بالتقارير، أما صور وبصمات الإثبات فتُمسح تلقائياً كل ${cur.retentionDays} يوماً لتبقى المنصة خفيفة وسريعة. ${!ref && !cur.manual && !cur.expired ? 'ما عند الطالب صورة مرجعية بعد: صوّره من ملفه حتى تكدر تقارن.' : ''}</div>
-        ${cap && !cur.expired && !isViewerRestricted ? `<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn sm" id="evdl">${icon('download', 14)}حفظ الصورة</button></div>` : ''}`;
+      ` : `
+        <div class="evgrid">
+          ${e.manual ? `<div class="evmanual">${icon('key', 40)}<b>تسجيل يدوي</b><span>سجّله: ${esc(e.by)}</span><span class="muted small">ما بيه صورة لأن الطالب ما بصم على الجهاز.</span></div>`
+          : `<figure class="evfig"><img src="${cap}" alt="صورة جهاز البصمة لحظة الوصول"><figcaption>صورة جهاز البصمة لحظة ${e.ev.type === 'in' ? 'الوصول' : 'الانصراف'}</figcaption></figure>`}
+          ${ref && !e.manual ? `<figure class="evfig"><img src="${ref}" alt="الصورة المرجعية"><figcaption>الصورة المرجعية بالمنصة</figcaption></figure>` : ''}
+          ${fp ? `<figure class="evfig fp"><img src="${fp}" alt="مطابقة بصمة الإصبع"><figcaption>مطابقة بصمة الإصبع · ${esc(e.template)}</figcaption></figure>` : ''}
+        </div>
+      `}
 
-      $('#evdl', m) && ($('#evdl', m).onclick = async () => { const b = await (await fetch(cap)).blob(); saveBlob(b, `إثبات-${cur.student.name}-${cur.ev.type === 'in' ? 'وصول' : 'انصراف'}-${dt.getDate()}-${dt.getMonth() + 1}.jpg`); });
+      <div class="evfacts">
+        <div><span>النوع</span><b>${e.ev.type === 'in' ? 'وصول' : 'انصراف'}</b></div>
+        <div><span>الوقت</span><b class="num">${fmtDay(dt)} · ${dt.toLocaleTimeString('en-GB')}</b></div>
+        <div><span>طريقة التحقق</span><b>${KIND[e.kind]}${e.template && e.kind !== 'finger' ? ` · ${esc(e.template)}` : ''}</b></div>
+        ${e.score ? `<div><span>نسبة التطابق</span><b class="num" style="color:var(--teal-ink)">${e.score}%</b></div>` : ''}
+        <div><span>الجهاز</span><b>${esc(e.gate)}${e.device ? ` · <span class="num" dir="ltr">${esc(e.device.serial)}</span>` : ''}</b></div>
+        <div><span>رقم السجل</span><b class="num" dir="ltr">${esc(e.ref)}</b></div>
+      </div>
+      ${cap && !e.expired && !isViewerRestricted ? `<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn sm" id="evdl">${icon('download', 14)}حفظ الصورة</button></div>` : ''}`;
 
-      const bindUpload = (inputId, proofKind) => {
-        const inp = $(inputId, m);
-        if (!inp) return;
-        inp.onchange = async () => {
-          const file = inp.files?.[0];
-          if (!file) return;
-          try {
-            const dataUrl = await compressProofImage(file, 640, 0.72);
-            const res = db.attachEventProof(evId, { dataUrl, proofKind }, c.name);
-            if (!res.ok) return toast(res.error || 'تعذر الرفع', '', 'absent');
-            EVIMG.delete('c' + evId);
-            toast(proofKind === 'finger' ? 'تم رفع بصمة الوصول لولي الأمر' : 'تم رفع صورة الوصول لولي الأمر', `تُحذف تلقائياً بعد ${cur.retentionDays} يوماً`);
-            await renderBody();
-          } catch (err) {
-            toast('تعذر معالجة الصورة', err?.message || '', 'absent');
-          }
-        };
-      };
-      bindUpload('#ev-up-photo', 'photo');
-      bindUpload('#ev-up-finger', 'finger');
-    };
-    await renderBody();
+    $('#evdl', m) && ($('#evdl', m).onclick = async () => { const b = await (await fetch(cap)).blob(); saveBlob(b, `إثبات-${e.student.name}-${e.ev.type === 'in' ? 'وصول' : 'انصراف'}-${dt.getDate()}-${dt.getMonth() + 1}.jpg`); });
   });
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-ev]'); if (b) { e.preventDefault(); e.stopPropagation(); evidenceModal(b.dataset.ev); } }, true);
