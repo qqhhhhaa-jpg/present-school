@@ -618,16 +618,18 @@ html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;width:0;height:0}
 .ap-tools .field{margin-bottom:0;flex:1;min-width:220px}
 @media (max-width:640px){.ap-grid{grid-template-columns:1fr}.ap-kpis{width:100%}.ap-kpi{flex:1;min-width:0;padding:6px 8px}}
 
-/* Attendance: colored section chips (each section its own color) */
-.sec.sc{--c:var(--brand);--cs:#E9ECF5;background:var(--cs);border-color:transparent;border-inline-start:4px solid var(--c);display:flex;flex-direction:column;gap:4px;font:inherit;transition:transform .12s,box-shadow .12s}
-.sec.sc:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(30,43,92,.10)}
-.sec.sc>b{color:var(--c);font-size:18px}
-.sec.sc .sn{display:flex;gap:6px;flex-wrap:wrap;font-size:11.5px;color:var(--ink);font-weight:600}
-.sec.sc .sn i{font-style:normal;background:rgba(255,255,255,.7);border-radius:6px;padding:1px 6px}
-.sec.sc .sn i b{font-variant-numeric:tabular-nums}
-.sec.sc.c0{--c:#1E2B5C;--cs:#E9ECF5} .sec.sc.c1{--c:#0B7F70;--cs:#E3F3EF} .sec.sc.c2{--c:#B7791F;--cs:#FBF0DC}
-.sec.sc.c3{--c:#B23A48;--cs:#F9E6E8} .sec.sc.c4{--c:#5B4B9A;--cs:#ECE9F6} .sec.sc.c5{--c:#1F6FA8;--cs:#E3EFF8}
-.secs:has(.sc){grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+/* Attendance: colored section chips (compact) */
+.secs:has(.sc){grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px}
+.sec.sc{--c:#1E2B5C;--cs:#EEF1F8;display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;border:1px solid var(--line);background:var(--surface-200);font:inherit;text-align:right;transition:border-color .12s,box-shadow .12s,background .12s}
+.sec.sc:hover{border-color:var(--c);background:var(--cs);box-shadow:0 3px 10px rgba(30,43,92,.08)}
+.sec.sc .sl{width:28px;height:28px;border-radius:8px;flex:none;display:flex;align-items:center;justify-content:center;background:var(--c);color:#fff;font-weight:800;font-size:14px;line-height:1}
+.sec.sc .sb{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.sec.sc .sn{font-size:12px;color:var(--muted);font-weight:600;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums}
+.sec.sc .sn em{font-style:normal;font-size:14px;font-weight:800;color:var(--ink)}
+.sec.sc .sm{height:4px;border-radius:3px;background:var(--surface-300);overflow:hidden}
+.sec.sc .sm i{display:block;height:100%;border-radius:3px;background:var(--c)}
+.sec.sc.c0{--c:#1E2B5C;--cs:#EEF1F8} .sec.sc.c1{--c:#0B7F70;--cs:#E8F4F1} .sec.sc.c2{--c:#C08A2E;--cs:#FBF3E3}
+.sec.sc.c3{--c:#3D6FA6;--cs:#EAF1F9} .sec.sc.c4{--c:#6A5A9E;--cs:#F0EEF7} .sec.sc.c5{--c:#A44A55;--cs:#F8ECEE}
 
 </style>
 </head>
@@ -3333,7 +3335,7 @@ const attendance = {
               ${isHoliday ? `<span class="pill p-quiet">${icon('calendar', 13)} عطلة</span>` : `<b class="num" style="font-size:20px;color:var(--${gc}-ink)">${gx.rate}%</b>`}
             </div>
             ${isHoliday ? '' : `<div class="bar" style="flex:none"><i style="width:${gx.rate}%;background:var(--${gc})"></i></div>`}
-            <div class="secs">${secs.map((s, si) => { const y = db.summary(db.students(s.id), att.day); return `<button type="button" class="sec sc c${si % 6}" data-open-sec="${s.id}" title="فتح حضور ${esc(g.name)} شعبة ${esc(s.name)}"><b>${esc(s.name)}</b><span class="sn"><i>الكل <b>${y.total}</b></i>${isHoliday ? '<i>عطلة رسمية</i>' : `<i>الحضور <b>${y.came}</b></i>`}</span></button>`; }).join('')}</div>
+            <div class="secs">${secs.map((s, si) => { const y = db.summary(db.students(s.id), att.day); const pct = y.total ? Math.round(y.came / y.total * 100) : 0; return `<button type="button" class="sec sc c${si % 6}" data-open-sec="${s.id}" title="فتح حضور ${esc(g.name)} شعبة ${esc(s.name)}"><span class="sl">${esc(s.name)}</span><span class="sb"><span class="sn">${isHoliday ? `عطلة · <em>${y.total}</em>` : `<em>${y.came}</em>/${y.total}`}</span><span class="sm"><i style="width:${isHoliday ? 0 : pct}%"></i></span></span></button>`; }).join('')}</div>
           </div>`;
         }).join('')}</div>`).join('') : `<div class="empty">لا توجد شعب مطابقة لبحثك</div>`}
       `;
