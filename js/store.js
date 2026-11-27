@@ -5,6 +5,11 @@
 import { rng, dayKey, atTime, minutesOf, norm, normalizePhone, validPhone, storage, fmtTime, totpGenerateSecret, totpVerify, totpUri } from './util.js';
 export { dayKey };
 
+// ===== MASTER SWITCH: Google Authenticator (2FA) on Login =====
+// false = فترة تجريبية / مشاركة المنصة (دخول سهل بدون إلزام Google Authenticator، مع بقاء الربط الاختياري شغالاً)
+// true  = تشغيل إلزامي لـ Google Authenticator بدل SMS لكل الحسابات (طلاب، أولياء أمور، مدرسين، إدارة)
+export const REQUIRE_TOTP_ON_LOGIN = false;
+
 const KEY = 'hader-demo-v5';
 // Which device holds each account. On the server this is the session table; in the demo every
 // browser tab counts as its own device, so open a second tab to watch the first one get signed out.
@@ -1214,13 +1219,16 @@ export function requestCode(phone) {
   const roles = rolesFor(p);
   if (!roles.length) return { ok: false, error: 'هذا الرقم غير مسجّل في المدرسة. تواصل مع الإدارة لإضافته.' };
   if (S.disabled.includes(p)) return { ok: false, error: 'هذا الحساب موقوف. تواصل مع إدارة المنصة.' };
+  if (!REQUIRE_TOTP_ON_LOGIN) {
+    return { ok: true, totpMode: false, demoCode: '123456', phone: p, name: roles[0]?.name || '' };
+  }
   const existing = getTotpEntry(p);
   if (existing?.secret) {
-    return { ok: true, needBind: false, phone: p, name: roles[0]?.name || '' };
+    return { ok: true, totpMode: true, needBind: false, phone: p, name: roles[0]?.name || '' };
   }
   const secret = totpGenerateSecret(20);
   const uri = totpUri(secret, p, 'Hader');
-  return { ok: true, needBind: true, secret, uri, phone: p, name: roles[0]?.name || '' };
+  return { ok: true, totpMode: true, needBind: true, secret, uri, phone: p, name: roles[0]?.name || '' };
 }
 export function safeCompare(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
@@ -1238,6 +1246,18 @@ export function verifyCode(phone, code, bindSecret = '') {
   const f = S.smsFails[phone];
   if (f && f.until > Date.now()) {
     return { ok: false, error: `محاولات كثيرة خاطئة. حاول بعد ${Math.ceil((f.until - Date.now()) / 60000)} دقيقة.` };
+  }
+  if (!REQUIRE_TOTP_ON_LOGIN) {
+    if (!safeCompare(String(code || '').trim(), '123456')) {
+      const n = (f?.n || 0) + 1;
+      S.smsFails[phone] = { n, until: n >= 5 ? Date.now() + 5 * 60000 : 0 };
+      if (n >= 5) S.smsFails[phone].n = 0;
+      save();
+      return { ok: false, error: n >= 5 ? 'خمس محاولات خاطئة. انقفل الدخول 5 دقائق.' : `الرمز غير صحيح. تبقى لديك ${5 - n} محاولات.` };
+    }
+    delete S.smsFails[phone];
+    save();
+    return startSession(phone);
   }
   const clean = String(code || '').replace(/[\s-]/g, '').toUpperCase();
   const existing = getTotpEntry(phone);
@@ -1392,8 +1412,12 @@ export function loginWithPassword(username, password) {
   delete S.fails[username];
   if (S.disabled.includes(phone)) return { ok: false, error: 'هذا الحساب موقوف. تواصل مع إدارة المنصة.' };
   if (!isStaff(phone)) return { ok: false, error: 'هذا الحساب ما عنده دخول باليوزر.' };
-  // Mandatory Google Authenticator verification on every staff/teacher/admin login
+  // Google Authenticator verification: mandatory for all when REQUIRE_TOTP_ON_LOGIN=true,
+  // or optional per-account (only if this account manually enabled it) during demo/sharing mode.
   const existing = getTotpEntry(phone);
+  if (!REQUIRE_TOTP_ON_LOGIN && !existing?.secret) {
+    return startSession(phone);
+  }
   const token = 'tfa_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
   if (existing?.secret) {
     pending2fa = { token, phone, username, needBind: false, until: Date.now() + 5 * 60000 };

@@ -174,13 +174,14 @@ const login = {
       np.focus();
     };
     const phoneStep = (err = '') => {
+      const totpOn = !!db.REQUIRE_TOTP_ON_LOGIN;
       step.innerHTML = `<div style="display:flex;gap:10px;align-items:center">${wordmark(46)}</div>
-        <div><h1>تسجيل الدخول</h1><div class="muted">التحقق عبر تطبيق Google Authenticator</div></div>
+        <div><h1>تسجيل الدخول</h1><div class="muted">${totpOn ? 'التحقق عبر تطبيق Google Authenticator' : 'رقم هاتف واحد = حساب واحد'}</div></div>
         ${tabs('phone')}${err ? '' : kickNote()}
         <form id="f1" style="display:flex;flex-direction:column;gap:14px" novalidate>
-          <label class="field ${err ? 'err' : ''}">رقم الهاتف المسجّل<input class="input num" id="ph" dir="ltr" placeholder="07XXXXXXXXX" data-phone inputmode="numeric" value="${esc(phone)}" autocomplete="tel"><span class="help">${esc(err || 'الدخول برقمك المسجّل لدى المدرسة + رمز Google Authenticator.')}</span></label>
-          <button class="btn pr" style="min-height:50px">${icon('shield', 18)}المتابعة عبر Google Authenticator</button></form>
-        <div class="card" style="padding:12px 14px;font-size:13px"><b>التحقق بـ Google Authenticator إلزامي في كل دخول.</b> يشتغل الحساب على جهاز واحد فقط.</div>
+          <label class="field ${err ? 'err' : ''}">رقم الهاتف المسجّل<input class="input num" id="ph" dir="ltr" placeholder="07XXXXXXXXX" data-phone inputmode="numeric" value="${esc(phone)}" autocomplete="tel"><span class="help">${esc(err || (totpOn ? 'الدخول برقمك المسجّل لدى المدرسة + رمز Google Authenticator.' : 'يصل الرمز إلى الرقم المسجّل لدى المدرسة فقط.'))}</span></label>
+          <button class="btn pr" style="min-height:50px">${totpOn ? `${icon('shield', 18)}المتابعة عبر Google Authenticator` : 'إرسال الرمز عبر SMS'}</button></form>
+        <div class="card" style="padding:12px 14px;font-size:13px">${totpOn ? '<b>التحقق بـ Google Authenticator إلزامي في كل دخول.</b> يشتغل الحساب على جهاز واحد فقط.' : '<b>التحقق برمز SMS إلزامي.</b> الحساب يشتغل على جهاز واحد: الدخول من جهاز جديد يطلّع الجهاز القديم.'}</div>
         <div class="demo"><b>نسخة تجريبية:</b> اضغط على رقم لتجربة الحساب<br>
           ولي الأمر: <button data-p="07700000003">0770 000 0003</button><br>
           الطالب (أحمد): <button data-p="07700000004">0770 000 0004</button></div>`;
@@ -195,6 +196,30 @@ const login = {
       ph.focus();
     };
     const codeStep = (req, err = '') => {
+      if (!req?.totpMode) {
+        step.innerHTML = `<div><h1>أدخل الرمز</h1><div class="muted">أرسلنا رمزاً من 6 أرقام إلى <span class="num" dir="ltr">${maskPhone(phone)}</span></div></div>
+          <form id="f2" style="display:flex;flex-direction:column;gap:14px" novalidate>
+            <div class="otp">${Array.from({ length: 6 }, (_, i) => `<input inputmode="numeric" maxlength="1" aria-label="الرقم ${i + 1}">`).join('')}</div>
+            ${err ? `<div class="small" style="color:var(--red-ink);font-weight:700;text-align:center">${esc(err)}</div>` : ''}
+            <button class="btn pr" style="min-height:50px">تأكيد</button>
+            <button type="button" class="btn" id="back">تغيير الرقم</button></form>
+          <div class="demo">الرمز في النسخة التجريبية: <b class="num">123456</b> · <button id="fill">املأه لي</button></div>`;
+        const boxes = $$('.otp input', step);
+        boxes.forEach((b, i) => {
+          b.addEventListener('input', () => { b.value = b.value.replace(/\D/g, '').slice(-1); if (b.value && boxes[i + 1]) boxes[i + 1].focus(); });
+          b.addEventListener('keydown', e => { if (e.key === 'Backspace' && !b.value && boxes[i - 1]) boxes[i - 1].focus(); });
+          b.addEventListener('paste', e => { const t = (e.clipboardData.getData('text') || '').replace(/\D/g, ''); if (t.length >= 6) { e.preventDefault(); boxes.forEach((x, j) => x.value = t[j] || ''); } });
+        });
+        boxes[0].focus();
+        $('#back', step).onclick = () => phoneStep();
+        $('#fill', step).onclick = () => { '123456'.split('').forEach((d, j) => boxes[j].value = d); };
+        $('#f2', step).onsubmit = e => {
+          e.preventDefault();
+          const r = db.verifyCode(phone, boxes.map(b => b.value).join(''));
+          if (!r.ok) codeStep(req, r.error); else if (r.session.roles.length > 1) whoStep(r.session.roles); else go();
+        };
+        return;
+      }
       const fKey = req?.secret ? req.secret.replace(/(.{4})/g, '$1 ').trim() : '';
       step.innerHTML = `<div style="display:flex;gap:10px;align-items:center">${wordmark(46)}</div>
         <div style="display:flex;align-items:center;gap:12px">
@@ -1942,10 +1967,10 @@ const settings = {
         <div id="hols">${db.holidays().length ? db.holidays().map(h => `<div class="row"><span class="num" style="font-weight:700">${h.day}</span><span style="flex:1">${esc(h.name)}</span><button type="button" class="btn sm dg" data-unhol="${h.day}">إلغاء</button></div>`).join('') : '<div class="small muted">ما أكو عطل رسمية مسجّلة.</div>'}</div>
         <h2 style="margin-top:8px">المصادقة الثنائية (Google Authenticator)</h2>
         ${(() => {
-          const ts = db.totpStatus();
-          return `<div class="muted small">${ts.enabled ? `حسابك (<b class="num" dir="ltr">${esc(ts.username)}</b>) مربوط بتطبيق Google Authenticator ومفعّل ✓ · رموز الاسترداد المتبقية: <b class="num">${ts.backupsLeft}</b>.` : 'اربط حسابك بتطبيق Google Authenticator لتأمين تسجيل الدخول برمز مؤقت يتجدد كل 30 ثانية.'}</div>
+        const ts = db.totpStatus();
+        return `<div class="muted small">${ts.enabled ? `حسابك (<b class="num" dir="ltr">${esc(ts.username)}</b>) مربوط بتطبيق Google Authenticator ومفعّل ✓ · رموز الاسترداد المتبقية: <b class="num">${ts.backupsLeft}</b>.` : 'اربط حسابك بتطبيق Google Authenticator لتأمين تسجيل الدخول برمز مؤقت يتجدد كل 30 ثانية.'}</div>
           <button type="button" class="btn ${ts.enabled ? '' : 'pr'}" data-totp style="align-self:flex-start">${icon('shield', 16)}${ts.enabled ? 'إدارة / تعطيل Google Authenticator' : 'ربط تطبيق Google Authenticator'}</button>`;
-        })()}
+      })()}
         <h2 style="margin-top:8px">حسابات الدخول</h2>
         <div class="muted small">ترجع اليوزرات والرموز مثل البداية (hader2026)، وينفك ربط Google Authenticator حتى تعيد ربطه من جديد، وتنفتح الحسابات المقفولة والموقوفة.</div>
         <button class="btn" id="resetlogins">${icon('key', 16)}إعادة تهيئة اليوزرات وأرقام الموبايل</button>
