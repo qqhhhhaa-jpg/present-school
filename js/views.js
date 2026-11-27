@@ -368,7 +368,6 @@ const attendance = {
     $('#day', el).onchange = e => { att.day = +e.target.value; this.update(el); };
     $('#sec', el).onchange = e => { att.sec = e.target.value; this.update(el); };
     $('#aq', el).oninput = e => { att.q = e.target.value; this.update(el); };
-    $('#att-hol-btn', el)?.addEventListener('click', () => officialHolidayModal(att.day, null, () => this.update(el)));
     el.addEventListener('click', e => {
       if (e.target.closest('#att-hol-btn')) {
         officialHolidayModal(att.day, null, () => this.update(el));
@@ -425,6 +424,9 @@ const attendance = {
       if (r.x.late) counts.late = (counts.late || 0) + (r.x.status === 'left' ? 1 : 0);
       if (r.x.exempt) counts.exempt = (counts.exempt || 0) + 1;
     });
+    if (isHoliday && att.f !== 'all' && att.f !== 'holiday') {
+      att.f = 'all';
+    }
     const F = isHoliday ? [
       ['all', 'الكل'],
       ['holiday', `عطلة رسمية (${counts.holiday || rows.length})`]
@@ -448,7 +450,20 @@ const attendance = {
           : (r.x.status === att.f || (att.f === 'late' && r.x.late));
       return matchFilter && (!q || r.s.name.includes(q));
     });
-    $('#tbl', el).innerHTML = shown.length ? `<table><thead><tr><th>الطالب</th><th>الشعبة</th><th>الوصول</th><th>الانصراف</th><th>الطريقة</th><th>الحالة</th><th></th></tr></thead><tbody>
+    const tableNotice = isHoliday ? `
+    <div style="background:linear-gradient(90deg, #EEF2FF 0%, #E0E7FF 100%);border:1px solid #C7D2FE;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:24px;flex:none">${holInfo?.badge || '🏖️'}</span>
+      <div style="flex:1">
+        <div style="font-weight:700;color:#3730A3;font-size:14px">
+          إشعار الحضور: اليوم عطلة رسمية معتمدة (${esc(holInfo?.name || 'عطلة رسمية')})
+        </div>
+        <div style="font-size:12px;color:#4338CA;margin-top:2px">
+          كافة الطلاب في حالة إعفاء رسمي معتمد من البصمة والدوام · يستمر هذا الإشعار والإعفاء سارياً طوال اليوم وحتى نهايته.
+        </div>
+      </div>
+      <span class="pill" style="background:#4338CA;color:#fff;font-size:11px;font-weight:700;flex:none">ساري طوال اليوم حتى 23:59</span>
+    </div>` : '';
+    $('#tbl', el).innerHTML = tableNotice + (shown.length ? `<table><thead><tr><th>الطالب</th><th>الشعبة</th><th>الوصول</th><th>الانصراف</th><th>الطريقة</th><th>الحالة</th><th></th></tr></thead><tbody>
       ${shown.map(({ s, x }) => {
       const isH = x.status === 'holiday';
       return `<tr><td><a href="#/student/${s.id}" style="color:inherit;display:flex;gap:10px;align-items:center;text-decoration:none">${avatar(s.name, x.status, db.photoOf(s.id))}<b>${esc(s.name)}</b></a></td>
@@ -459,7 +474,7 @@ const attendance = {
           <td>${isH ? '<span class="pill" style="background:#E0E7FF;color:#3730A3;border:1px solid #C7D2FE">عطلة رسمية 🏖️</span>' : pill(x.status)}${x.status === 'left' && x.late ? ' ' + pill('late') : ''}${x.exempt && !isH ? ` <span class="pill" style="background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE" title="مستثنى بقرار: ${esc(x.exemption?.reason || '')}">مستثنى 🛡️</span>` : ''}</td>
           <td style="white-space:nowrap">${!isH && isToday && can('att') && (x.status === 'pending' || x.status === 'absent') ? `<button class="btn sm" data-mark="${s.id}">حضور يدوي</button> <button class="btn sm" data-excuse="${s.id}">عذر</button>` : ''}</td></tr>`;
     }).join('')}
-      </tbody></table>` : `<div class="empty">لا يوجد طلاب بهذه الحالة</div>`;
+      </tbody></table>` : `<div class="empty">لا يوجد طلاب بهذه الحالة</div>`);
   },
 };
 
@@ -503,13 +518,14 @@ function holBannerHtml(holInfo, isHoliday, canManage, day) {
             <span class="pill" style="background:#FDE68A;color:#92400E;border:1px solid #F59E0B;font-weight:700">مسودة في المستودع (غير منشورة)</span>
           ` : `
             <span class="pill" style="background:#DCFCE7;color:#166534;border:1px solid #86EFAC;font-weight:700">منشورة ومعتمدة للطلاب والمدرسين ✓</span>
+            <span class="pill" style="background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;font-weight:700">🕒 سارية طوال اليوم حتى 23:59</span>
           `}
         </div>
         <div style="font-size:13px;color:#B45309;margin-top:2px">
           ${isDraft ? `
             هذه العطلة محفوظة في المستودع كمسودة. انقر <b>"نشر للطلاب والمدرسين والكل"</b> لتعميمها رسمياً وإعفاء الجميع من البصمة.
           ` : `
-            تم إعفاء جميع الطلاب والملاك التدريسي من البصمة لهذا اليوم (${fmtDay(new Date(day))})، ولا يُحسب أي غياب أو تأخير.
+            تم إعفاء جميع الطلاب والملاك التدريسي من البصمة لهذا اليوم (${fmtDay(new Date(day))}) طوال اليوم وحتى نهايته (11:59 ليلاً)، ولا يُحسب أي غياب أو تأخير.
           `}
           ${holInfo.orderNo ? ` · رقم القرار: <b>${esc(holInfo.orderNo)}</b>` : ''}
           ${holInfo.by ? ` · بواسطة: <b>${esc(holInfo.by)}</b>` : ''}
@@ -3402,6 +3418,9 @@ const staffAtt = {
       fseg.innerHTML = F.map(([k, label]) => `<button type="button" data-tf="${k}" aria-pressed="${staffAttState.f === k}">${label}</button>`).join('');
     }
 
+    if (isHoliday && staffAttState.f !== 'all' && staffAttState.f !== 'holiday') {
+      staffAttState.f = 'all';
+    }
     let rows = list.map(t => ({ t, st: db.teacherStatusOf(t.id, day) }));
     if (staffAttState.q) {
       const q = norm(staffAttState.q);
@@ -3414,7 +3433,20 @@ const staffAtt = {
     const tbl = $('#t-tbl', el);
     if (tbl) {
       const canManage = can('att') || ctx().role === 'owner' || ctx().role === 'admin';
-      tbl.innerHTML = rows.length ? `
+      const tableNotice = isHoliday ? `
+      <div style="background:linear-gradient(90deg, #EEF2FF 0%, #E0E7FF 100%);border:1px solid #C7D2FE;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:24px;flex:none">${holInfo?.badge || '🏖️'}</span>
+        <div style="flex:1">
+          <div style="font-weight:700;color:#3730A3;font-size:14px">
+            إشعار دوام الكادر: اليوم عطلة رسمية معتمدة (${esc(holInfo?.name || 'عطلة رسمية')})
+          </div>
+          <div style="font-size:12px;color:#4338CA;margin-top:2px">
+            كافة أعضاء الكادر التعليمي في حالة إعفاء رسمي معتمد من البصمة والدوام · يستمر هذا الإشعار والإعفاء سارياً طوال اليوم وحتى نهايته.
+          </div>
+        </div>
+        <span class="pill" style="background:#4338CA;color:#fff;font-size:11px;font-weight:700;flex:none">ساري طوال اليوم حتى 23:59</span>
+      </div>` : '';
+      tbl.innerHTML = tableNotice + (rows.length ? `
       <table>
         <thead>
           <tr>
@@ -3479,7 +3511,7 @@ const staffAtt = {
             </tr>`;
       }).join('')}
         </tbody>
-      </table>` : '<div class="empty">لا توجد سجلات مطابقة للبحث أو التصفية الحالية.</div>';
+      </table>` : '<div class="empty">لا توجد سجلات مطابقة للبحث أو التصفية الحالية.</div>');
     }
 
     const feed = $('#t-live-feed', el);
