@@ -3648,8 +3648,9 @@ const timetableView = {
     this.update(el);
   },
   update(el) {
-    const c = ctx(); const box = $('#live', el); if (!box || !tts.sec) return;
+    const c = ctx(); const box = $('#live', el); if (!box) return;
     if (!['owner', 'admin', 'teacher'].includes(c.role)) return this.updateReader(el, c);
+    if (!tts.sec) return;
     const t = db.ttOf(tts.sec); const diff = db.ttDiff(tts.sec); const can = db.ttCanEdit(c.role, c.roleInfo.teacherId, tts.sec);
     const opt = $(`#tsec option[value="${CSS.escape(tts.sec)}"]`, el); if (opt) opt.textContent = db.sectionLabel(tts.sec) + (diff.length ? ` · ${diff.length} تغيير غير منشور` : '');
     const wd = new Date(db.now()).getDay(); const today = wd <= 4 && !db.isHoliday() ? wd : -1;
@@ -3665,14 +3666,16 @@ const timetableView = {
     box.innerHTML = bar + body;
   },
   renderReader(el, c) {
-    const kids = c.role === 'parent' ? db.childrenOf(c.roleInfo.guardianId) : [db.student(c.roleInfo.studentId)];
-    if (!kids.some(k => k.id === tts.kid)) tts.kid = kids[0]?.id;
+    const kids = (c.role === 'parent' ? db.childrenOf(c.roleInfo.guardianId) : [db.student(c.roleInfo.studentId)]).filter(Boolean);
+    if (!kids.some(k => k.id === tts.kid)) tts.kid = kids[0]?.id || '';
     el.innerHTML = topbar(c.role === 'parent' ? 'جدول الدروس' : 'جدولي', 'الجدول الأسبوعي اللي نشرته المدرسة') + `${kids.length > 1 ? `<div class="seg" role="group" aria-label="الطالب" style="align-self:flex-start">${kids.map(k => `<button data-kid="${k.id}" aria-pressed="${k.id === tts.kid}">${esc(db.first(k.name))}</button>`).join('')}</div>` : ''}<div id="live" style="display:flex;flex-direction:column;gap:16px"></div>`;
-    el.addEventListener('click', e => { const k = e.target.closest('[data-kid]'); if (k) { tts.kid = k.dataset.kid; $$('[data-kid]', el).forEach(b => b.setAttribute('aria-pressed', b === k)); this.update(el); } });
-    this.update(el);
+    el.addEventListener('click', e => { const k = e.target.closest('[data-kid]'); if (k) { tts.kid = k.dataset.kid; $$('[data-kid]', el).forEach(b => b.setAttribute('aria-pressed', b === k)); this.updateReader(el, c); } });
+    this.updateReader(el, c);
   },
   updateReader(el, c) {
-    const box = $('#live', el); const s = db.student(tts.kid); if (!box || !s) return;
+    const box = $('#live', el); const s = db.student(tts.kid);
+    if (!box) return;
+    if (!s) { box.innerHTML = '<div class="card empty">لا يوجد جدول متاح حالياً.</div>'; return; }
     const key = c.role === 'parent' ? c.roleInfo.guardianId : 's:' + s.id;
     const kids = c.role === 'parent' ? db.childrenOf(c.roleInfo.guardianId) : [s];
     db.ttMarkSeen(key, kids.map(k => k.sectionId));
