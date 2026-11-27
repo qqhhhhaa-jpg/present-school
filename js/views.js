@@ -1844,6 +1844,12 @@ const settings = {
         <h2 style="margin-top:8px">حسابات الدخول</h2>
         <div class="muted small">ترجع اليوزرات والرموز مثل البداية (hader2026)، وتنفتح الحسابات المقفولة والموقوفة، وتطلع كل الأجهزة المسجّل دخولها. أرقام أولياء الأمور والطلاب تبقى تدخل برمز SMS.</div>
         <button class="btn" id="resetlogins">${icon('key', 16)}إعادة تهيئة اليوزرات وأرقام الموبايل</button>
+        <h2 style="margin-top:8px">صور وبصمات إثبات الوصول (الحذف التلقائي)</h2>
+        ${(() => {
+          const ps = db.proofStorageStats();
+          return `<div class="muted small">صور وبصمات إثبات الوصول المرسلة لأولياء الأمور تُحذف تلقائياً بعد <b>${ps.retentionDays} يوماً</b> لمنع ثقل المنصة (تبقى أوقات الحضور فقط). الصور المرفوعة النشطة حالياً: <b class="num">${ps.uploadedActive}</b>.</div>
+          <button type="button" class="btn sm" id="prune-proofs" style="align-self:flex-start">${icon('trash', 14)}تنظيف الصور المنتهية (أقدم من ${ps.retentionDays} يوماً) الآن</button>`;
+        })()}
         <h2 style="margin-top:8px">السيرفر</h2>
         <div class="muted small">كل البيانات الآن داخل المتصفح فقط. عند ربط السيرفر يتبدّل ملف واحد (store.js) وتبقى الواجهات كما هي.</div>
       </div>
@@ -1859,6 +1865,11 @@ const settings = {
       const m = e.target.closest('[data-mode]'); if (m && m.dataset.mode !== db.clock().mode) { db.setMode(m.dataset.mode); toast(m.dataset.mode === 'real' ? 'صارت على الوقت الحقيقي' : 'صارت على العرض التجريبي', m.dataset.mode === 'real' ? '' : 'الساعة 7:50'); window.dispatchEvent(new HashChangeEvent('hashchange')); }
       const uh = e.target.closest('[data-unhol]'); if (uh) { db.removeHoliday(uh.dataset.unhol); toast('انلغت العطلة', uh.dataset.unhol); window.dispatchEvent(new HashChangeEvent('hashchange')); }
       if (e.target.closest('#reset')) { db.resetDemo(); toast('رجعت البيانات من البداية', ''); }
+      if (e.target.closest('#prune-proofs')) {
+        const res = db.pruneExpiredProofs();
+        toast(res.purgedCount ? `تم حذف ${res.purgedCount} صورة/بصمة منتهية` : 'لا توجد صور إثبات تجاوزت 30 يوماً حالياً', 'الاحتفاظ التلقائي: 30 يوماً');
+        this.render(el);
+      }
       if (e.target.closest('#resetlogins')) modal('إعادة تهيئة حسابات الدخول', `<div style="display:flex;flex-direction:column;gap:12px"><div>كل اليوزرات والرموز ترجع مثل البداية، وتنفتح الحسابات المقفولة والموقوفة، وتطلع كل الأجهزة المسجّل دخولها (حتى جهازك، فترجع تسجل دخول).</div>
         <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز: <b class="num">hader2026</b>)<br>الأدمن <b class="num">admin</b> · مدير المدرسة <b class="num">m1001</b> · المدرس <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (رمز SMS <b class="num">123456</b>)<br>ولي الأمر <b class="num" dir="ltr">0770 000 0003</b> · الطالب <b class="num" dir="ltr">0770 000 0004</b></div>
         <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-close>إلغاء</button><button class="btn pr" id="okrl">إعادة التهيئة</button></div></div>`, (m, close) => { $('#okrl', m).onclick = () => { db.resetLogins(); close(); toast('رجعت حسابات الدخول للبداية', 'سجّل دخول من جديد'); setTimeout(() => { db.logout?.(); location.hash = '#/'; location.reload(); }, 900); }; });
@@ -1938,7 +1949,11 @@ const parent = {
       return `<div class="card" style="background:${tone};display:flex;flex-direction:column;gap:12px">
         <div style="display:flex;gap:12px;align-items:center">${avatar(s.name, x.status, db.photoOf(s.id))}<div style="flex:1"><h2>${esc(db.first(s.name))}</h2><div class="muted small">${esc(db.sectionLabel(s.sectionId))}</div></div>${pill(x.status)}</div>
         <div style="font-weight:700">${esc(line)}</div>
-        ${x.inEv || x.outEv ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${x.inEv ? `<button class="btn sm" data-ev="${x.inEv.id}">${icon('eye', 14)}إثبات الوصول ${fmtTime(x.inEv.ts)}</button>` : ''}${x.outEv ? `<button class="btn sm" data-ev="${x.outEv.id}">${icon('eye', 14)}إثبات الانصراف ${fmtTime(x.outEv.ts)}</button>` : ''}</div>` : ''}
+        ${x.inEv || x.outEv ? (() => {
+          const inProof = x.inEv ? db.evidenceOf(x.inEv) : null;
+          return `${inProof?.proofImg && !inProof.expired ? `<button type="button" class="ev-thumb" data-ev="${x.inEv.id}" title="اضغط لتكبير إثبات الوصول"><img src="${inProof.proofImg}" alt="إثبات الوصول"><span><b>${inProof.proofKind === 'finger' ? 'بصمة الوصول' : 'صورة الوصول'}</b><small>تُحذف تلقائياً بعد ${inProof.daysLeft} يوماً</small></span>${icon('eye', 16)}</button>` : ''}
+          <div style="display:flex;gap:8px;flex-wrap:wrap">${x.inEv ? `<button class="btn sm" data-ev="${x.inEv.id}">${icon('eye', 14)}إثبات الوصول (صورة / بصمة) ${fmtTime(x.inEv.ts)}</button>` : ''}${x.outEv ? `<button class="btn sm" data-ev="${x.outEv.id}">${icon('eye', 14)}إثبات الانصراف ${fmtTime(x.outEv.ts)}</button>` : ''}</div>`;
+        })() : ''}
         ${x.status === 'absent' ? `<button class="btn pr" data-excuse="${s.id}">تبرير الغياب</button>` : ''}
         <div style="display:flex;gap:6px">${db.days().slice(0, 6).reverse().map(d => { const y = db.statusOf(s.id, d); const col = { present: 'var(--teal)', left: 'var(--teal)', late: 'var(--amber)', absent: 'var(--red)', excused: 'var(--amber)', pending: 'var(--surface-300)', none: 'var(--surface-300)', holiday: 'var(--surface-300)' }[y.status]; return `<div style="flex:1;text-align:center"><div style="height:28px;border-radius:8px;background:${col}" title="${db.STATUS[y.status]}"></div><div class="small muted">${dayName(new Date(d))}</div></div>`; }).join('')}</div>
       </div>`;
@@ -1987,6 +2002,7 @@ export function notesList(list, fresh) {
         <div class="muted small">${esc(n.body)}</div>
       </div>
       <span class="num small muted">${ago(n.ts, db.now())}</span>
+      ${n.evId ? `<button type="button" class="btn sm" data-ev="${n.evId}" style="min-height:28px;padding:0 10px;font-size:11.5px">${icon('eye', 13)}الإثبات</button>` : ''}
       ${href ? icon('back', 14) : ''}
     </${tag}>`;
   }).join('');
@@ -4941,31 +4957,120 @@ function fingerImage(e) {
   for (let i = 0; i < 14; i++) { r = (r * 1103515245 + 12345) >>> 0; const a = (r % 628) / 100, d = 20 + (r >> 8) % 110; const x = cx + Math.cos(a) * d * .8, y = cy + Math.sin(a) * d; g.beginPath(); g.arc(x, y, 5, 0, 7); g.stroke(); g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a * 2) * 12, y + Math.sin(a * 2) * 12); g.stroke(); }
   const url = cv.toDataURL('image/png'); EVIMG.set(key, url); return url;
 }
+function compressProofImage(file, maxW = 640, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('تعذر قراءة الصورة'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('الملف ليس صورة صالحة'));
+      img.onload = () => {
+        const scale = Math.min(1, maxW / Math.max(img.width, img.height, 1));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(cv.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 async function evidenceModal(evId) {
+  db.pruneExpiredProofs();
   const e = db.evidenceOf(db.eventById(evId)); if (!e) return toast('ما لكينا هذي البصمة', '', 'absent');
   const ref = db.photoOf(e.student.id); const dt = new Date(e.ev.ts);
   const KIND = { face: 'بصمة الوجه', finger: 'بصمة الإصبع', card: 'البطاقة', palm: 'بصمة الكف', manual: 'تسجيل يدوي' };
+  const c = ctx();
+  const canUpload = c && (['owner', 'admin'].includes(c.role) || can('att'));
+  const isViewerRestricted = c && ['parent', 'student'].includes(c.role) && db.protection().noDownload;
+
   modal(`إثبات ${e.ev.type === 'in' ? 'الوصول' : 'الانصراف'}: ${e.student.name}`, `<div id="evb" class="evb"><div class="empty">جاري تجهيز الإثبات…</div></div>`, async (m) => {
     m.classList.add('wide');
-    const cap = e.photo ? await captureImage(e) : null; const fp = e.kind === 'finger' ? fingerImage(e) : null;
-    $('#evb', m).innerHTML = `
-      <div class="evgrid">
-        ${e.manual ? `<div class="evmanual">${icon('key', 40)}<b>تسجيل يدوي</b><span>سجّله: ${esc(e.by)}</span><span class="muted small">ما بيه صورة لأن الطالب ما بصم على الجهاز. التسجيل اليدوي ينحفظ باسم اللي سجّله بسجل العمليات.</span></div>`
-        : `<figure class="evfig"><img src="${cap}" alt="صورة كاميرا الجهاز لحظة البصمة"><figcaption>صورة كاميرا الجهاز لحظة البصمة</figcaption></figure>`}
-        ${ref ? `<figure class="evfig"><img src="${ref}" alt="الصورة المرجعية"><figcaption>الصورة المرجعية بالمنصة (أول بصمة وجه)</figcaption></figure>` : ''}
-        ${fp ? `<figure class="evfig fp"><img src="${fp}" alt="مطابقة بصمة الإصبع"><figcaption>مطابقة بصمة الإصبع · ${esc(e.template)}</figcaption></figure>` : ''}
-      </div>
-      <div class="evfacts">
-        <div><span>النوع</span><b>${e.ev.type === 'in' ? 'وصول' : 'انصراف'}</b></div>
-        <div><span>الوقت</span><b class="num">${fmtDay(dt)} · ${dt.toLocaleTimeString('en-GB')}</b></div>
-        <div><span>طريقة التحقق</span><b>${KIND[e.kind]}${e.template && e.kind !== 'finger' ? ` · ${esc(e.template)}` : ''}</b></div>
-        ${e.score ? `<div><span>نسبة التطابق</span><b class="num" style="color:var(--teal-ink)">${e.score}%</b></div>` : ''}
-        <div><span>الجهاز</span><b>${esc(e.gate)}${e.device ? ` · <span class="num" dir="ltr">${esc(e.device.serial)}</span>` : ''}</b></div>
-        <div><span>رقم السجل</span><b class="num" dir="ltr">${esc(e.ref)}</b></div>
-      </div>
-      <div class="muted small">السجل محفوظ بالمنصة وما ينمسح أو يتعدّل، والصورة تنحفظ ويه كل بصمة وصول وانصراف. ${!ref && !e.manual ? 'ما عند الطالب صورة مرجعية بعد: صوّره من ملفه حتى تكدر تقارن.' : ''}</div>
-      ${cap ? `<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn sm" id="evdl">${icon('download', 14)}حفظ الصورة</button></div>` : ''}`;
-    $('#evdl', m) && ($('#evdl', m).onclick = async () => { const b = await (await fetch(cap)).blob(); saveBlob(b, `إثبات-${e.student.name}-${e.ev.type === 'in' ? 'وصول' : 'انصراف'}-${dt.getDate()}-${dt.getMonth() + 1}.jpg`); });
+    const renderBody = async () => {
+      const cur = db.evidenceOf(db.eventById(evId));
+      if (!cur) return;
+      const cap = !cur.expired ? (cur.proofImg || (!cur.manual ? await captureImage(cur) : null)) : null;
+      const fp = !cur.expired && cur.kind === 'finger' && !(cur.proofImg && cur.proofKind === 'finger') ? fingerImage(cur) : null;
+      const expDateStr = fmtDay(new Date(cur.expiresAt));
+      const uploadCaption = cur.proofKind === 'finger' ? 'بصمة الطالب المرفوعة للمنصة (ظاهرة لولي الأمر)' : 'صورة الطالب لحظة الوصول (مرفوعة لولي الأمر)';
+
+      $('#evb', m).innerHTML = `
+        <div class="ev-ttl ${cur.expired ? 'exp' : ''}">
+          ${icon('clock', 16)}
+          <div style="flex:1">
+            ${cur.expired
+              ? `<b>تم حذف صورة/بصمة الإثبات تلقائياً بعد مرور ${cur.retentionDays} يوماً</b> — حفاظاً على سرعة وخفة المنصة. بيانات وقت الوصول والسجل تبقى محفوظة.`
+              : `<b>سياسة الاحتفاظ (${cur.retentionDays} يوماً):</b> تُحذف الصورة والبصمة تلقائياً بعد <b class="num">${cur.daysLeft}</b> ${cur.daysLeft === 1 ? 'يوم' : 'يوماً'} (بتاريخ <b class="num">${expDateStr}</b>) لمنع ثقل المنصة.`}
+          </div>
+        </div>
+
+        ${cur.expired ? `
+          <div class="ev-expired">
+            ${icon('trash', 32)}
+            <b>الصورة والبصمة محذوفة تلقائياً</b>
+            <span class="muted small">مرّ أكثر من ${cur.retentionDays} يوماً على هذا السجل فتم تفريغ وسائط الإثبات تلقائياً لتخفيف المنصة، مع بقاء سجل الحضور والوقت محفوظاً.</span>
+          </div>
+        ` : `
+          <div class="evgrid">
+            ${cur.proofImg ? `<figure class="evfig ${cur.proofKind === 'finger' ? 'fp' : ''}"><img src="${cur.proofImg}" alt="${uploadCaption}"><figcaption>${uploadCaption}</figcaption></figure>`
+              : cur.manual ? `<div class="evmanual">${icon('key', 36)}<b>تسجيل يدوي</b><span>سجّله: ${esc(cur.by)}</span><span class="muted small">لم تُرفع صورة أو بصمة لهذا السجل بعد.${canUpload ? ' يمكنك رفع صورة الطالب أو بصمته من الأسفل لتظهر لولي الأمر.' : ''}</span></div>`
+              : `<figure class="evfig"><img src="${cap}" alt="صورة كاميرا الجهاز لحظة البصمة"><figcaption>صورة كاميرا الجهاز لحظة البصمة (ظاهرة لولي الأمر)</figcaption></figure>`}
+            ${ref ? `<figure class="evfig"><img src="${ref}" alt="الصورة المرجعية"><figcaption>الصورة المرجعية بالمنصة (أول بصمة وجه)</figcaption></figure>` : ''}
+            ${fp ? `<figure class="evfig fp"><img src="${fp}" alt="مطابقة بصمة الإصبع"><figcaption>مطابقة بصمة الإصبع · ${esc(cur.template)}</figcaption></figure>` : ''}
+          </div>
+        `}
+
+        ${canUpload && !cur.expired ? `
+          <div class="ev-upbar">
+            <div style="flex:1;min-width:180px">
+              <b>رفع إثبات وصول لولي الأمر</b>
+              <div class="muted small">ارفع صورة الطالب أو صورة بصمته — تُضغط تلقائياً وتُرسل لولي الأمر وتُحذف بعد ${cur.retentionDays} يوماً.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <label class="btn sm pr" style="cursor:pointer">${icon('upload', 14)}رفع صورة الطالب<input type="file" id="ev-up-photo" accept="image/*" capture="environment" hidden></label>
+              <label class="btn sm" style="cursor:pointer">${icon('device', 14)}رفع صورة البصمة<input type="file" id="ev-up-finger" accept="image/*" hidden></label>
+            </div>
+          </div>
+        ` : ''}
+
+        <div class="evfacts">
+          <div><span>النوع</span><b>${cur.ev.type === 'in' ? 'وصول' : 'انصراف'}</b></div>
+          <div><span>الوقت</span><b class="num">${fmtDay(dt)} · ${dt.toLocaleTimeString('en-GB')}</b></div>
+          <div><span>طريقة التحقق</span><b>${KIND[cur.kind]}${cur.template && cur.kind !== 'finger' ? ` · ${esc(cur.template)}` : ''}</b></div>
+          ${cur.score ? `<div><span>نسبة التطابق</span><b class="num" style="color:var(--teal-ink)">${cur.score}%</b></div>` : ''}
+          <div><span>الجهاز</span><b>${esc(cur.gate)}${cur.device ? ` · <span class="num" dir="ltr">${esc(cur.device.serial)}</span>` : ''}</b></div>
+          <div><span>رقم السجل</span><b class="num" dir="ltr">${esc(cur.ref)}</b></div>
+        </div>
+        <div class="muted small">بيانات وقت الحضور محفوظة دائماً بالتقارير، أما صور وبصمات الإثبات فتُمسح تلقائياً كل ${cur.retentionDays} يوماً لتبقى المنصة خفيفة وسريعة. ${!ref && !cur.manual && !cur.expired ? 'ما عند الطالب صورة مرجعية بعد: صوّره من ملفه حتى تكدر تقارن.' : ''}</div>
+        ${cap && !cur.expired && !isViewerRestricted ? `<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn sm" id="evdl">${icon('download', 14)}حفظ الصورة</button></div>` : ''}`;
+
+      $('#evdl', m) && ($('#evdl', m).onclick = async () => { const b = await (await fetch(cap)).blob(); saveBlob(b, `إثبات-${cur.student.name}-${cur.ev.type === 'in' ? 'وصول' : 'انصراف'}-${dt.getDate()}-${dt.getMonth() + 1}.jpg`); });
+
+      const bindUpload = (inputId, proofKind) => {
+        const inp = $(inputId, m);
+        if (!inp) return;
+        inp.onchange = async () => {
+          const file = inp.files?.[0];
+          if (!file) return;
+          try {
+            const dataUrl = await compressProofImage(file, 640, 0.72);
+            const res = db.attachEventProof(evId, { dataUrl, proofKind }, c.name);
+            if (!res.ok) return toast(res.error || 'تعذر الرفع', '', 'absent');
+            EVIMG.delete('c' + evId);
+            toast(proofKind === 'finger' ? 'تم رفع بصمة الوصول لولي الأمر' : 'تم رفع صورة الوصول لولي الأمر', `تُحذف تلقائياً بعد ${cur.retentionDays} يوماً`);
+            await renderBody();
+          } catch (err) {
+            toast('تعذر معالجة الصورة', err?.message || '', 'absent');
+          }
+        };
+      };
+      bindUpload('#ev-up-photo', 'photo');
+      bindUpload('#ev-up-finger', 'finger');
+    };
+    await renderBody();
   });
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-ev]'); if (b) { e.preventDefault(); e.stopPropagation(); evidenceModal(b.dataset.ev); } }, true);

@@ -403,13 +403,16 @@ export function init() {
   if (!S.teacherExcuses) S.teacherExcuses = [];
   if (!S.exemptions) S.exemptions = [];
   S.clock.real = Date.now(); // resume from where the page was closed
+  pruneExpiredProofs(Date.now());
   tick(true);
   clearInterval(tickTimer);
   tickTimer = setInterval(() => tick(false), 1000);
 }
 
 function addEvent(ev, quiet) {
-  ev.id = S.eid++; S.events.push(ev);
+  ev.id = S.eid++;
+  ev.proofExpiresAt = ev.ts + PROOF_TTL_MS;
+  S.events.push(ev);
   const st = student(ev.studentId);
   // Catch-up on page load (quiet) still files the notifications; only live scans pop a toast.
   if (st) {
@@ -419,15 +422,15 @@ function addEvent(ev, quiet) {
       kind: ev.type === 'in' ? (late ? 'late' : 'in') : 'out',
       title: ev.type === 'in' ? `${late ? 'وصل متأخراً' : 'وصل إلى المدرسة'}: ${first(st.name)}` : `غادر المدرسة: ${first(st.name)}`,
       body: `${fmtTime(ev.ts)} · ${ev.method} · ${device(ev.deviceId)?.name.split(' · ')[0] ?? ''}`,
-      ts: ev.ts, studentId: st.id,
+      ts: ev.ts, studentId: st.id, evId: ev.id,
     });
-    if (st.phone) notify(st.phone, { kind: ev.type === 'in' ? (late ? 'late' : 'in') : 'out', title: ev.type === 'in' ? `سُجّل حضورك ${fmtTime(ev.ts)}` : `سُجّل انصرافك ${fmtTime(ev.ts)}`, body: `${ev.method}`, ts: ev.ts, studentId: st.id });
+    if (st.phone) notify(st.phone, { kind: ev.type === 'in' ? (late ? 'late' : 'in') : 'out', title: ev.type === 'in' ? `سُجّل حضورك ${fmtTime(ev.ts)}` : `سُجّل انصرافك ${fmtTime(ev.ts)}`, body: `${ev.method}`, ts: ev.ts, studentId: st.id, evId: ev.id });
   }
 }
 
 function tick(quiet) {
   if (S.clock.mode === 'real' && dayKey(new Date()) !== S.day) { const keep = { students: S.students, guardians: S.guardians, teachers: S.teachers, admins: S.admins, disabled: S.disabled, posts: S.posts, reads: S.reads, settings: S.settings, audit: S.audit, notes: S.notes, excuses: S.excuses, events: S.events, eid: S.eid, seen: S.seen, marks: S.marks, markReads: S.markReads, creds: S.creds, holidays: S.holidays, chats: S.chats, tickets: S.tickets, tt: S.tt, ttSeen: S.ttSeen, promotions: S.promotions, graduates: S.graduates, graduatedStore: S.graduatedStore, finalsSeeded: S.finalsSeeded, teacherEvents: S.teacherEvents, teacherExcuses: S.teacherExcuses, exemptions: S.exemptions };
-    S = Object.assign(seed('real'), keep); IDX = null; emit('reset'); return; }
+    S = Object.assign(seed('real'), keep); IDX = null; pruneExpiredProofs(Date.now()); emit('reset'); return; }
   const t = now();
   const base = S.today;
   let changed = false;
@@ -647,18 +650,97 @@ export function absentStreak(studentId) {
 }
 
 /* ---------------- scan proof ----------------
-   Every scan keeps its evidence so nobody can deny coming in or leaving: the device camera's photo at that second
-   (the face devices snap one on every verification, whatever the method), how it was verified (face, finger, card,
-   palm) with the match score, the device serial and the event number. A manual entry records who entered it. */
+   Every scan keeps its evidence (photo or fingerprint) for 30 days so parents & admins can verify arrival/departure,
+   then heavy media is automatically purged after 30 days to keep the platform fast and lightweight. */
+export const PROOF_RETENTION_DAYS = 30;
+const PROOF_TTL_MS = PROOF_RETENTION_DAYS * 86400000;
+
+export function pruneExpiredProofs(referenceTs = now()) {
+  if (!S) return { purgedCount: 0 };
+  let purgedCount = 0;
+  const clean = list => (list || []).forEach(ev => {
+    const exp = ev.proofExpiresAt || (ev.ts + PROOF_TTL_MS);
+    if (referenceTs >= exp) {
+      if (ev.proofImg || !ev.proofExpired) {
+        if (ev.proofImg) purgedCount++;
+        delete ev.proofImg;
+        delete ev.proofKind;
+        ev.proofExpired = true;
+        ev.proofPurgedAt = referenceTs;
+      }
+    }
+  });
+  clean(S.events);
+  clean(S.teacherEvents);
+  if (purgedCount > 0) {
+    log('تنظيف تلقائي لصور الإثبات', `تم حذف ${purgedCount} صورة/بصمة تجاوزت ${PROOF_RETENTION_DAYS} يوماً لتخفيف المنصة`);
+    save();
+    emit('proof');
+  }
+  return { purgedCount };
+}
+
+export function attachEventProof(evId, { dataUrl, proofKind = 'photo' }, by) {
+  const ev = eventById(evId);
+  if (!ev) return { ok: false, error: 'سجل البصمة غير موجود.' };
+  if (!dataUrl || !String(dataUrl).startsWith('data:image/')) return { ok: false, error: 'يرجى اختيار صورة صالحة.' };
+  const exp = ev.proofExpiresAt || (ev.ts + PROOF_TTL_MS);
+  if (now() >= exp || ev.proofExpired) return { ok: false, error: `تجاوز هذا السجل مدة الاحتفاظ (${PROOF_RETENTION_DAYS} يوماً).` };
+  ev.proofImg = dataUrl;
+  ev.proofKind = proofKind === 'finger' ? 'finger' : 'photo';
+  ev.proofUploadedAt = now();
+  ev.proofUploadedBy = by || '';
+  ev.proofExpiresAt = exp;
+  ev.proofExpired = false;
+  const st = student(ev.studentId);
+  if (st) {
+    const g = guardian(st.guardianId);
+    const kindLbl = ev.proofKind === 'finger' ? 'بصمة الوصول' : 'صورة الوصول';
+    if (g) {
+      notify(g.phone, {
+        kind: ev.type === 'in' ? 'in' : 'out',
+        title: `تم رفع ${kindLbl}: ${first(st.name)}`,
+        body: `${fmtTime(ev.ts)} · متاحة للعرض لمدة ${PROOF_RETENTION_DAYS} يوماً ثم تُحذف تلقائياً`,
+        ts: now(), studentId: st.id, evId: ev.id,
+      });
+    }
+    log('رفع إثبات وصول', `${st.name} · ${kindLbl} · تُحذف تلقائياً بعد ${PROOF_RETENTION_DAYS} يوماً`, by);
+  }
+  save();
+  emit('proof');
+  return { ok: true, ev };
+}
+
+export function proofStorageStats() {
+  const t = now();
+  let uploadedActive = 0, activeTotal = 0, expiredTotal = 0;
+  (S.events || []).forEach(ev => {
+    const exp = ev.proofExpiresAt || (ev.ts + PROOF_TTL_MS);
+    if (ev.proofExpired || t >= exp) expiredTotal++;
+    else {
+      activeTotal++;
+      if (ev.proofImg) uploadedActive++;
+    }
+  });
+  return { uploadedActive, activeTotal, expiredTotal, retentionDays: PROOF_RETENTION_DAYS };
+}
+
 export const eventById = id => S.events.find(e => String(e.id) === String(id));
 export function evidenceOf(ev) {
   if (!ev) return null; const s = student(ev.studentId); const d = ev.deviceId ? device(ev.deviceId) : null;
   const h = [...String(ev.id) + ev.ts].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
   const manual = !ev.deviceId || String(ev.method).startsWith('يدوي');
   const kind = manual ? 'manual' : /إصبع/.test(ev.method) ? 'finger' : /بطاقة/.test(ev.method) ? 'card' : /كف/.test(ev.method) ? 'palm' : 'face';
+  const expiresAt = ev.proofExpiresAt || (ev.ts + PROOF_TTL_MS);
+  const remainingMs = expiresAt - now();
+  const expired = !!ev.proofExpired || remainingMs <= 0;
+  const daysLeft = expired ? 0 : Math.max(1, Math.ceil(remainingMs / 86400000));
+  const proofImg = expired ? null : (ev.proofImg || null);
+  const proofKind = ev.proofKind || (kind === 'finger' ? 'finger' : 'photo');
   return { ev, student: s, device: d, kind, manual, by: manual ? String(ev.method).replace('يدوي · ', '') : null,
     score: manual ? null : 91 + (h % 9), template: kind === 'finger' ? `FP-${s?.deviceId}-${['إبهام', 'سبابة', 'وسطى'][h % 3]}` : kind === 'card' ? `بطاقة ${String(10000000 + (s?.no || 0) * 7919).slice(-8)}` : null,
-    photo: !manual, ref: `${d?.serial || 'MANUAL'}-${ev.id}`, gate: d?.name || 'تسجيل يدوي' };
+    photo: !expired && (!manual || !!proofImg), proofImg, proofKind, expiresAt, expired, daysLeft, retentionDays: PROOF_RETENTION_DAYS,
+    ref: `${d?.serial || 'MANUAL'}-${ev.id}`, gate: d?.name || 'تسجيل يدوي' };
 }
 export function markManual(studentId, by) {
   const t = now();

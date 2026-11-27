@@ -719,6 +719,17 @@ a.sec.sc{color:inherit;text-decoration:none}
 .sec-act.del:hover{background:var(--red);color:#fff;border-color:var(--red)}
 .btn.danger-solid:disabled{opacity:.45;cursor:not-allowed}
 
+/* ===== Arrival proof upload & 30-day auto-purge UI ===== */
+.ev-ttl{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:12px;background:var(--teal-soft);border:1px solid rgba(11,127,112,.25);color:var(--teal-ink);font-size:12.5px;line-height:1.5}
+.ev-ttl.exp{background:var(--amber-soft);border-color:rgba(196,127,23,.35);color:var(--amber-ink)}
+.ev-ttl svg{flex:none;margin-top:2px}
+.ev-expired{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:22px 16px;border-radius:14px;border:1.5px dashed var(--line-strong);background:var(--surface-100);color:var(--ink)}
+.ev-upbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;border-radius:12px;background:var(--surface-100);border:1px solid var(--line)}
+.ev-thumb{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:12px;border:1px solid var(--line);background:var(--surface-200);cursor:pointer;text-align:right;font:inherit;color:var(--ink)}
+.ev-thumb img{width:46px;height:46px;border-radius:9px;object-fit:cover;flex:none;border:1px solid var(--line)}
+.ev-thumb span{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ev-thumb small{font-size:11.5px;color:var(--muted)}
+
 </style>
 </head>
 <body>
@@ -1407,13 +1418,16 @@ function init() {
   if (!S.teacherExcuses) S.teacherExcuses = [];
   if (!S.exemptions) S.exemptions = [];
   S.clock.real = Date.now(); // resume from where the page was closed
+  pruneExpiredProofs(Date.now());
   tick(true);
   clearInterval(tickTimer);
   tickTimer = setInterval(() => tick(false), 1000);
 }
 
 function addEvent(ev, quiet) {
-  ev.id = S.eid++; S.events.push(ev);
+  ev.id = S.eid++;
+  ev.proofExpiresAt = ev.ts + PROOF_TTL_MS;
+  S.events.push(ev);
   const st = student(ev.studentId);
   // Catch-up on page load (quiet) still files the notifications; only live scans pop a toast.
   if (st) {
@@ -1423,15 +1437,15 @@ function addEvent(ev, quiet) {
       kind: ev.type === 'in' ? (late ? 'late' : 'in') : 'out',
       title: ev.type === 'in' ? `${late ? 'وصل متأخراً' : 'وصل إلى المدرسة'}: ${first(st.name)}` : `غادر المدرسة: ${first(st.name)}`,
       body: `${fmtTime(ev.ts)} · ${ev.method} · ${device(ev.deviceId)?.name.split(' · ')[0] ?? ''}`,
-      ts: ev.ts, studentId: st.id,
+      ts: ev.ts, studentId: st.id, evId: ev.id,
     });
-    if (st.phone) notify(st.phone, { kind: ev.type === 'in' ? (late ? 'late' : 'in') : 'out', title: ev.type === 'in' ? `سُجّل حضورك ${fmtTime(ev.ts)}` : `سُجّل انصرافك ${fmtTime(ev.ts)}`, body: `${ev.method}`, ts: ev.ts, studentId: st.id });
+    if (st.phone) notify(st.phone, { kind: ev.type === 'in' ? (late ? 'late' : 'in') : 'out', title: ev.type === 'in' ? `سُجّل حضورك ${fmtTime(ev.ts)}` : `سُجّل انصرافك ${fmtTime(ev.ts)}`, body: `${ev.method}`, ts: ev.ts, studentId: st.id, evId: ev.id });
   }
 }
 
 function tick(quiet) {
   if (S.clock.mode === 'real' && dayKey(new Date()) !== S.day) { const keep = { students: S.students, guardians: S.guardians, teachers: S.teachers, admins: S.admins, disabled: S.disabled, posts: S.posts, reads: S.reads, settings: S.settings, audit: S.audit, notes: S.notes, excuses: S.excuses, events: S.events, eid: S.eid, seen: S.seen, marks: S.marks, markReads: S.markReads, creds: S.creds, holidays: S.holidays, chats: S.chats, tickets: S.tickets, tt: S.tt, ttSeen: S.ttSeen, promotions: S.promotions, graduates: S.graduates, graduatedStore: S.graduatedStore, finalsSeeded: S.finalsSeeded, teacherEvents: S.teacherEvents, teacherExcuses: S.teacherExcuses, exemptions: S.exemptions };
-    S = Object.assign(seed('real'), keep); IDX = null; emit('reset'); return; }
+    S = Object.assign(seed('real'), keep); IDX = null; pruneExpiredProofs(Date.now()); emit('reset'); return; }
   const t = now();
   const base = S.today;
   let changed = false;
@@ -1651,18 +1665,97 @@ function absentStreak(studentId) {
 }
 
 /* ---------------- scan proof ----------------
-   Every scan keeps its evidence so nobody can deny coming in or leaving: the device camera's photo at that second
-   (the face devices snap one on every verification, whatever the method), how it was verified (face, finger, card,
-   palm) with the match score, the device serial and the event number. A manual entry records who entered it. */
+   Every scan keeps its evidence (photo or fingerprint) for 30 days so parents & admins can verify arrival/departure,
+   then heavy media is automatically purged after 30 days to keep the platform fast and lightweight. */
+const PROOF_RETENTION_DAYS = 30;
+const PROOF_TTL_MS = PROOF_RETENTION_DAYS * 86400000;
+
+function pruneExpiredProofs(referenceTs = now()) {
+  if (!S) return { purgedCount: 0 };
+  let purgedCount = 0;
+  const clean = list => (list || []).forEach(ev => {
+    const exp = ev.proofExpiresAt || (ev.ts + PROOF_TTL_MS);
+    if (referenceTs >= exp) {
+      if (ev.proofImg || !ev.proofExpired) {
+        if (ev.proofImg) purgedCount++;
+        delete ev.proofImg;
+        delete ev.proofKind;
+        ev.proofExpired = true;
+        ev.proofPurgedAt = referenceTs;
+      }
+    }
+  });
+  clean(S.events);
+  clean(S.teacherEvents);
+  if (purgedCount > 0) {
+    log('تنظيف تلقائي لصور الإثبات', `تم حذف ${purgedCount} صورة/بصمة تجاوزت ${PROOF_RETENTION_DAYS} يوماً لتخفيف المنصة`);
+    save();
+    emit('proof');
+  }
+  return { purgedCount };
+}
+
+function attachEventProof(evId, { dataUrl, proofKind = 'photo' }, by) {
+  const ev = eventById(evId);
+  if (!ev) return { ok: false, error: 'سجل البصمة غير موجود.' };
+  if (!dataUrl || !String(dataUrl).startsWith('data:image/')) return { ok: false, error: 'يرجى اختيار صورة صالحة.' };
+  const exp = ev.proofExpiresAt || (ev.ts + PROOF_TTL_MS);
+  if (now() >= exp || ev.proofExpired) return { ok: false, error: `تجاوز هذا السجل مدة الاحتفاظ (${PROOF_RETENTION_DAYS} يوماً).` };
+  ev.proofImg = dataUrl;
+  ev.proofKind = proofKind === 'finger' ? 'finger' : 'photo';
+  ev.proofUploadedAt = now();
+  ev.proofUploadedBy = by || '';
+  ev.proofExpiresAt = exp;
+  ev.proofExpired = false;
+  const st = student(ev.studentId);
+  if (st) {
+    const g = guardian(st.guardianId);
+    const kindLbl = ev.proofKind === 'finger' ? 'بصمة الوصول' : 'صورة الوصول';
+    if (g) {
+      notify(g.phone, {
+        kind: ev.type === 'in' ? 'in' : 'out',
+        title: `تم رفع ${kindLbl}: ${first(st.name)}`,
+        body: `${fmtTime(ev.ts)} · متاحة للعرض لمدة ${PROOF_RETENTION_DAYS} يوماً ثم تُحذف تلقائياً`,
+        ts: now(), studentId: st.id, evId: ev.id,
+      });
+    }
+    log('رفع إثبات وصول', `${st.name} · ${kindLbl} · تُحذف تلقائياً بعد ${PROOF_RETENTION_DAYS} يوماً`, by);
+  }
+  save();
+  emit('proof');
+  return { ok: true, ev };
+}
+
+function proofStorageStats() {
+  const t = now();
+  let uploadedActive = 0, activeTotal = 0, expiredTotal = 0;
+  (S.events || []).forEach(ev => {
+    const exp = ev.proofExpiresAt || (ev.ts + PROOF_TTL_MS);
+    if (ev.proofExpired || t >= exp) expiredTotal++;
+    else {
+      activeTotal++;
+      if (ev.proofImg) uploadedActive++;
+    }
+  });
+  return { uploadedActive, activeTotal, expiredTotal, retentionDays: PROOF_RETENTION_DAYS };
+}
+
 const eventById = id => S.events.find(e => String(e.id) === String(id));
 function evidenceOf(ev) {
   if (!ev) return null; const s = student(ev.studentId); const d = ev.deviceId ? device(ev.deviceId) : null;
   const h = [...String(ev.id) + ev.ts].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
   const manual = !ev.deviceId || String(ev.method).startsWith('يدوي');
   const kind = manual ? 'manual' : /إصبع/.test(ev.method) ? 'finger' : /بطاقة/.test(ev.method) ? 'card' : /كف/.test(ev.method) ? 'palm' : 'face';
+  const expiresAt = ev.proofExpiresAt || (ev.ts + PROOF_TTL_MS);
+  const remainingMs = expiresAt - now();
+  const expired = !!ev.proofExpired || remainingMs <= 0;
+  const daysLeft = expired ? 0 : Math.max(1, Math.ceil(remainingMs / 86400000));
+  const proofImg = expired ? null : (ev.proofImg || null);
+  const proofKind = ev.proofKind || (kind === 'finger' ? 'finger' : 'photo');
   return { ev, student: s, device: d, kind, manual, by: manual ? String(ev.method).replace('يدوي · ', '') : null,
     score: manual ? null : 91 + (h % 9), template: kind === 'finger' ? `FP-${s?.deviceId}-${['إبهام', 'سبابة', 'وسطى'][h % 3]}` : kind === 'card' ? `بطاقة ${String(10000000 + (s?.no || 0) * 7919).slice(-8)}` : null,
-    photo: !manual, ref: `${d?.serial || 'MANUAL'}-${ev.id}`, gate: d?.name || 'تسجيل يدوي' };
+    photo: !expired && (!manual || !!proofImg), proofImg, proofKind, expiresAt, expired, daysLeft, retentionDays: PROOF_RETENTION_DAYS,
+    ref: `${d?.serial || 'MANUAL'}-${ev.id}`, gate: d?.name || 'تسجيل يدوي' };
 }
 function markManual(studentId, by) {
   const t = now();
@@ -2969,7 +3062,7 @@ function saveAccount({ phone, name, admin, teacher, subject, sections: secs, dis
   return { ok: true };
 }
 
-return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, holidayOn, getHoliday, offDay, isHoliday, holidayName, broadcastHolidayNotification, publishHolidayAnnouncement, publishHoliday, addHoliday, editHoliday, addHolidayRange, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, updateSection, deleteSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, eventById, evidenceOf, markManual, addExcuse, teacherEvents, teacherExcuses, teacherStatusOf, teacherSummary, getExemption, isExempt, exemptions, addExemption, updateExemption, deleteExemption, toggleExemption, teacherMarkManual, teacherAddExcuse, simulateTeacherScan, teacherMonthReport, recentTeacherEvents, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, updateStudent, deleteStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, publishMarks, publishGradeMarks, quickPublishGradeExam, addStudentScore, deleteSheet, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, setStudentPromoStatus, studentPromoOverride, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
+return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, holidayOn, getHoliday, offDay, isHoliday, holidayName, broadcastHolidayNotification, publishHolidayAnnouncement, publishHoliday, addHoliday, editHoliday, addHolidayRange, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, updateSection, deleteSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, PROOF_RETENTION_DAYS, pruneExpiredProofs, attachEventProof, proofStorageStats, eventById, evidenceOf, markManual, addExcuse, teacherEvents, teacherExcuses, teacherStatusOf, teacherSummary, getExemption, isExempt, exemptions, addExemption, updateExemption, deleteExemption, toggleExemption, teacherMarkManual, teacherAddExcuse, simulateTeacherScan, teacherMonthReport, recentTeacherEvents, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, updateStudent, deleteStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, publishMarks, publishGradeMarks, quickPublishGradeExam, addStudentScore, deleteSheet, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, setStudentPromoStatus, studentPromoOverride, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
 })();
 
 
@@ -4818,6 +4911,12 @@ const settings = {
         <h2 style="margin-top:8px">حسابات الدخول</h2>
         <div class="muted small">ترجع اليوزرات والرموز مثل البداية (hader2026)، وتنفتح الحسابات المقفولة والموقوفة، وتطلع كل الأجهزة المسجّل دخولها. أرقام أولياء الأمور والطلاب تبقى تدخل برمز SMS.</div>
         <button class="btn" id="resetlogins">${icon('key', 16)}إعادة تهيئة اليوزرات وأرقام الموبايل</button>
+        <h2 style="margin-top:8px">صور وبصمات إثبات الوصول (الحذف التلقائي)</h2>
+        ${(() => {
+          const ps = db.proofStorageStats();
+          return `<div class="muted small">صور وبصمات إثبات الوصول المرسلة لأولياء الأمور تُحذف تلقائياً بعد <b>${ps.retentionDays} يوماً</b> لمنع ثقل المنصة (تبقى أوقات الحضور فقط). الصور المرفوعة النشطة حالياً: <b class="num">${ps.uploadedActive}</b>.</div>
+          <button type="button" class="btn sm" id="prune-proofs" style="align-self:flex-start">${icon('trash', 14)}تنظيف الصور المنتهية (أقدم من ${ps.retentionDays} يوماً) الآن</button>`;
+        })()}
         <h2 style="margin-top:8px">السيرفر</h2>
         <div class="muted small">كل البيانات الآن داخل المتصفح فقط. عند ربط السيرفر يتبدّل ملف واحد (store.js) وتبقى الواجهات كما هي.</div>
       </div>
@@ -4833,6 +4932,11 @@ const settings = {
       const m = e.target.closest('[data-mode]'); if (m && m.dataset.mode !== db.clock().mode) { db.setMode(m.dataset.mode); toast(m.dataset.mode === 'real' ? 'صارت على الوقت الحقيقي' : 'صارت على العرض التجريبي', m.dataset.mode === 'real' ? '' : 'الساعة 7:50'); window.dispatchEvent(new HashChangeEvent('hashchange')); }
       const uh = e.target.closest('[data-unhol]'); if (uh) { db.removeHoliday(uh.dataset.unhol); toast('انلغت العطلة', uh.dataset.unhol); window.dispatchEvent(new HashChangeEvent('hashchange')); }
       if (e.target.closest('#reset')) { db.resetDemo(); toast('رجعت البيانات من البداية', ''); }
+      if (e.target.closest('#prune-proofs')) {
+        const res = db.pruneExpiredProofs();
+        toast(res.purgedCount ? `تم حذف ${res.purgedCount} صورة/بصمة منتهية` : 'لا توجد صور إثبات تجاوزت 30 يوماً حالياً', 'الاحتفاظ التلقائي: 30 يوماً');
+        this.render(el);
+      }
       if (e.target.closest('#resetlogins')) modal('إعادة تهيئة حسابات الدخول', `<div style="display:flex;flex-direction:column;gap:12px"><div>كل اليوزرات والرموز ترجع مثل البداية، وتنفتح الحسابات المقفولة والموقوفة، وتطلع كل الأجهزة المسجّل دخولها (حتى جهازك، فترجع تسجل دخول).</div>
         <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز: <b class="num">hader2026</b>)<br>الأدمن <b class="num">admin</b> · مدير المدرسة <b class="num">m1001</b> · المدرس <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (رمز SMS <b class="num">123456</b>)<br>ولي الأمر <b class="num" dir="ltr">0770 000 0003</b> · الطالب <b class="num" dir="ltr">0770 000 0004</b></div>
         <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-close>إلغاء</button><button class="btn pr" id="okrl">إعادة التهيئة</button></div></div>`, (m, close) => { $('#okrl', m).onclick = () => { db.resetLogins(); close(); toast('رجعت حسابات الدخول للبداية', 'سجّل دخول من جديد'); setTimeout(() => { db.logout?.(); location.hash = '#/'; location.reload(); }, 900); }; });
@@ -4912,7 +5016,11 @@ const parent = {
       return `<div class="card" style="background:${tone};display:flex;flex-direction:column;gap:12px">
         <div style="display:flex;gap:12px;align-items:center">${avatar(s.name, x.status, db.photoOf(s.id))}<div style="flex:1"><h2>${esc(db.first(s.name))}</h2><div class="muted small">${esc(db.sectionLabel(s.sectionId))}</div></div>${pill(x.status)}</div>
         <div style="font-weight:700">${esc(line)}</div>
-        ${x.inEv || x.outEv ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${x.inEv ? `<button class="btn sm" data-ev="${x.inEv.id}">${icon('eye', 14)}إثبات الوصول ${fmtTime(x.inEv.ts)}</button>` : ''}${x.outEv ? `<button class="btn sm" data-ev="${x.outEv.id}">${icon('eye', 14)}إثبات الانصراف ${fmtTime(x.outEv.ts)}</button>` : ''}</div>` : ''}
+        ${x.inEv || x.outEv ? (() => {
+          const inProof = x.inEv ? db.evidenceOf(x.inEv) : null;
+          return `${inProof?.proofImg && !inProof.expired ? `<button type="button" class="ev-thumb" data-ev="${x.inEv.id}" title="اضغط لتكبير إثبات الوصول"><img src="${inProof.proofImg}" alt="إثبات الوصول"><span><b>${inProof.proofKind === 'finger' ? 'بصمة الوصول' : 'صورة الوصول'}</b><small>تُحذف تلقائياً بعد ${inProof.daysLeft} يوماً</small></span>${icon('eye', 16)}</button>` : ''}
+          <div style="display:flex;gap:8px;flex-wrap:wrap">${x.inEv ? `<button class="btn sm" data-ev="${x.inEv.id}">${icon('eye', 14)}إثبات الوصول (صورة / بصمة) ${fmtTime(x.inEv.ts)}</button>` : ''}${x.outEv ? `<button class="btn sm" data-ev="${x.outEv.id}">${icon('eye', 14)}إثبات الانصراف ${fmtTime(x.outEv.ts)}</button>` : ''}</div>`;
+        })() : ''}
         ${x.status === 'absent' ? `<button class="btn pr" data-excuse="${s.id}">تبرير الغياب</button>` : ''}
         <div style="display:flex;gap:6px">${db.days().slice(0, 6).reverse().map(d => { const y = db.statusOf(s.id, d); const col = { present: 'var(--teal)', left: 'var(--teal)', late: 'var(--amber)', absent: 'var(--red)', excused: 'var(--amber)', pending: 'var(--surface-300)', none: 'var(--surface-300)', holiday: 'var(--surface-300)' }[y.status]; return `<div style="flex:1;text-align:center"><div style="height:28px;border-radius:8px;background:${col}" title="${db.STATUS[y.status]}"></div><div class="small muted">${dayName(new Date(d))}</div></div>`; }).join('')}</div>
       </div>`;
@@ -4961,6 +5069,7 @@ function notesList(list, fresh) {
         <div class="muted small">${esc(n.body)}</div>
       </div>
       <span class="num small muted">${ago(n.ts, db.now())}</span>
+      ${n.evId ? `<button type="button" class="btn sm" data-ev="${n.evId}" style="min-height:28px;padding:0 10px;font-size:11.5px">${icon('eye', 13)}الإثبات</button>` : ''}
       ${href ? icon('back', 14) : ''}
     </${tag}>`;
   }).join('');
@@ -7915,31 +8024,120 @@ function fingerImage(e) {
   for (let i = 0; i < 14; i++) { r = (r * 1103515245 + 12345) >>> 0; const a = (r % 628) / 100, d = 20 + (r >> 8) % 110; const x = cx + Math.cos(a) * d * .8, y = cy + Math.sin(a) * d; g.beginPath(); g.arc(x, y, 5, 0, 7); g.stroke(); g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a * 2) * 12, y + Math.sin(a * 2) * 12); g.stroke(); }
   const url = cv.toDataURL('image/png'); EVIMG.set(key, url); return url;
 }
+function compressProofImage(file, maxW = 640, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('تعذر قراءة الصورة'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('الملف ليس صورة صالحة'));
+      img.onload = () => {
+        const scale = Math.min(1, maxW / Math.max(img.width, img.height, 1));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(cv.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 async function evidenceModal(evId) {
+  db.pruneExpiredProofs();
   const e = db.evidenceOf(db.eventById(evId)); if (!e) return toast('ما لكينا هذي البصمة', '', 'absent');
   const ref = db.photoOf(e.student.id); const dt = new Date(e.ev.ts);
   const KIND = { face: 'بصمة الوجه', finger: 'بصمة الإصبع', card: 'البطاقة', palm: 'بصمة الكف', manual: 'تسجيل يدوي' };
+  const c = ctx();
+  const canUpload = c && (['owner', 'admin'].includes(c.role) || can('att'));
+  const isViewerRestricted = c && ['parent', 'student'].includes(c.role) && db.protection().noDownload;
+
   modal(`إثبات ${e.ev.type === 'in' ? 'الوصول' : 'الانصراف'}: ${e.student.name}`, `<div id="evb" class="evb"><div class="empty">جاري تجهيز الإثبات…</div></div>`, async (m) => {
     m.classList.add('wide');
-    const cap = e.photo ? await captureImage(e) : null; const fp = e.kind === 'finger' ? fingerImage(e) : null;
-    $('#evb', m).innerHTML = `
-      <div class="evgrid">
-        ${e.manual ? `<div class="evmanual">${icon('key', 40)}<b>تسجيل يدوي</b><span>سجّله: ${esc(e.by)}</span><span class="muted small">ما بيه صورة لأن الطالب ما بصم على الجهاز. التسجيل اليدوي ينحفظ باسم اللي سجّله بسجل العمليات.</span></div>`
-        : `<figure class="evfig"><img src="${cap}" alt="صورة كاميرا الجهاز لحظة البصمة"><figcaption>صورة كاميرا الجهاز لحظة البصمة</figcaption></figure>`}
-        ${ref ? `<figure class="evfig"><img src="${ref}" alt="الصورة المرجعية"><figcaption>الصورة المرجعية بالمنصة (أول بصمة وجه)</figcaption></figure>` : ''}
-        ${fp ? `<figure class="evfig fp"><img src="${fp}" alt="مطابقة بصمة الإصبع"><figcaption>مطابقة بصمة الإصبع · ${esc(e.template)}</figcaption></figure>` : ''}
-      </div>
-      <div class="evfacts">
-        <div><span>النوع</span><b>${e.ev.type === 'in' ? 'وصول' : 'انصراف'}</b></div>
-        <div><span>الوقت</span><b class="num">${fmtDay(dt)} · ${dt.toLocaleTimeString('en-GB')}</b></div>
-        <div><span>طريقة التحقق</span><b>${KIND[e.kind]}${e.template && e.kind !== 'finger' ? ` · ${esc(e.template)}` : ''}</b></div>
-        ${e.score ? `<div><span>نسبة التطابق</span><b class="num" style="color:var(--teal-ink)">${e.score}%</b></div>` : ''}
-        <div><span>الجهاز</span><b>${esc(e.gate)}${e.device ? ` · <span class="num" dir="ltr">${esc(e.device.serial)}</span>` : ''}</b></div>
-        <div><span>رقم السجل</span><b class="num" dir="ltr">${esc(e.ref)}</b></div>
-      </div>
-      <div class="muted small">السجل محفوظ بالمنصة وما ينمسح أو يتعدّل، والصورة تنحفظ ويه كل بصمة وصول وانصراف. ${!ref && !e.manual ? 'ما عند الطالب صورة مرجعية بعد: صوّره من ملفه حتى تكدر تقارن.' : ''}</div>
-      ${cap ? `<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn sm" id="evdl">${icon('download', 14)}حفظ الصورة</button></div>` : ''}`;
-    $('#evdl', m) && ($('#evdl', m).onclick = async () => { const b = await (await fetch(cap)).blob(); saveBlob(b, `إثبات-${e.student.name}-${e.ev.type === 'in' ? 'وصول' : 'انصراف'}-${dt.getDate()}-${dt.getMonth() + 1}.jpg`); });
+    const renderBody = async () => {
+      const cur = db.evidenceOf(db.eventById(evId));
+      if (!cur) return;
+      const cap = !cur.expired ? (cur.proofImg || (!cur.manual ? await captureImage(cur) : null)) : null;
+      const fp = !cur.expired && cur.kind === 'finger' && !(cur.proofImg && cur.proofKind === 'finger') ? fingerImage(cur) : null;
+      const expDateStr = fmtDay(new Date(cur.expiresAt));
+      const uploadCaption = cur.proofKind === 'finger' ? 'بصمة الطالب المرفوعة للمنصة (ظاهرة لولي الأمر)' : 'صورة الطالب لحظة الوصول (مرفوعة لولي الأمر)';
+
+      $('#evb', m).innerHTML = `
+        <div class="ev-ttl ${cur.expired ? 'exp' : ''}">
+          ${icon('clock', 16)}
+          <div style="flex:1">
+            ${cur.expired
+              ? `<b>تم حذف صورة/بصمة الإثبات تلقائياً بعد مرور ${cur.retentionDays} يوماً</b> — حفاظاً على سرعة وخفة المنصة. بيانات وقت الوصول والسجل تبقى محفوظة.`
+              : `<b>سياسة الاحتفاظ (${cur.retentionDays} يوماً):</b> تُحذف الصورة والبصمة تلقائياً بعد <b class="num">${cur.daysLeft}</b> ${cur.daysLeft === 1 ? 'يوم' : 'يوماً'} (بتاريخ <b class="num">${expDateStr}</b>) لمنع ثقل المنصة.`}
+          </div>
+        </div>
+
+        ${cur.expired ? `
+          <div class="ev-expired">
+            ${icon('trash', 32)}
+            <b>الصورة والبصمة محذوفة تلقائياً</b>
+            <span class="muted small">مرّ أكثر من ${cur.retentionDays} يوماً على هذا السجل فتم تفريغ وسائط الإثبات تلقائياً لتخفيف المنصة، مع بقاء سجل الحضور والوقت محفوظاً.</span>
+          </div>
+        ` : `
+          <div class="evgrid">
+            ${cur.proofImg ? `<figure class="evfig ${cur.proofKind === 'finger' ? 'fp' : ''}"><img src="${cur.proofImg}" alt="${uploadCaption}"><figcaption>${uploadCaption}</figcaption></figure>`
+              : cur.manual ? `<div class="evmanual">${icon('key', 36)}<b>تسجيل يدوي</b><span>سجّله: ${esc(cur.by)}</span><span class="muted small">لم تُرفع صورة أو بصمة لهذا السجل بعد.${canUpload ? ' يمكنك رفع صورة الطالب أو بصمته من الأسفل لتظهر لولي الأمر.' : ''}</span></div>`
+              : `<figure class="evfig"><img src="${cap}" alt="صورة كاميرا الجهاز لحظة البصمة"><figcaption>صورة كاميرا الجهاز لحظة البصمة (ظاهرة لولي الأمر)</figcaption></figure>`}
+            ${ref ? `<figure class="evfig"><img src="${ref}" alt="الصورة المرجعية"><figcaption>الصورة المرجعية بالمنصة (أول بصمة وجه)</figcaption></figure>` : ''}
+            ${fp ? `<figure class="evfig fp"><img src="${fp}" alt="مطابقة بصمة الإصبع"><figcaption>مطابقة بصمة الإصبع · ${esc(cur.template)}</figcaption></figure>` : ''}
+          </div>
+        `}
+
+        ${canUpload && !cur.expired ? `
+          <div class="ev-upbar">
+            <div style="flex:1;min-width:180px">
+              <b>رفع إثبات وصول لولي الأمر</b>
+              <div class="muted small">ارفع صورة الطالب أو صورة بصمته — تُضغط تلقائياً وتُرسل لولي الأمر وتُحذف بعد ${cur.retentionDays} يوماً.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <label class="btn sm pr" style="cursor:pointer">${icon('upload', 14)}رفع صورة الطالب<input type="file" id="ev-up-photo" accept="image/*" capture="environment" hidden></label>
+              <label class="btn sm" style="cursor:pointer">${icon('device', 14)}رفع صورة البصمة<input type="file" id="ev-up-finger" accept="image/*" hidden></label>
+            </div>
+          </div>
+        ` : ''}
+
+        <div class="evfacts">
+          <div><span>النوع</span><b>${cur.ev.type === 'in' ? 'وصول' : 'انصراف'}</b></div>
+          <div><span>الوقت</span><b class="num">${fmtDay(dt)} · ${dt.toLocaleTimeString('en-GB')}</b></div>
+          <div><span>طريقة التحقق</span><b>${KIND[cur.kind]}${cur.template && cur.kind !== 'finger' ? ` · ${esc(cur.template)}` : ''}</b></div>
+          ${cur.score ? `<div><span>نسبة التطابق</span><b class="num" style="color:var(--teal-ink)">${cur.score}%</b></div>` : ''}
+          <div><span>الجهاز</span><b>${esc(cur.gate)}${cur.device ? ` · <span class="num" dir="ltr">${esc(cur.device.serial)}</span>` : ''}</b></div>
+          <div><span>رقم السجل</span><b class="num" dir="ltr">${esc(cur.ref)}</b></div>
+        </div>
+        <div class="muted small">بيانات وقت الحضور محفوظة دائماً بالتقارير، أما صور وبصمات الإثبات فتُمسح تلقائياً كل ${cur.retentionDays} يوماً لتبقى المنصة خفيفة وسريعة. ${!ref && !cur.manual && !cur.expired ? 'ما عند الطالب صورة مرجعية بعد: صوّره من ملفه حتى تكدر تقارن.' : ''}</div>
+        ${cap && !cur.expired && !isViewerRestricted ? `<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn sm" id="evdl">${icon('download', 14)}حفظ الصورة</button></div>` : ''}`;
+
+      $('#evdl', m) && ($('#evdl', m).onclick = async () => { const b = await (await fetch(cap)).blob(); saveBlob(b, `إثبات-${cur.student.name}-${cur.ev.type === 'in' ? 'وصول' : 'انصراف'}-${dt.getDate()}-${dt.getMonth() + 1}.jpg`); });
+
+      const bindUpload = (inputId, proofKind) => {
+        const inp = $(inputId, m);
+        if (!inp) return;
+        inp.onchange = async () => {
+          const file = inp.files?.[0];
+          if (!file) return;
+          try {
+            const dataUrl = await compressProofImage(file, 640, 0.72);
+            const res = db.attachEventProof(evId, { dataUrl, proofKind }, c.name);
+            if (!res.ok) return toast(res.error || 'تعذر الرفع', '', 'absent');
+            EVIMG.delete('c' + evId);
+            toast(proofKind === 'finger' ? 'تم رفع بصمة الوصول لولي الأمر' : 'تم رفع صورة الوصول لولي الأمر', `تُحذف تلقائياً بعد ${cur.retentionDays} يوماً`);
+            await renderBody();
+          } catch (err) {
+            toast('تعذر معالجة الصورة', err?.message || '', 'absent');
+          }
+        };
+      };
+      bindUpload('#ev-up-photo', 'photo');
+      bindUpload('#ev-up-finger', 'finger');
+    };
+    await renderBody();
   });
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-ev]'); if (b) { e.preventDefault(); e.stopPropagation(); evidenceModal(b.dataset.ev); } }, true);
