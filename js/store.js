@@ -47,26 +47,134 @@ export function setMode(m) { storage.del(KEY); const keepCreds = S?.creds; S = s
 export const holidays = () => (S.holidays || []).slice().sort((a, b) => a.day.localeCompare(b.day));
 export const holidayOn = ts => (S.holidays || []).find(h => h.day === (typeof ts === 'string' ? ts : dayKey(new Date(ts))));
 export const getHoliday = ts => holidayOn(ts);
-export function offDay(ts) { if (holidayOn(ts)) return true; return S.clock?.mode === 'real' && !isSchoolDay(new Date(ts)); }
-export const isHoliday = () => !!S.holiday || !!holidayOn(S.today);
-export const holidayName = () => holidayOn(S.today)?.name || (S.holiday ? (new Date(S.today).getDay() === 5 ? 'الجمعة' : 'السبت') : '');
+export function offDay(ts) {
+  const h = holidayOn(ts);
+  if (h && h.status !== 'draft') return true;
+  return S.clock?.mode === 'real' && !isSchoolDay(new Date(ts));
+}
+export const isHoliday = () => !!S.holiday || !!(holidayOn(S.today) && holidayOn(S.today).status !== 'draft');
+export const holidayName = () => {
+  const h = holidayOn(S.today);
+  return (h && h.status !== 'draft' ? h.name : '') || (S.holiday ? (new Date(S.today).getDay() === 5 ? 'الجمعة' : 'السبت') : '');
+};
+
+export function broadcastHolidayNotification(hol) {
+  const title = `📢 عطلة رسمية: ${hol.name}`;
+  const body = `تعطيل الدوام الرسمي لكافة الطلاب والمدرسين ليوم (${hol.day}). لا يُحسب غياب أو تأخير.`;
+  const sent = new Set();
+  (S.guardians || []).forEach(g => {
+    if (g.phone && !sent.has(g.phone)) {
+      sent.add(g.phone);
+      notify(g.phone, { kind: 'post', title, body, ts: now() });
+    }
+  });
+  (S.students || []).forEach(s => {
+    if (s.phone && !sent.has(s.phone)) {
+      sent.add(s.phone);
+      notify(s.phone, { kind: 'post', title, body, ts: now(), studentId: s.id });
+    }
+  });
+  (S.teachers || []).forEach(t => {
+    if (t.phone && !sent.has(t.phone)) {
+      sent.add(t.phone);
+      notify(t.phone, { kind: 'post', title, body, ts: now() });
+    }
+  });
+}
+
+export function publishHolidayAnnouncement(hol, by) {
+  const allSecs = (S.sections || []).map(s => s.id);
+  const pTitle = `📢 إعلان عطلة رسمية: ${hol.name}`;
+  const pBody = `تعلن إدارة المدرسة عن تعطيل الدوام الرسمي لكافة الطلبة والملاك التدريسي ليوم (${hol.day}) بمناسبة (${hol.name}).\n` +
+    (hol.orderNo ? `رقم الأمر / القرار: ${hol.orderNo}\n` : '') +
+    (hol.notes ? `ملاحظات الإدارة: ${hol.notes}\n` : '') +
+    `يعفى جميع الطلاب والمدرسين من تسجيل البصمة لذلك اليوم ولا يُسجل أي غياب أو تأخير.`;
+
+  if (hol.postId) {
+    const p = (S.posts || []).find(x => x.id === hol.postId);
+    if (p) {
+      p.title = pTitle;
+      p.body = pBody;
+      emit('post');
+      return;
+    }
+  }
+
+  const res = addPost({
+    type: 'ann',
+    title: pTitle,
+    body: pBody,
+    sections: allSecs.length ? allSecs : ['g1-أ'],
+    audience: 'all'
+  }, { id: 'admin', name: by || 'إدارة المدرسة' });
+
+  if (res.ok && res.post) {
+    hol.postId = res.post.id;
+  }
+}
+
+export function publishHoliday(day, by) {
+  const hol = (S.holidays || []).find(h => h.day === day);
+  if (!hol) return { ok: false, error: 'العطلة غير موجودة.' };
+  hol.status = 'published';
+  hol.publishedAt = now();
+  broadcastHolidayNotification(hol);
+  publishHolidayAnnouncement(hol, by);
+  log('نشر عطلة رسمية للجميع', `${day} · ${hol.name}`);
+  IDX = null;
+  emit('holidays');
+  return { ok: true, holiday: hol };
+}
+
 export function addHoliday(day, name, by, extra = {}) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '')) return { ok: false, error: 'اختر تاريخ العطلة.' };
+  const existing = (S.holidays || []).find(h => h.day === day);
   S.holidays = (S.holidays || []).filter(h => h.day !== day);
+  const status = extra.status || 'published';
   const hol = {
     day,
     name: String(name || '').trim() || 'عطلة رسمية',
     category: extra.category || 'عطلة رسمية',
     orderNo: extra.orderNo || '',
     notes: extra.notes || '',
+    badge: extra.badge || '🏛️',
+    status, // 'draft' (مسودة / مستودع) or 'published' (منشور للجميع)
     by: by || '',
-    ts: now()
+    ts: now(),
+    publishedAt: status === 'published' ? (existing?.publishedAt || now()) : null,
+    postId: existing?.postId || null
   };
   S.holidays.push(hol);
-  log('إعلان عطلة رسمية', `${day} · ${hol.name} (${hol.category})${extra.orderNo ? ' · أمر: ' + extra.orderNo : ''}`);
-  IDX = null; emit('holidays'); return { ok: true, holiday: hol };
+
+  if (status === 'published' && extra.broadcast !== false) {
+    broadcastHolidayNotification(hol);
+    publishHolidayAnnouncement(hol, by);
+  }
+
+  log(status === 'published' ? 'إعلان ونشر عطلة رسمية' : 'حفظ عطلة كمسودة في المستودع', `${day} · ${hol.name} (${hol.category})`);
+  IDX = null;
+  emit('holidays');
+  return { ok: true, holiday: hol };
 }
-export function addHolidayRange({ startDate, endDate, name, category, orderNo, notes }, by) {
+
+export function editHoliday(day, data, by) {
+  const existing = (S.holidays || []).find(h => h.day === day);
+  if (!existing) return { ok: false, error: 'العطلة غير موجودة.' };
+  const targetDay = data.day || data.startDate || day;
+  if (targetDay !== day) {
+    removeHoliday(day, by);
+  }
+  return addHoliday(targetDay, data.name || existing.name, by, {
+    category: data.category !== undefined ? data.category : existing.category,
+    orderNo: data.orderNo !== undefined ? data.orderNo : existing.orderNo,
+    notes: data.notes !== undefined ? data.notes : existing.notes,
+    badge: data.badge !== undefined ? data.badge : (existing.badge || '🏛️'),
+    status: data.status !== undefined ? data.status : existing.status,
+    postId: existing.postId
+  });
+}
+
+export function addHolidayRange({ startDate, endDate, name, category, orderNo, notes, status = 'published', badge = '🏛️' }, by) {
   if (!startDate) return { ok: false, error: 'يرجى تحديد تاريخ البدء.' };
   const parseLocal = s => {
     const p = (s || '').split('-').map(Number);
@@ -79,18 +187,26 @@ export function addHolidayRange({ startDate, endDate, name, category, orderNo, n
 
   const added = [];
   const cur = new Date(d1);
+  let isFirst = true;
   while (cur <= d2) {
     const k = dayKey(cur);
-    addHoliday(k, name, by, { category, orderNo, notes });
+    addHoliday(k, name, by, { category, orderNo, notes, status, badge, broadcast: isFirst && status === 'published' });
+    isFirst = false;
     added.push(k);
     cur.setDate(cur.getDate() + 1);
   }
   return { ok: true, count: added.length };
 }
+
 export function removeHoliday(day, by) {
   const h = (S.holidays || []).find(x => x.day === day);
   S.holidays = (S.holidays || []).filter(x => x.day !== day);
-  if (h) log('إلغاء عطلة رسمية', `${day} · ${h.name}${by ? ' · ألغاها: ' + by : ''}`);
+  if (h) {
+    if (h.postId) {
+      deletePost(h.postId, by || 'إدارة المدرسة');
+    }
+    log('إلغاء عطلة رسمية', `${day} · ${h.name}${by ? ' · ألغاها: ' + by : ''}`);
+  }
   IDX = null;
   emit('holidays');
   return { ok: true };
