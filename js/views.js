@@ -1,6 +1,6 @@
 import * as db from './store.js';
 import { $, $$, esc, icon, fmtTime, fmtDay, dayKey, dayName, ago, maskPhone, fmtPhone, normalizePhone, atTime, norm, readTable, files, fmtSize, fileKind, saveBlob, docxText, openPdf, sampleHandout, pdfPage, jpegsToPdf, qrSvg } from './util.js';
-import { pill, avatar, topbar, toast, modal, ctx, scope, logo, wordmark, protectedViewer, watermarkText, watermarkTile } from './app.js';
+import { pill, avatar, topbar, toast, modal, ctx, scope, logo, wordmark, protectedViewer, watermarkText, watermarkTile, notifSupport } from './app.js';
 // Staff permission check: the administration can do everything; a teacher only what the school allowed.
 const can = perm => { const c = ctx(); return !c ? false : c.role !== 'teacher' ? ['owner', 'admin'].includes(c.role) : db.teacherCan(c.roleInfo.teacherId, perm); };
 
@@ -1971,6 +1971,13 @@ const settings = {
         return `<div class="muted small">${ts.enabled ? `حسابك (<b class="num" dir="ltr">${esc(ts.username)}</b>) مربوط بتطبيق Google Authenticator ومفعّل ✓ · رموز الاسترداد المتبقية: <b class="num">${ts.backupsLeft}</b>.` : 'اربط حسابك بتطبيق Google Authenticator لتأمين تسجيل الدخول برمز مؤقت يتجدد كل 30 ثانية.'}</div>
           <button type="button" class="btn ${ts.enabled ? '' : 'pr'}" data-totp style="align-self:flex-start">${icon('shield', 16)}${ts.enabled ? 'إدارة / تعطيل Google Authenticator' : 'ربط تطبيق Google Authenticator'}</button>`;
       })()}` : ''}
+        <h2 style="margin-top:8px">إشعارات الجهاز (جميع الأجهزة)</h2>
+        ${(() => {
+        const ns = notifSupport();
+        const stTxt = ns.state === 'granted' ? '<b style="color:var(--teal-ink)">مفعّلة على هذا الجهاز ✓</b> — تصل التنبيهات مباشرة لشريط إشعارات الجهاز.' : ns.state === 'denied' ? '<b style="color:var(--red-ink)">محظورة من المتصفح</b> — اضغط لمعرفة طريقة السماح.' : ns.state === 'ios_install' ? 'على الآيفون/الآيباد: ثبّت المنصة على الشاشة الرئيسية أولاً لتفعيل إشعارات الجهاز.' : 'اسمح للمنصة بإرسال إشعارات مباشرة على الهاتف أو الكمبيوتر عند الحضور والغياب والدرجات.';
+        return `<div class="muted small">${stTxt}</div>
+          <button type="button" class="btn ${ns.state === 'granted' ? '' : 'pr'}" data-notif-req style="align-self:flex-start">${icon('bell', 16)}${ns.state === 'granted' ? 'إرسال إشعار تجريبي للجهاز' : 'تفعيل إشعارات هذا الجهاز'}</button>`;
+      })()}
         <h2 style="margin-top:8px">حسابات الدخول</h2>
         <div class="muted small">${db.REQUIRE_TOTP_ON_LOGIN ? 'ترجع اليوزرات والرموز مثل البداية (hader2026)، وينفك ربط Google Authenticator حتى تعيد ربطه من جديد، وتنفتح الحسابات المقفولة والموقوفة.' : 'ترجع اليوزرات والرموز مثل البداية (hader2026)، وتنفتح الحسابات المقفولة والموقوفة، وتطلع كل الأجهزة المسجّل دخولها.'}</div>
         <button class="btn" id="resetlogins">${icon('key', 16)}إعادة تهيئة اليوزرات وأرقام الموبايل</button>

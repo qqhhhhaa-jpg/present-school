@@ -102,7 +102,7 @@ function mobileNav(c, name, items, groups, other, cred, link) {
     <div class="mpanel" role="dialog" aria-label="كل الأقسام"><div class="mhandle" data-more-close></div>
       <div class="mme">${avatar(c.name)}<div style="flex:1;min-width:0"><b class="ell" style="display:block">${esc(c.name)}</b><span class="muted small">${esc(c.roleInfo.label.split(' · ')[0])}${cred && !cred.pending ? ` · <span class="num" dir="ltr">${esc(cred.username)}</span>` : ''}</span></div><button class="iconbtn" data-more-close aria-label="إغلاق">${icon('x', 18)}</button></div>
       ${sheetGroups}
-      <div class="macts">${other.map(r => `<button class="btn sm" data-role="${r.rid || r.role}">${icon('swap', 14)}التبديل إلى: ${esc(r.label.split(' · ')[0])}</button>`).join('')}${cred && !cred.pending ? `${db.REQUIRE_TOTP_ON_LOGIN ? `<button class="btn sm" data-totp>${icon('shield', 14)}Google Authenticator</button>` : ''}<button class="btn sm" data-chpw>${icon('key', 14)}تغيير الرمز</button>` : ''}<button class="btn sm" data-install ${matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'hidden' : ''}>${icon('download', 14)}ثبّت التطبيق</button><button class="btn sm danger" data-logout>${icon('logout', 14)}تسجيل الخروج</button></div>
+      <div class="macts">${other.map(r => `<button class="btn sm" data-role="${r.rid || r.role}">${icon('swap', 14)}التبديل إلى: ${esc(r.label.split(' · ')[0])}</button>`).join('')}<button class="btn sm" data-notif-req>${icon('bell', 14)}إشعارات الجهاز</button>${cred && !cred.pending ? `${db.REQUIRE_TOTP_ON_LOGIN ? `<button class="btn sm" data-totp>${icon('shield', 14)}Google Authenticator</button>` : ''}<button class="btn sm" data-chpw>${icon('key', 14)}تغيير الرمز</button>` : ''}<button class="btn sm" data-install ${matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'hidden' : ''}>${icon('download', 14)}ثبّت التطبيق</button><button class="btn sm danger" data-logout>${icon('logout', 14)}تسجيل الخروج</button></div>
     </div></div>`;
 }
 function toggleMore(open) {
@@ -161,6 +161,7 @@ function shell(c, name) {
     <div class="me">
       <div class="who">${avatar(c.name)}<div style="flex:1;min-width:0"><b class="ell">${esc(c.name)}</b><span class="ell">${esc(c.roleInfo.label.split(' · ')[0])}${cred && !cred.pending ? ` · <span class="num" dir="ltr">${esc(cred.username)}</span>` : ''}</span></div>${cred && !cred.pending ? `${db.REQUIRE_TOTP_ON_LOGIN ? `<button class="mebtn ${db.totpStatus(c.phone).enabled ? 'tfa-on' : ''}" data-totp title="Google Authenticator (2FA)" aria-label="Google Authenticator">${icon('shield', 17)}</button>` : ''}<button class="mebtn" data-chpw title="تغيير الرمز" aria-label="تغيير الرمز">${icon('key', 17)}</button>` : ''}</div>
       ${other.map(r => `<button class="sidebtn" data-role="${r.rid || r.role}">${icon('swap', 15)}التبديل إلى: ${esc(r.label.split(' · ')[0])}</button>`).join('')}
+      <button class="sidebtn" data-notif-req>${icon('bell', 15)}<span data-notif-lbl>تفعيل إشعارات الجهاز</span></button>
       <button class="sidebtn" data-install ${matchMedia('(display-mode: standalone)').matches || navigator.standalone ? 'hidden' : ''}>${icon('download', 15)}ثبّت «حاضر» على شاشتك</button>
       <button class="logout" data-logout>${icon('logout', 18)}تسجيل الخروج</button></div>
   </aside>
@@ -779,6 +780,8 @@ function route() {
   }
   current = { name, arg, view: views[name], el: main };
   views[name].render(main, arg);
+  injectNotifBanner(main);
+  syncNotifUI();
   bindChrome();
   applyProtection();
   window.scrollTo(0, 0);
@@ -804,6 +807,8 @@ function goBack() {
   location.hash = prev || parent || `#/${HOME[c.role]}`;
 }
 function onChromeClick(e) {
+  if (e.target.closest('[data-notif-req]')) { requestDeviceNotifs(); return; }
+  if (e.target.closest('[data-notif-dismiss]')) { try { sessionStorage.setItem('hader-notif-dismiss', '1'); } catch { } $('#notif-ask-bar')?.remove(); return; }
   if (e.target.closest('[data-totp]')) { totpModal(); return; }
   if (e.target.closest('[data-chpw]')) { changePwModal(); return; }
   if (e.target.closest('[data-back]')) { goBack(); return; }
@@ -822,7 +827,12 @@ let bellFresh = null;
 function renderBell() {
   const p = $('#npop'); if (!p || p.hidden) return;
   const c = ctx(); const list = db.notes(c.inbox).slice(0, 8);
+  const ns = notifSupport();
+  const permBar = ns.state === 'granted'
+    ? `<div class="npop-perm ok"><span>${icon('check', 14)} إشعارات هذا الجهاز مفعّلة</span><button type="button" class="btn sm" data-notif-req style="min-height:26px;padding:0 9px;font-size:11px">تجربة</button></div>`
+    : `<div class="npop-perm"><span>${icon('bell', 14)} ${ns.state === 'denied' ? 'الإشعارات محظورة بالمتصفح' : 'فعّل إشعارات هذا الجهاز'}</span><button type="button" class="btn sm pr" data-notif-req style="min-height:26px;padding:0 10px;font-size:11.5px">${ns.state === 'denied' ? 'طريقة الفتح' : 'تفعيل الآن'}</button></div>`;
   p.innerHTML = `<div class="npop-head"><b style="flex:1;font-size:16px">الإشعارات</b><a href="#/notes" class="small" style="color:var(--teal-ink);font-weight:700">كل الإشعارات</a><button type="button" class="iconbtn sm npop-close" data-bell-close aria-label="إغلاق" style="width:28px;height:28px;min-height:28px;border-radius:8px">${icon('x', 15)}</button></div>
+    ${permBar}
     <div style="padding:0 12px">${notesList(list, bellFresh)}</div>`;
 }
 function toggleBell() { const p = $('#npop'); if (!p) return; if (p.hidden) openBell(); else closeBell(); }
@@ -982,7 +992,13 @@ db.subscribe(what => {
   // new notification for this account → toast
   const n = db.notes(c.inbox);
   const fresh = n.filter(x => !x.read).length;
-  if (fresh > lastNoteCount && n[0] && !n[0].read) toast(n[0].title, n[0].body, n[0].kind);
+  if (fresh > lastNoteCount && n[0] && !n[0].read) {
+    toast(n[0].title, n[0].body, n[0].kind);
+    sendDeviceNotification(n[0].title, n[0].body, {
+      tag: 'hader-' + (n[0].id || n[0].ts),
+      url: n[0].kind === 'mark' ? './#/marks' : n[0].kind === 'post' ? './#/posts' : './#/notes',
+    });
+  }
   lastNoteCount = fresh;
   refreshTop();
   if (bellFresh) { const c2 = ctx(); db.notes(c2.inbox).filter(n => !n.read).forEach(n => bellFresh.add(n.id)); if (db.unread(c2.inbox)) setTimeout(() => db.readAll(c2.inbox)); renderBell(); }
@@ -1024,8 +1040,131 @@ document.addEventListener('click', async e => {
 // Unread notifications appear as a number on the app icon (phones and computers that support it).
 function appBadge() { try { const c = ctx(); const n = c ? db.unread(c.inbox) : 0; if ('setAppBadge' in navigator) (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {}); } catch { } }
 db.subscribe(() => { appBadge(); showInstallBtn(); });
-if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
-setTimeout(() => { showInstallBtn(); appBadge(); }, 500);
+let swReg = null;
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  navigator.serviceWorker.register('sw.js').then(r => { swReg = r; }).catch(() => {});
+}
+setTimeout(() => { showInstallBtn(); appBadge(); syncNotifUI(); }, 500);
+
+/* ---------- universal system / push notification permissions across ALL devices (Android, iOS PWA, Desktop) ---------- */
+function isIOSDevice() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+export function notifSupport() {
+  const ios = isIOSDevice();
+  const hasApi = typeof window !== 'undefined' && 'Notification' in window;
+  if (ios && !standalone() && !hasApi) return { state: 'ios_install', ios: true };
+  if (!hasApi) return { state: 'unsupported', ios };
+  return { state: Notification.permission || 'default', ios };
+}
+export async function sendDeviceNotification(title, body, opts = {}) {
+  if (typeof window === 'undefined' || !('Notification' in window) || Notification.permission !== 'granted') return false;
+  const payload = {
+    body: String(body || ''),
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png',
+    dir: 'rtl',
+    lang: 'ar',
+    tag: opts.tag || 'hader-note',
+    renotify: true,
+    vibrate: [150, 80, 150],
+    data: { url: opts.url || './#/notes' },
+  };
+  try {
+    const reg = swReg || ('serviceWorker' in navigator ? await navigator.serviceWorker.ready.catch(() => null) : null);
+    if (reg && typeof reg.showNotification === 'function') {
+      await reg.showNotification(title, payload);
+      return true;
+    }
+  } catch { }
+  try {
+    const n = new Notification(title, payload);
+    n.onclick = () => { window.focus(); if (opts.url && opts.url.includes('#')) location.hash = opts.url.slice(opts.url.indexOf('#')); n.close(); };
+    return true;
+  } catch { return false; }
+}
+export async function requestDeviceNotifs() {
+  const ns = notifSupport();
+  if (ns.state === 'ios_install') {
+    modal('تفعيل الإشعارات على الآيفون / الآيباد', `
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div>بأجهزة آبل (iPhone / iPad)، النظام يطلب تثبيت التطبيق على الشاشة الرئيسية أولاً حتى يسمح بوصول الإشعارات:</div>
+        <ol class="small" style="margin:0;padding-inline-start:20px;line-height:2.1">
+          <li>افتح المنصة بمتصفح <b>Safari</b>.</li>
+          <li>اضغط زر المشاركة <b>(المربع والسهم للأعلى)</b> أسفل الشاشة.</li>
+          <li>اختر <b>«إضافة إلى الشاشة الرئيسية»</b> ثم <b>«إضافة»</b>.</li>
+          <li>افتح أيقونة <b>«حاضر»</b> من الشاشة الرئيسية واضغط <b>«تفعيل إشعارات الجهاز»</b>.</li>
+        </ol>
+        <div style="display:flex;justify-content:flex-end"><button type="button" class="btn pr" data-close>فهمت</button></div>
+      </div>`);
+    return;
+  }
+  if (ns.state === 'unsupported') {
+    toast('الإشعارات غير مدعومة هنا', 'افتح المنصة عبر رابط الموقع (HTTPS) من Chrome أو Safari أو Edge', 'late');
+    return;
+  }
+  if (ns.state === 'denied') {
+    modal('الإشعارات محظورة على هذا الجهاز', `
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div>تم رفض إذن الإشعارات مسبقاً على هذا المتصفح. لإعادة تفعيلها:</div>
+        <ol class="small" style="margin:0;padding-inline-start:20px;line-height:2.1">
+          <li>اضغط على أيقونة <b>القفل أو الإعدادات</b> بجانب رابط الموقع بالأعلى.</li>
+          <li>اختر <b>الأذونات / الإشعارات (Notifications)</b> وغيّرها إلى <b>السماح (Allow)</b>.</li>
+          <li>حدّث الصفحة وستصل الإشعارات مباشرة لجهازك.</li>
+        </ol>
+        <div style="display:flex;justify-content:flex-end"><button type="button" class="btn pr" data-close>حسناً</button></div>
+      </div>`);
+    return;
+  }
+  if (ns.state === 'granted') {
+    const ok = await sendDeviceNotification('إشعار تجريبي من منصة «حاضر»', 'إشعارات جهازك مفعّلة وتعمل بنجاح ✓', { tag: 'hader-test-' + Date.now() });
+    toast(ok ? 'تم إرسال إشعار تجريبي لجهازك ✓' : 'الإشعارات مفعّلة على جهازك ✓', '');
+    syncNotifUI();
+    return;
+  }
+  try {
+    const res = await new Promise(resolve => {
+      const p = Notification.requestPermission(r => resolve(r));
+      if (p && typeof p.then === 'function') p.then(resolve, () => resolve('denied'));
+    });
+    syncNotifUI();
+    if (res === 'granted') {
+      $('#notif-ask-bar')?.remove();
+      toast('تم تفعيل إشعارات الجهاز بنجاح ✓', 'راح توصلك التنبيهات مباشرة على جهازك');
+      await sendDeviceNotification('مرحباً بك في منصة «حاضر»', 'تم تفعيل إشعارات الحضور والغياب والدرجات على جهازك بنجاح ✓', { tag: 'hader-welcome' });
+      renderBell();
+    } else if (res === 'denied') {
+      toast('تم رفض إذن الإشعارات', 'تكدر تفعله لاحقاً من إعدادات المتصفح', 'late');
+    }
+  } catch {
+    toast('تعذر طلب إذن الإشعارات', 'جرّب فتح المنصة عبر رابط HTTPS', 'late');
+  }
+}
+function syncNotifUI() {
+  const ns = notifSupport();
+  const label = ns.state === 'granted' ? 'إشعارات الجهاز مفعّلة ✓' : ns.state === 'denied' ? 'الإشعارات محظورة' : 'تفعيل إشعارات الجهاز';
+  $$('[data-notif-lbl]').forEach(el => { el.textContent = label; });
+  if (ns.state === 'granted') $('#notif-ask-bar')?.remove();
+}
+function injectNotifBanner(main) {
+  if (!main) return;
+  $('#notif-ask-bar', main)?.remove();
+  try { if (sessionStorage.getItem('hader-notif-dismiss') === '1') return; } catch { }
+  const ns = notifSupport();
+  if (ns.state !== 'default' && ns.state !== 'ios_install') return;
+  const bar = document.createElement('div');
+  bar.id = 'notif-ask-bar';
+  bar.className = 'notif-ask';
+  bar.innerHTML = `<span class="ki t" style="width:32px;height:32px;border-radius:10px">${icon('bell', 16)}</span>
+    <div style="flex:1;min-width:160px"><b>فعّل إشعارات هذا الجهاز</b><div class="muted small">حتى توصلك تنبيهات وصول الطالب والغياب والدرجات والتبليغات مباشرة على ${ns.ios ? 'الآيفون' : 'جهازك'}.</div></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button type="button" class="btn sm pr" data-notif-req>${icon('bell', 14)}تفعيل الإشعارات</button>
+      <button type="button" class="btn sm" data-notif-dismiss>لاحقاً</button>
+    </div>`;
+  const top = main.querySelector('.top');
+  if (top && top.nextSibling) main.insertBefore(bar, top.nextSibling);
+  else main.prepend(bar);
+}
 
 /* ---------- privacy: protect what parents and students see ----------
    A website cannot fully block screenshots (only a native app can). What it can do: no downloads, no copy/print,

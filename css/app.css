@@ -5538,3 +5538,38 @@ button.tt-dh:focus-visible {
   color: #34C3AE !important;
   border-color: rgba(52, 195, 174, .45) !important;
 }
+
+/* ===== Cross-device system notification permission banner & bell bar ===== */
+.notif-ask {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: linear-gradient(155deg, #FFFFFF 0%, #EAF5F2 100%);
+  border: 1px solid rgba(11, 127, 112, .30);
+  box-shadow: var(--app-glow-sm);
+}
+.npop-perm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--surface-100);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.npop-perm span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.npop-perm.ok {
+  background: var(--teal-soft);
+  color: var(--teal-ink);
+}
