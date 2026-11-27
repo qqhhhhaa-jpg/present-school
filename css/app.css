@@ -5447,3 +5447,10 @@ button.tt-dh:focus-visible {
     grid-column: 1 / -1;
   }
 }
+
+/* Align KPI & stat numbers cleanly to the right in RTL cards while preserving LTR digit order */
+.kpi .kn,
+.stat .n,
+.mk-pct {
+  text-align: right;
+}
