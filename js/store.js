@@ -399,6 +399,11 @@ export function init() {
   S.chats = S.chats || {}; S.tickets = S.tickets || [];
   if (!S.marks) { S.marks = seedMarks(); S.markReads = {}; }
   if (!S.creds) S.creds = saved?.creds || seedCreds(); // generated logins survive a new demo day
+  // Migrate owner/admin credential from old demo password to the new private password automatically
+  if (S.creds['07700000000'] && S.creds['07700000000'].hash === hashPw('hader2026')) {
+    S.creds['07700000000'].hash = '4of9nz';
+    save();
+  }
   if (!S.teacherEvents) S.teacherEvents = [];
   if (!S.teacherExcuses) S.teacherExcuses = [];
   if (!S.exemptions) S.exemptions = [];
@@ -1224,7 +1229,7 @@ const STAFF = ['owner', 'admin', 'teacher'];
 const hashPw = s => { let h = 2166136261; for (const ch of String(s)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
 function seedCreds() {
   return {
-    '07700000000': { username: 'admin', hash: hashPw('hader2026'), ts: Date.now() },
+    '07700000000': { username: 'admin', hash: '4of9nz', ts: Date.now() },
     '07700000001': { username: 'm1001', hash: hashPw('hader2026'), ts: Date.now() },
     '07700000002': { username: 't1001', hash: hashPw('hader2026'), ts: Date.now() },
   };

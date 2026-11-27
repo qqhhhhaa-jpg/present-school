@@ -42,7 +42,7 @@ const login = {
           <button class="btn pr" style="min-height:50px">دخول</button>
           <button type="button" class="btn" id="forgot" style="border:0;background:none;color:var(--teal-ink);text-decoration:underline">نسيت الرمز؟</button></form>
         <div class="demo"><b>نسخة تجريبية:</b> اضغط على يوزر لتجربته (الرمز الأولي: <b class="num">hader2026</b>، إلا إذا غيّرته)<br>
-          الأدمن: <button data-u="admin">admin</button> · مدير المدرسة: <button data-u="m1001">m1001</button> · المدرس: <button data-u="t1001">t1001</button><br>
+          مدير المدرسة: <button data-u="m1001">m1001</button> · المدرس: <button data-u="t1001">t1001</button><br>
           <button type="button" id="resetlog" style="margin-top:6px">إعادة تهيئة اليوزرات والرموز</button></div>`;
       bindTabs();
       const un = $('#un', step), pw = $('#pw', step);
@@ -50,7 +50,7 @@ const login = {
       $$('[data-u]', step).forEach(b => b.onclick = () => { un.value = b.dataset.u; pw.value = 'hader2026'; });
       $('#forgot', step).onclick = () => forgotStep('', un.value);
       $('#resetlog', step).onclick = () => modal('إعادة تهيئة حسابات التجربة', `<div style="display:flex;flex-direction:column;gap:12px"><div>كل اليوزرات والرموز ترجع مثل البداية، وينفتح أي حساب مقفول، وتطلع كل الأجهزة المسجّل دخولها.</div>
-        <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز للكل: <b class="num">hader2026</b>)<br>الأدمن: <b class="num">admin</b> · مدير المدرسة: <b class="num">m1001</b> · المدرس: <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (رمز SMS: <b class="num">123456</b>)<br>ولي الأمر: <b class="num" dir="ltr">0770 000 0003</b> · الطالب أحمد: <b class="num" dir="ltr">0770 000 0004</b></div>
+        <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز للكل: <b class="num">hader2026</b>)<br>مدير المدرسة: <b class="num">m1001</b> · المدرس: <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (رمز SMS: <b class="num">123456</b>)<br>ولي الأمر: <b class="num" dir="ltr">0770 000 0003</b> · الطالب أحمد: <b class="num" dir="ltr">0770 000 0004</b></div>
         <div class="muted small">بيانات الطلاب والمنشورات والدرجات تبقى مثل ما هي. اليوزرات اللي ولّدتها لمدرسين جدد تنمسح وتحتاج تولّدها من جديد.</div>
         <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-close>إلغاء</button><button class="btn pr" id="okreset">إعادة التهيئة</button></div></div>`, (m, close) => {
         $('#okreset', m).onclick = () => { db.resetLogins(); close(); toast('رجعت حسابات التجربة للبداية', 'الرمز hader2026 · رمز SMS 123456'); userStep(); };
@@ -1871,7 +1871,7 @@ const settings = {
         this.render(el);
       }
       if (e.target.closest('#resetlogins')) modal('إعادة تهيئة حسابات الدخول', `<div style="display:flex;flex-direction:column;gap:12px"><div>كل اليوزرات والرموز ترجع مثل البداية، وتنفتح الحسابات المقفولة والموقوفة، وتطلع كل الأجهزة المسجّل دخولها (حتى جهازك، فترجع تسجل دخول).</div>
-        <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز: <b class="num">hader2026</b>)<br>الأدمن <b class="num">admin</b> · مدير المدرسة <b class="num">m1001</b> · المدرس <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (رمز SMS <b class="num">123456</b>)<br>ولي الأمر <b class="num" dir="ltr">0770 000 0003</b> · الطالب <b class="num" dir="ltr">0770 000 0004</b></div>
+        <div class="card" style="background:var(--surface-100);padding:10px 14px;line-height:2"><b>الإدارة والمدرسين</b> (الرمز: <b class="num">hader2026</b>)<br>مدير المدرسة <b class="num">m1001</b> · المدرس <b class="num">t1001</b><br><b>أولياء الأمور والطلاب</b> (رمز SMS <b class="num">123456</b>)<br>ولي الأمر <b class="num" dir="ltr">0770 000 0003</b> · الطالب <b class="num" dir="ltr">0770 000 0004</b></div>
         <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-close>إلغاء</button><button class="btn pr" id="okrl">إعادة التهيئة</button></div></div>`, (m, close) => { $('#okrl', m).onclick = () => { db.resetLogins(); close(); toast('رجعت حسابات الدخول للبداية', 'سجّل دخول من جديد'); setTimeout(() => { db.logout?.(); location.hash = '#/'; location.reload(); }, 900); }; });
       const pt = e.target.closest('[data-prot]'); if (pt) { const on = pt.getAttribute('aria-checked') !== 'true'; pt.setAttribute('aria-checked', on); db.setProtection({ [pt.dataset.prot]: on }, ctx().name); toast(on ? 'تفعّلت الحماية' : 'انطفت الحماية', pt.closest('.row').querySelector('b').textContent); }
     });
