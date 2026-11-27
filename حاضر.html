@@ -4644,15 +4644,91 @@ button.card[data-sheet] {
 }
 
 /* ===== Arrival proof upload & 30-day auto-purge UI ===== */
-.ev-ttl{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:12px;background:var(--teal-soft);border:1px solid rgba(11,127,112,.25);color:var(--teal-ink);font-size:12.5px;line-height:1.5}
-.ev-ttl.exp{background:var(--amber-soft);border-color:rgba(196,127,23,.35);color:var(--amber-ink)}
-.ev-ttl svg{flex:none;margin-top:2px}
-.ev-expired{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:22px 16px;border-radius:14px;border:1.5px dashed var(--line-strong);background:var(--surface-100);color:var(--ink)}
-.ev-upbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;border-radius:12px;background:var(--surface-100);border:1px solid var(--line)}
-.ev-thumb{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:12px;border:1px solid var(--line);background:var(--surface-200);cursor:pointer;text-align:right;font:inherit;color:var(--ink)}
-.ev-thumb img{width:46px;height:46px;border-radius:9px;object-fit:cover;flex:none;border:1px solid var(--line)}
-.ev-thumb span{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.ev-thumb small{font-size:11.5px;color:var(--muted)}
+.ev-ttl {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--teal-soft);
+  border: 1px solid rgba(11, 127, 112, .25);
+  color: var(--teal-ink);
+  font-size: 12.5px;
+  line-height: 1.5
+}
+
+.ev-ttl.exp {
+  background: var(--amber-soft);
+  border-color: rgba(196, 127, 23, .35);
+  color: var(--amber-ink)
+}
+
+.ev-ttl svg {
+  flex: none;
+  margin-top: 2px
+}
+
+.ev-expired {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 22px 16px;
+  border-radius: 14px;
+  border: 1.5px dashed var(--line-strong);
+  background: var(--surface-100);
+  color: var(--ink)
+}
+
+.ev-upbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-100);
+  border: 1px solid var(--line)
+}
+
+.ev-thumb {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-200);
+  cursor: pointer;
+  text-align: right;
+  font: inherit;
+  color: var(--ink)
+}
+
+.ev-thumb img {
+  width: 46px;
+  height: 46px;
+  border-radius: 9px;
+  object-fit: cover;
+  flex: none;
+  border: 1px solid var(--line)
+}
+
+.ev-thumb span {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px
+}
+
+.ev-thumb small {
+  font-size: 11.5px;
+  color: var(--muted)
+}
 
 /* ===== Compact side-by-side proof modal (RTL: info right, photo left, zero scroll) ===== */
 .modal.ev-compact{width:min(660px,96vw);padding:16px 18px;gap:10px;overflow:visible}
@@ -4696,6 +4772,90 @@ button.card[data-sheet] {
 .st {
   box-shadow: var(--app-glow-sm) !important;
   border-color: rgba(59, 130, 246, .20) !important;
+}
+
+/* ===== Color-coded Grade Subject App Cards (Pass=Green, 50-65=Yellow+Note, Fail=Red) ===== */
+.main .card.mk-card {
+  cursor: pointer;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 15px 16px;
+  font: inherit;
+  color: var(--ink);
+  transition: transform .14s ease;
+}
+.main .card.mk-card:hover { transform: translateY(-2px); }
+.mk-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mk-top b { font-size: 15px; font-weight: 800; color: var(--ink); }
+.mk-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.mk-pct { font-size: 28px; font-weight: 800; line-height: 1.1; }
+.mk-bar { height: 6px; border-radius: 999px; background: rgba(30, 43, 92, .08); overflow: hidden; }
+.mk-bar i { display: block; height: 100%; border-radius: 999px; }
+
+/* Pass (> 65%): Green */
+.main .card.mk-card.mk-pass {
+  background: linear-gradient(155deg, #FFFFFF 0%, #E7F7F2 100%) !important;
+  border-color: rgba(11, 127, 112, .38) !important;
+  box-shadow: 0 0 0 1px rgba(11, 127, 112, .16), 0 6px 20px 0 rgba(11, 127, 112, .20), 0 0 28px 2px rgba(16, 185, 129, .16) !important;
+}
+.mk-pass .mk-pct { color: var(--teal-ink); }
+.mk-pass .mk-badge { background: var(--teal); color: #fff; }
+.mk-pass .mk-bar i { background: var(--teal); }
+
+/* Caution (50% - 65%): Yellow + gentle note */
+.main .card.mk-card.mk-warn {
+  background: linear-gradient(155deg, #FFFFFF 0%, #FEF5DE 100%) !important;
+  border-color: rgba(217, 146, 20, .48) !important;
+  box-shadow: 0 0 0 1px rgba(217, 146, 20, .18), 0 6px 20px 0 rgba(242, 169, 59, .26), 0 0 28px 2px rgba(245, 158, 11, .18) !important;
+}
+.mk-warn .mk-pct { color: var(--amber-ink); }
+.mk-warn .mk-badge { background: var(--amber); color: var(--on-amber); }
+.mk-warn .mk-bar i { background: var(--amber); }
+
+/* Fail (< 50%): Red */
+.main .card.mk-card.mk-fail {
+  background: linear-gradient(155deg, #FFFFFF 0%, #FDECEC 100%) !important;
+  border-color: rgba(200, 69, 63, .44) !important;
+  box-shadow: 0 0 0 1px rgba(200, 69, 63, .18), 0 6px 20px 0 rgba(200, 69, 63, .24), 0 0 28px 2px rgba(239, 68, 68, .18) !important;
+}
+.mk-fail .mk-pct { color: var(--red-ink); }
+.mk-fail .mk-badge { background: var(--red); color: #fff; }
+.mk-fail .mk-bar i { background: var(--red); }
+
+.main .card.mk-card.mk-sel {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.mk-note {
+  margin-top: 2px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: rgba(242, 169, 59, .20);
+  border: 1px solid rgba(196, 127, 23, .30);
+  color: var(--amber-ink);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.mk-note-inline {
+  margin-top: 4px;
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: var(--amber-soft);
+  border: 1px solid rgba(196, 127, 23, .30);
+  color: var(--amber-ink);
+  font-size: 11.5px;
+  font-weight: 700;
 }
 
 </style>
@@ -9014,15 +9174,20 @@ const parent = {
           </div>
           ${nMarks ? `<div class="pill p-late" style="align-self:flex-start;font-weight:700">يوجد ${nMarks} درجات جديدة غير مقروءة</div>` : ''}
           <div style="display:flex;flex-direction:column;gap:8px">
-            ${kidMarks.slice(0, 4).map(({ m, kid }) => `
-              <div class="row" style="background:var(--surface-200);border-radius:10px;padding:8px 12px">
-                <div style="flex:1">
+            ${kidMarks.slice(0, 4).map(({ m, kid }) => {
+              const scVal = m.scores[kid.id];
+              const pct = scVal == null ? null : (scVal / m.max) * 100;
+              const isWarn = pct != null && pct >= 50 && pct <= 65;
+              return `
+              <div class="row" style="background:var(--surface-200);border-radius:10px;padding:8px 12px;flex-wrap:wrap">
+                <div style="flex:1;min-width:160px">
                   <b>${esc(db.first(kid.name))} · ${esc(m.subject)}</b>
                   <div class="muted small">${esc(m.exam)} · ${esc(m.lesson)} · ${fmtDay(new Date(m.ts))}</div>
+                  ${isWarn ? '<div class="mk-note-inline">أرجو الاهتمام بالطالب لتحسين الدرجة إلى الأفضل</div>' : ''}
                 </div>
-                ${scoreChip(m.scores[kid.id], m.max)}
-              </div>
-            `).join('')}
+                ${scoreChip(scVal, m.max)}
+              </div>`;
+            }).join('')}
           </div>
         </div>`;
       })()}
@@ -9832,8 +9997,13 @@ const auditView = {
 };
 
 /* ============ MARKS ============ */
-// Colour of a score by percentage: 85+ excellent, 50+ pass, below 50 fail.
-const markTone = (v, max) => { const p = v / max * 100; return p >= 85 ? ['var(--teal)', 'var(--on-teal)', 'ممتاز'] : p >= 50 ? ['var(--amber)', 'var(--on-amber)', 'ناجح'] : ['var(--red)', 'var(--on-red)', 'يحتاج متابعة']; };
+// Colour of a score by percentage: >65 pass (green), 50..65 caution (yellow + parent note), <50 fail (red).
+const markTone = (v, max) => {
+  const p = v / max * 100;
+  if (p > 65) return ['var(--teal)', 'var(--on-teal)', p >= 85 ? 'ممتاز' : 'ناجح', 'pass'];
+  if (p >= 50) return ['var(--amber)', 'var(--on-amber)', 'ناجح · يحتاج تحسين', 'warn'];
+  return ['var(--red)', 'var(--on-red)', 'راسب', 'fail'];
+};
 const markState = { sec: '', subj: '', kid: '' };
 function scoreChip(v, max, big) {
   if (v == null) return '<span class="pill p-quiet">لم يُمتحن</span>';
@@ -9929,9 +10099,28 @@ const marksView = {
     const list = all.filter(m => !markState.subj || m.subject === markState.subj);
     const perSub = subjects.map(s => { const ms = all.filter(m => m.subject === s && m.scores[kid.id] != null); const p = ms.length ? Math.round(ms.reduce((a, m) => a + m.scores[kid.id] / m.max * 100, 0) / ms.length) : null; return { s, p, n: ms.length }; });
     box.innerHTML = `${kids.length > 1 ? `<div class="seg" role="group">${kids.map(k => `<button data-kid="${k.id}" aria-pressed="${k.id === kid.id}">${esc(db.first(k.name))}</button>`).join('')}</div>` : ''}
-      <div class="grid g4">${perSub.map(x => { const t = x.p == null ? null : markTone(x.p, 100); return `<button class="card" data-subj="${esc(x.s)}" style="cursor:pointer;text-align:right;display:flex;flex-direction:column;gap:6px;${markState.subj === x.s ? 'border:2px solid var(--brand)' : ''}"><b>${esc(x.s)}</b><span class="num" style="font-size:26px;font-weight:800;color:${t ? 'var(--ink)' : 'var(--muted)'}">${x.p == null ? '—' : x.p + '%'}</span><span class="small muted">${x.n} امتحان${t ? ` · ${t[2]}` : ''}</span></button>`; }).join('') || '<div class="card empty">لا درجات بعد</div>'}</div>
+      <div class="grid g4">${perSub.map(x => {
+        const t = x.p == null ? null : markTone(x.p, 100);
+        const tier = t ? t[3] : '';
+        const isSel = markState.subj === x.s;
+        return `<button class="card mk-card ${tier ? 'mk-' + tier : ''} ${isSel ? 'mk-sel' : ''}" data-subj="${esc(x.s)}">
+          <div class="mk-top">
+            <b>${esc(x.s)}</b>
+            ${t ? `<span class="mk-badge">${t[2]}</span>` : ''}
+          </div>
+          <span class="num mk-pct">${x.p == null ? '—' : x.p + '%'}</span>
+          <div class="mk-bar"><i style="width:${x.p == null ? 0 : Math.min(100, x.p)}%"></i></div>
+          <span class="small muted">${x.n} امتحان</span>
+          ${tier === 'warn' ? '<div class="mk-note">أرجو الاهتمام بالطالب لتحسين الدرجة إلى الأفضل</div>' : ''}
+        </button>`;
+      }).join('') || '<div class="card empty">لا درجات بعد</div>'}</div>
       <div class="card"><h2 style="margin-bottom:4px">${markState.subj ? esc(markState.subj) : 'كل الدرجات'} · ${esc(db.first(kid.name))}</h2>
-      ${list.length ? list.map(m => `<div class="row" style="${this.fresh?.has(m.id) ? 'background:var(--surface-300);margin:0 -10px;padding:10px' : ''}"><div style="flex:1;min-width:0"><b>${esc(m.subject)} · ${esc(m.exam)}</b>${this.fresh?.has(m.id) ? ' <span class="pill p-absent" style="font-size:10px;padding:0 6px">جديد</span>' : ''}<div class="muted small">${esc(m.lesson)} · ${esc(m.byName)} · ${fmtDay(new Date(m.ts))}</div></div>${(m.history || []).some(h => h.studentId === kid.id) ? '<span class="pill p-late" style="font-size:10px;padding:0 6px" title="هذه الدرجة تعدّلت بعد النشر">معدّلة</span>' : ''}${scoreChip(m.scores[kid.id], m.max)}</div>`).join('') : '<div class="empty">لا درجات</div>'}</div>`;
+      ${list.length ? list.map(m => {
+        const scVal = m.scores[kid.id];
+        const pct = scVal == null ? null : (scVal / m.max) * 100;
+        const isWarn = pct != null && pct >= 50 && pct <= 65;
+        return `<div class="row" style="${this.fresh?.has(m.id) ? 'background:var(--surface-300);margin:0 -10px;padding:10px' : ''}"><div style="flex:1;min-width:0"><b>${esc(m.subject)} · ${esc(m.exam)}</b>${this.fresh?.has(m.id) ? ' <span class="pill p-absent" style="font-size:10px;padding:0 6px">جديد</span>' : ''}<div class="muted small">${esc(m.lesson)} · ${esc(m.byName)} · ${fmtDay(new Date(m.ts))}</div>${isWarn ? '<div class="mk-note-inline">أرجو الاهتمام بالطالب لتحسين الدرجة إلى الأفضل</div>' : ''}</div>${(m.history || []).some(h => h.studentId === kid.id) ? '<span class="pill p-late" style="font-size:10px;padding:0 6px" title="هذه الدرجة تعدّلت بعد النشر">معدّلة</span>' : ''}${scoreChip(scVal, m.max)}</div>`;
+      }).join('') : '<div class="empty">لا درجات</div>'}</div>`;
   },
 };
 // Who is acting right now, as it gets written next to every change.

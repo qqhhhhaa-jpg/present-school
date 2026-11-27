@@ -1966,15 +1966,20 @@ const parent = {
           </div>
           ${nMarks ? `<div class="pill p-late" style="align-self:flex-start;font-weight:700">يوجد ${nMarks} درجات جديدة غير مقروءة</div>` : ''}
           <div style="display:flex;flex-direction:column;gap:8px">
-            ${kidMarks.slice(0, 4).map(({ m, kid }) => `
-              <div class="row" style="background:var(--surface-200);border-radius:10px;padding:8px 12px">
-                <div style="flex:1">
+            ${kidMarks.slice(0, 4).map(({ m, kid }) => {
+              const scVal = m.scores[kid.id];
+              const pct = scVal == null ? null : (scVal / m.max) * 100;
+              const isWarn = pct != null && pct >= 50 && pct <= 65;
+              return `
+              <div class="row" style="background:var(--surface-200);border-radius:10px;padding:8px 12px;flex-wrap:wrap">
+                <div style="flex:1;min-width:160px">
                   <b>${esc(db.first(kid.name))} · ${esc(m.subject)}</b>
                   <div class="muted small">${esc(m.exam)} · ${esc(m.lesson)} · ${fmtDay(new Date(m.ts))}</div>
+                  ${isWarn ? '<div class="mk-note-inline">أرجو الاهتمام بالطالب لتحسين الدرجة إلى الأفضل</div>' : ''}
                 </div>
-                ${scoreChip(m.scores[kid.id], m.max)}
-              </div>
-            `).join('')}
+                ${scoreChip(scVal, m.max)}
+              </div>`;
+            }).join('')}
           </div>
         </div>`;
       })()}
@@ -2784,8 +2789,13 @@ const auditView = {
 };
 
 /* ============ MARKS ============ */
-// Colour of a score by percentage: 85+ excellent, 50+ pass, below 50 fail.
-const markTone = (v, max) => { const p = v / max * 100; return p >= 85 ? ['var(--teal)', 'var(--on-teal)', 'ممتاز'] : p >= 50 ? ['var(--amber)', 'var(--on-amber)', 'ناجح'] : ['var(--red)', 'var(--on-red)', 'يحتاج متابعة']; };
+// Colour of a score by percentage: >65 pass (green), 50..65 caution (yellow + parent note), <50 fail (red).
+const markTone = (v, max) => {
+  const p = v / max * 100;
+  if (p > 65) return ['var(--teal)', 'var(--on-teal)', p >= 85 ? 'ممتاز' : 'ناجح', 'pass'];
+  if (p >= 50) return ['var(--amber)', 'var(--on-amber)', 'ناجح · يحتاج تحسين', 'warn'];
+  return ['var(--red)', 'var(--on-red)', 'راسب', 'fail'];
+};
 const markState = { sec: '', subj: '', kid: '' };
 function scoreChip(v, max, big) {
   if (v == null) return '<span class="pill p-quiet">لم يُمتحن</span>';
@@ -2881,9 +2891,28 @@ const marksView = {
     const list = all.filter(m => !markState.subj || m.subject === markState.subj);
     const perSub = subjects.map(s => { const ms = all.filter(m => m.subject === s && m.scores[kid.id] != null); const p = ms.length ? Math.round(ms.reduce((a, m) => a + m.scores[kid.id] / m.max * 100, 0) / ms.length) : null; return { s, p, n: ms.length }; });
     box.innerHTML = `${kids.length > 1 ? `<div class="seg" role="group">${kids.map(k => `<button data-kid="${k.id}" aria-pressed="${k.id === kid.id}">${esc(db.first(k.name))}</button>`).join('')}</div>` : ''}
-      <div class="grid g4">${perSub.map(x => { const t = x.p == null ? null : markTone(x.p, 100); return `<button class="card" data-subj="${esc(x.s)}" style="cursor:pointer;text-align:right;display:flex;flex-direction:column;gap:6px;${markState.subj === x.s ? 'border:2px solid var(--brand)' : ''}"><b>${esc(x.s)}</b><span class="num" style="font-size:26px;font-weight:800;color:${t ? 'var(--ink)' : 'var(--muted)'}">${x.p == null ? '—' : x.p + '%'}</span><span class="small muted">${x.n} امتحان${t ? ` · ${t[2]}` : ''}</span></button>`; }).join('') || '<div class="card empty">لا درجات بعد</div>'}</div>
+      <div class="grid g4">${perSub.map(x => {
+        const t = x.p == null ? null : markTone(x.p, 100);
+        const tier = t ? t[3] : '';
+        const isSel = markState.subj === x.s;
+        return `<button class="card mk-card ${tier ? 'mk-' + tier : ''} ${isSel ? 'mk-sel' : ''}" data-subj="${esc(x.s)}">
+          <div class="mk-top">
+            <b>${esc(x.s)}</b>
+            ${t ? `<span class="mk-badge">${t[2]}</span>` : ''}
+          </div>
+          <span class="num mk-pct">${x.p == null ? '—' : x.p + '%'}</span>
+          <div class="mk-bar"><i style="width:${x.p == null ? 0 : Math.min(100, x.p)}%"></i></div>
+          <span class="small muted">${x.n} امتحان</span>
+          ${tier === 'warn' ? '<div class="mk-note">أرجو الاهتمام بالطالب لتحسين الدرجة إلى الأفضل</div>' : ''}
+        </button>`;
+      }).join('') || '<div class="card empty">لا درجات بعد</div>'}</div>
       <div class="card"><h2 style="margin-bottom:4px">${markState.subj ? esc(markState.subj) : 'كل الدرجات'} · ${esc(db.first(kid.name))}</h2>
-      ${list.length ? list.map(m => `<div class="row" style="${this.fresh?.has(m.id) ? 'background:var(--surface-300);margin:0 -10px;padding:10px' : ''}"><div style="flex:1;min-width:0"><b>${esc(m.subject)} · ${esc(m.exam)}</b>${this.fresh?.has(m.id) ? ' <span class="pill p-absent" style="font-size:10px;padding:0 6px">جديد</span>' : ''}<div class="muted small">${esc(m.lesson)} · ${esc(m.byName)} · ${fmtDay(new Date(m.ts))}</div></div>${(m.history || []).some(h => h.studentId === kid.id) ? '<span class="pill p-late" style="font-size:10px;padding:0 6px" title="هذه الدرجة تعدّلت بعد النشر">معدّلة</span>' : ''}${scoreChip(m.scores[kid.id], m.max)}</div>`).join('') : '<div class="empty">لا درجات</div>'}</div>`;
+      ${list.length ? list.map(m => {
+        const scVal = m.scores[kid.id];
+        const pct = scVal == null ? null : (scVal / m.max) * 100;
+        const isWarn = pct != null && pct >= 50 && pct <= 65;
+        return `<div class="row" style="${this.fresh?.has(m.id) ? 'background:var(--surface-300);margin:0 -10px;padding:10px' : ''}"><div style="flex:1;min-width:0"><b>${esc(m.subject)} · ${esc(m.exam)}</b>${this.fresh?.has(m.id) ? ' <span class="pill p-absent" style="font-size:10px;padding:0 6px">جديد</span>' : ''}<div class="muted small">${esc(m.lesson)} · ${esc(m.byName)} · ${fmtDay(new Date(m.ts))}</div>${isWarn ? '<div class="mk-note-inline">أرجو الاهتمام بالطالب لتحسين الدرجة إلى الأفضل</div>' : ''}</div>${(m.history || []).some(h => h.studentId === kid.id) ? '<span class="pill p-late" style="font-size:10px;padding:0 6px" title="هذه الدرجة تعدّلت بعد النشر">معدّلة</span>' : ''}${scoreChip(scVal, m.max)}</div>`;
+      }).join('') : '<div class="empty">لا درجات</div>'}</div>`;
   },
 };
 // Who is acting right now, as it gets written next to every change.
