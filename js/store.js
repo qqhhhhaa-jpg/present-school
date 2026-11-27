@@ -404,6 +404,12 @@ export function init() {
     S.creds['07700000000'].hash = '4of9nz';
     save();
   }
+  // Ensure watermark defaults to optional (off) unless administration explicitly toggled it
+  if (S.settings?.protect && !S.settings.protect._wmOpt) {
+    S.settings.protect.watermark = false;
+    S.settings.protect._wmOpt = true;
+    save();
+  }
   if (!S.teacherEvents) S.teacherEvents = [];
   if (!S.teacherExcuses) S.teacherExcuses = [];
   if (!S.exemptions) S.exemptions = [];
@@ -498,9 +504,9 @@ export const settings = () => S.settings;
 /* ---------------- content protection ----------------
    For parents and students: no downloads, a watermark with the viewer's name and number, no copy or print,
    and the screen is covered while the app is in the background (app switchers and many recorders show it covered). */
-const PROTECT_DEFAULT = { noDownload: true, watermark: true, noCopy: true, blurOnLeave: true };
+const PROTECT_DEFAULT = { noDownload: true, watermark: false, noCopy: true, blurOnLeave: true };
 export const protection = () => ({ ...PROTECT_DEFAULT, ...(S.settings.protect || {}) });
-export function setProtection(patch, by) { S.settings.protect = { ...protection(), ...patch }; log('تعديل حماية المحتوى', `${Object.entries(patch).map(([k, v]) => `${k}: ${v ? 'تشغيل' : 'إيقاف'}`).join('، ')} · ${by}`); emit('settings'); }
+export function setProtection(patch, by) { S.settings.protect = { ...protection(), ...patch, _wmOpt: true }; log('تعديل حماية المحتوى', `${Object.entries(patch).map(([k, v]) => `${k}: ${v ? 'تشغيل' : 'إيقاف'}`).join('، ')} · ${by}`); save(); emit('settings'); }
 export const grades = () => S.grades;
 export const sections = gradeId => gradeId ? S.sections.filter(s => s.gradeId === gradeId) : S.sections;
 export const section = id => S.sections.find(s => s.id === id);
