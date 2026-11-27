@@ -1391,18 +1391,33 @@ function faceModal(s) {
 
 /* ============ CLASSES & SECTION ============ */
 const classes = {
-  render(el) { const canAdd = ['owner', 'admin'].includes(ctx().role); el.innerHTML = topbar('الصفوف والشعب', `${sub()} · اضغط على أي شعبة لفتحها`, canAdd ? `<button class="btn" id="impc">${icon('upload', 18)}استيراد طلاب</button><button class="btn pr" id="addsec">${icon('plus', 18)}إضافة شعبة</button>` : '') + `<div id="live" style="display:flex;flex-direction:column;gap:16px"></div>`; $('#addsec', el)?.addEventListener('click', () => sectionModal()); $('#impc', el)?.addEventListener('click', () => importModal()); el.addEventListener('click', e => { const b = e.target.closest('[data-addsec]'); if (b) sectionModal(b.dataset.addsec); }); this.update(el); },
+  render(el) {
+    const canAdd = ['owner', 'admin'].includes(ctx().role);
+    el.innerHTML = topbar('الصفوف والشعب', `${sub()} · اضغط على أي شعبة لفتحها`, canAdd ? `<button class="btn" id="impc">${icon('upload', 18)}استيراد طلاب</button><button class="btn pr" id="addsec">${icon('plus', 18)}إضافة شعبة</button>` : '') + `<div id="live" style="display:flex;flex-direction:column;gap:16px"></div>`;
+    el.onclick = e => {
+      if (e.target.closest('#addsec')) { sectionModal(); return; }
+      if (e.target.closest('#impc')) { importModal(); return; }
+      const bAdd = e.target.closest('[data-addsec]');
+      if (bAdd) { sectionModal(bAdd.dataset.addsec); return; }
+      const bEdit = e.target.closest('[data-editsec]');
+      if (bEdit) { editSectionModal(bEdit.dataset.editsec, () => this.update(el)); return; }
+      const bDel = e.target.closest('[data-delsec]');
+      if (bDel) { deleteSectionModal(bDel.dataset.delsec, () => this.update(el)); return; }
+    };
+    this.update(el);
+  },
   update(el) {
     const box = $('#live', el); if (!box) return;
     const stages = [...new Set(db.grades().map(g => g.stage))];
     const hol = db.offDay();
+    const canManage = ['owner', 'admin'].includes(ctx().role);
     box.innerHTML = stages.map((stage, sti) => {
       const stageGrades = db.grades().filter(g => g.stage === stage);
       return `<div class="stg-h st${sti % 3}"><span class="stg-i">${icon('grade', 16)}</span><h2>المرحلة ${esc(stage.replace('ال', ''))}</h2><span class="stg-c">${stageGrades.length} صف</span></div><div class="tiles">${stageGrades.map(g => {
-      const list = db.students().filter(s => db.section(s.sectionId).gradeId === g.id); const x = db.summary(list);
+      const list = db.students().filter(s => db.section(s.sectionId)?.gradeId === g.id); const x = db.summary(list);
       return `<div class="tile"><div style="display:flex;gap:12px;align-items:center"><span class="tip st${sti % 3}">${icon('grade', 20)}<b>${esc(g.short || g.name.slice(0, 2))}</b></span><div style="flex:1"><b style="font-size:17px">${esc(g.name)}</b><div class="muted small">${db.sections(g.id).length} شعبة · ${list.length} طالباً</div></div>${hol ? `<span class="pill p-quiet">${icon('calendar', 13)} عطلة</span>` : `<b class="num" style="font-size:20px;color:${x.rate >= 90 ? 'var(--teal-ink)' : 'var(--amber-ink)'}">${x.rate}%</b>`}</div>
         ${hol ? '' : `<div class="bar" style="flex:none"><i style="width:${x.rate}%;background:${x.rate >= 90 ? 'var(--teal)' : 'var(--amber)'}"></i></div>`}
-        <div class="secs">${db.sections(g.id).map((s, si) => { const ss = db.students(s.id); const n = ss.length; const y = db.summary(ss); const pct = n ? Math.round(y.came / n * 100) : 0; return `<a class="sec sc c${si % 6}" href="#/section/${s.id}"><span class="sl">${esc(s.name)}</span><span class="sb"><span class="sn">الكل <em>${n}</em></span><span class="sp">${hol ? 'عطلة رسمية' : `حاضر <em>${y.came}</em>`}</span><span class="sm"><i style="width:${hol ? 0 : pct}%"></i></span></span></a>`; }).join('')}${['owner', 'admin'].includes(ctx().role) ? `<button type="button" class="sec add" data-addsec="${g.id}">${icon('plus', 16)}شعبة</button>` : ''}</div></div>`;
+        <div class="secs">${db.sections(g.id).map((s, si) => { const ss = db.students(s.id); const n = ss.length; const y = db.summary(ss); const pct = n ? Math.round(y.came / n * 100) : 0; return `<div class="sec-box"><a class="sec sc c${si % 6}" href="#/section/${s.id}"><span class="sl">${esc(s.name)}</span><span class="sb"><span class="sn">الكل <em>${n}</em></span><span class="sp">${hol ? 'عطلة رسمية' : `حاضر <em>${y.came}</em>`}</span><span class="sm"><i style="width:${hol ? 0 : pct}%"></i></span></span></a>${canManage ? `<div class="sec-acts"><button type="button" class="sec-act" data-editsec="${s.id}" title="تعديل الشعبة">${icon('edit', 12)} تعديل</button><button type="button" class="sec-act del" data-delsec="${s.id}" title="حذف الشعبة">${icon('trash', 12)} حذف</button></div>` : ''}</div>`; }).join('')}${canManage ? `<button type="button" class="sec add" data-addsec="${g.id}">${icon('plus', 16)}شعبة</button>` : ''}</div></div>`;
     }).join('')}</div>`;
     }).join('');
   },
@@ -1428,12 +1443,159 @@ function sectionModal(gradeId) {
     };
   });
 }
+function editSectionModal(sectionId, onSaved) {
+  const s = db.section(sectionId);
+  if (!s) return;
+  const g = db.grade(s.gradeId);
+  const c = ctx();
+  const u = db.credOf(c.phone)?.username;
+  const actorWithUser = `${c.name}${u ? ` (${u})` : ''}`;
+  const teachers = db.teachers();
+  const hasCustomHr = s.homeroom && !teachers.some(t => t.name === s.homeroom);
+  modal(`تعديل الشعبة: ${db.sectionLabel(sectionId)}`, `
+    <form id="esf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+      <label class="field">الصف<input class="input" value="${esc(g?.name || '')}" disabled></label>
+      <div class="grid g2" style="gap:12px">
+        <label class="field" data-k="name">اسم الشعبة<input class="input" name="name" value="${esc(s.name)}" placeholder="مثال: أ أو علمي"><span class="help"></span></label>
+        <label class="field">رقم القاعة<input class="input num" name="room" type="number" min="1" inputmode="numeric" value="${esc(s.room || '')}"></label>
+      </div>
+      <label class="field">مشرف الشعبة (اختياري)
+        <select class="input" name="homeroom">
+          <option value="">بدون</option>
+          ${hasCustomHr ? `<option value="${esc(s.homeroom)}" selected>${esc(s.homeroom)}</option>` : ''}
+          ${teachers.map(t => `<option value="${esc(t.name)}" ${t.name === s.homeroom ? 'selected' : ''}>${esc(t.name)}${t.subject ? ` · ${esc(t.subject)}` : ''}</option>`).join('')}
+        </select>
+      </label>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+        <button type="button" class="btn" data-close>إلغاء</button>
+        <button type="submit" class="btn pr">${icon('save', 16)}حفظ التعديلات</button>
+      </div>
+    </form>`, (m, close) => {
+    $('#esf', m).onsubmit = e => {
+      e.preventDefault();
+      const f = e.target;
+      const r = db.updateSection(sectionId, { name: f.name.value, room: f.room.value, homeroom: f.homeroom.value }, actorWithUser);
+      $$('[data-k]', m).forEach(x => { const k = x.dataset.k; x.classList.toggle('err', !!r.errors?.[k]); if (r.errors?.[k]) $('.help', x).textContent = r.errors[k]; });
+      if (!r.ok) return;
+      close();
+      toast('تم حفظ تعديل الشعبة', db.sectionLabel(sectionId));
+      onSaved?.();
+    };
+  });
+}
+function deleteSectionModal(sectionId, onDeleted) {
+  const s = db.section(sectionId);
+  if (!s) return;
+  const label = db.sectionLabel(sectionId);
+  const stuList = db.students(sectionId);
+  const stuCount = stuList.length;
+  const otherSecs = db.sections().filter(x => x.id !== sectionId);
+  const c = ctx();
+  const u = db.credOf(c.phone)?.username;
+  const actorWithUser = `${c.name}${u ? ` (${u})` : ''}`;
+
+  modal(`حذف الشعبة: ${label}`, `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="card" style="padding:12px 14px;background:var(--surface-100);display:flex;flex-direction:column;gap:6px">
+        <div><b>${esc(label)}</b></div>
+        <div class="small muted">
+          مشرف الشعبة: <b>${esc(s.homeroom || 'غير معيّن')}</b> · القاعة: <b class="num">${esc(s.room || '—')}</b> · عدد الطلاب: <b class="num">${stuCount}</b> طالباً
+        </div>
+      </div>
+
+      ${stuCount > 0 ? `
+        <div class="card" style="padding:12px 14px;background:var(--red-soft);border-color:#F5C6CB;display:flex;flex-direction:column;gap:8px;font-size:13px">
+          <div style="font-weight:800;color:var(--red-ink);display:flex;align-items:center;gap:6px">
+            ${icon('alert', 16)} تنبيه هام: هذه الشعبة تحتوي على <span class="num">${stuCount}</span> طالباً
+          </div>
+          <div>يرجى تحديد ما تريد فعله بمعلومات الطلاب المسجّلين في هذه الشعبة قبل الحذف:</div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label class="card" style="padding:10px 12px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;border-color:var(--red)">
+            <input type="radio" name="del-mode" value="delete" checked style="margin-top:3px">
+            <div>
+              <b style="color:var(--red-ink)">حذف الشعبة وحذف جميع معلومات الطلاب (${stuCount} طالباً)</b>
+              <div class="muted small" style="margin-top:2px">سيتم حذف بيانات الطلاب، سجلات حضورهم وبصماتهم، الأعذار، الاستثناءات، والدرجات المرتبطة بهذه الشعبة نهائياً.</div>
+            </div>
+          </label>
+          ${otherSecs.length ? `
+          <label class="card" style="padding:10px 12px;display:flex;gap:10px;align-items:flex-start;cursor:pointer">
+            <input type="radio" name="del-mode" value="move" style="margin-top:3px">
+            <div style="flex:1">
+              <b>نقل الطلاب (${stuCount} طالباً) إلى شعبة أخرى ثم حذف الشعبة</b>
+              <div class="muted small" style="margin-top:2px">تُحفظ جميع معلومات الطلاب وسجلاتهم وتُنقل للشعبة البديلة.</div>
+              <select class="input" id="move-sec-sel" style="margin-top:8px" disabled>
+                ${otherSecs.map(o => `<option value="${o.id}">${esc(db.sectionLabel(o.id))} (${db.students(o.id).length} طالب)</option>`).join('')}
+              </select>
+            </div>
+          </label>` : ''}
+        </div>
+
+        <label id="del-confirm-wrap" style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:var(--amber-soft);border:1px solid var(--amber);cursor:pointer;font-size:13px">
+          <input type="checkbox" id="del-stu-confirm" style="margin-top:3px;width:17px;height:17px;flex:none">
+          <span><b>تأكيد حذف معلومات الطلاب:</b> أؤكد رغبتي في حذف الشعبة وجميع بيانات الطلاب الـ (<span class="num">${stuCount}</span>) نهائياً، مع العلم أن هذا الإجراء لا يمكن التراجع عنه.</span>
+        </label>
+      ` : `
+        <div class="muted">هذه الشعبة فارغة ولا تحتوي على أي طلاب. هل أنت متأكد من حذفها؟</div>
+      `}
+
+      <div class="muted small">سيُوثّق الحذف في سجل العمليات باسم: <b>${esc(actorWithUser)}</b></div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;flex-wrap:wrap">
+        <button type="button" class="btn" data-close>إلغاء</button>
+        <button type="button" class="btn danger-solid" id="okdelsec" ${stuCount > 0 ? 'disabled' : ''}>
+          ${icon('trash', 16)}<span id="okdelsec-lbl">${stuCount > 0 ? `تأكيد حذف الشعبة ومعلومات الطلاب (${stuCount})` : 'تأكيد حذف الشعبة'}</span>
+        </button>
+      </div>
+    </div>`, (m, close) => {
+    const btn = $('#okdelsec', m);
+    const lbl = $('#okdelsec-lbl', m);
+    const chk = $('#del-stu-confirm', m);
+    const wrap = $('#del-confirm-wrap', m);
+    const sel = $('#move-sec-sel', m);
+    const getMode = () => $('input[name="del-mode"]:checked', m)?.value || 'delete';
+    const syncState = () => {
+      if (stuCount === 0) { btn.disabled = false; return; }
+      const mode = getMode();
+      if (sel) sel.disabled = mode !== 'move';
+      if (wrap) wrap.style.display = mode === 'delete' ? 'flex' : 'none';
+      if (mode === 'move') {
+        btn.disabled = false;
+        lbl.textContent = `تأكيد نقل الطلاب (${stuCount}) وحذف الشعبة`;
+      } else {
+        btn.disabled = !chk?.checked;
+        lbl.textContent = `تأكيد حذف الشعبة ومعلومات الطلاب (${stuCount})`;
+      }
+    };
+    $$('input[name="del-mode"]', m).forEach(r => { r.onchange = syncState; });
+    if (chk) chk.onchange = syncState;
+    syncState();
+
+    btn.onclick = () => {
+      const mode = getMode();
+      if (stuCount > 0 && mode === 'delete' && !chk?.checked) return;
+      const moveTo = mode === 'move' && sel ? sel.value : '';
+      const r = db.deleteSection(sectionId, { deleteStudents: mode === 'delete', moveToSectionId: moveTo }, actorWithUser);
+      if (!r.ok) { toast(r.error || 'تعذر حذف الشعبة', '', 'absent'); return; }
+      close();
+      if (r.movedTo) {
+        toast('تم حذف الشعبة ونقل طلابها', `${r.label} → نُقل ${r.studentCount} طالباً إلى ${r.movedTo}`);
+      } else {
+        toast('تم حذف الشعبة ومعلومات طلابها', `${r.label}${r.studentCount ? ` · حُذف ${r.studentCount} طالباً` : ''}`, 'absent');
+      }
+      onDeleted?.();
+    };
+  });
+}
 const section = {
   render(el, id) {
     const s = db.section(id); const sc = scope();
     if (!s || (sc.sections && !sc.sections.includes(id))) { el.innerHTML = topbar('غير متاح', '') + '<div class="card empty">هذه الشعبة خارج صلاحيتك.</div>'; return; }
     const canAdd = ['owner', 'admin'].includes(ctx().role);
-    el.innerHTML = topbar(db.sectionLabel(id), `${sub()} · مشرف الشعبة: ${esc(s.homeroom || '—')} · القاعة <span class="num">${s.room}</span>`, canAdd ? `<button class="btn" id="imps">${icon('upload', 18)}استيراد من Excel / Word</button><button class="btn pr" id="adds">${icon('plus', 18)}إضافة يدوي</button>` : '') + `<div id="live" style="display:flex;flex-direction:column;gap:16px"></div>`;
+    el.innerHTML = topbar(db.sectionLabel(id), `${sub()} · مشرف الشعبة: ${esc(s.homeroom || '—')} · القاعة <span class="num">${s.room}</span>`, canAdd ? `<button class="btn" id="editsec-top">${icon('edit', 16)}تعديل الشعبة</button><button class="btn danger" id="delsec-top">${icon('trash', 16)}حذف الشعبة</button><button class="btn" id="imps">${icon('upload', 18)}استيراد من Excel / Word</button><button class="btn pr" id="adds">${icon('plus', 18)}إضافة يدوي</button>` : '') + `<div id="live" style="display:flex;flex-direction:column;gap:16px"></div>`;
+    $('#editsec-top', el)?.addEventListener('click', () => editSectionModal(id, () => this.render(el, id)));
+    $('#delsec-top', el)?.addEventListener('click', () => deleteSectionModal(id, () => { location.hash = '#/classes'; }));
     $('#imps', el)?.addEventListener('click', () => importModal(id));
     $('#adds', el)?.addEventListener('click', () => addStudentModal(id));
     this.update(el, id);

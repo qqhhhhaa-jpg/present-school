@@ -707,6 +707,16 @@ a.sec.sc{color:inherit;text-decoration:none}
   border-color:rgba(59,130,246,.38)!important;
 }
 
+/* ===== Section edit/delete mini action bar in Classes ===== */
+.secs:has(.sec-box){grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:8px}
+.sec-box{display:flex;flex-direction:column;gap:4px}
+.sec-acts{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.sec-act{border:1px solid var(--line);background:var(--surface-100);color:var(--ink);border-radius:8px;padding:4px 4px;font:700 11px var(--font-ar);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:3px;white-space:nowrap;transition:background .12s,border-color .12s,color .12s}
+.sec-act:hover{background:var(--surface-300);border-color:var(--line-strong)}
+.sec-act.del{color:var(--red-ink);background:var(--red-soft);border-color:rgba(200,69,63,.25)}
+.sec-act.del:hover{background:var(--red);color:#fff;border-color:var(--red)}
+.btn.danger-solid:disabled{opacity:.45;cursor:not-allowed}
+
 </style>
 </head>
 <body>
@@ -839,6 +849,7 @@ const ICON = {
   send: '<path d="m21 3-9.5 18-2.5-7.5L2 11z"/><path d="M9 13.5 21 3"/>',
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
   grade: '<path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="M6 10.5V16c0 1.5 2.7 3 6 3s6-1.5 6-3v-5.5"/><path d="M22 8v6"/>',
+  save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>',
   video: '<rect x="2" y="5" width="15" height="14" rx="3"/><path d="m17 10 5-3v10l-5-3"/>',
 };
 const icon = (name, size = 20) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name] || ''}</svg>`;
@@ -1509,6 +1520,64 @@ function addSection({ gradeId, name, homeroom, room }) {
   S.sections.push(sec); syncTeacherScopes();
   log('إضافة شعبة', `${grade(gradeId).name} / ${name}`);
   emit('sections'); return { ok: true, section: sec };
+}
+function updateSection(sectionId, { name, homeroom, room }, by) {
+  const sec = section(sectionId);
+  if (!sec) return { ok: false, errors: { name: 'الشعبة غير موجودة.' } };
+  const errors = {};
+  name = String(name || '').trim();
+  if (!name) errors.name = 'اكتب اسم الشعبة، مثلاً ب أو أدبي.';
+  else if (name.length > 12) errors.name = 'الاسم طويل، خليه قصير مثل «ج» أو «أدبي».';
+  else if (S.sections.some(s => s.id !== sectionId && s.gradeId === sec.gradeId && s.name === name)) errors.name = 'هذي الشعبة موجودة بنفس الصف.';
+  if (Object.keys(errors).length) return { ok: false, errors };
+  const oldLabel = sectionLabel(sectionId);
+  sec.name = name;
+  sec.homeroom = String(homeroom || '').trim();
+  if (room !== '' && room != null && Number(room) > 0) sec.room = Number(room);
+  log('تعديل شعبة', `${oldLabel} → ${sectionLabel(sectionId)}${sec.homeroom ? ' · مشرف الشعبة: ' + sec.homeroom : ''} · قاعة ${sec.room}`, by);
+  save();
+  emit('sections');
+  return { ok: true, section: sec };
+}
+function deleteSection(sectionId, { deleteStudents = true, moveToSectionId = '' } = {}, by) {
+  const sec = section(sectionId);
+  if (!sec) return { ok: false, error: 'الشعبة غير موجودة.' };
+  const label = sectionLabel(sectionId);
+  const secStudents = students(sectionId);
+  const ids = new Set(secStudents.map(s => s.id));
+  const targetSec = moveToSectionId && moveToSectionId !== sectionId ? section(moveToSectionId) : null;
+
+  if (targetSec) {
+    secStudents.forEach(s => { s.sectionId = targetSec.id; });
+  } else if (deleteStudents) {
+    S.students = S.students.filter(s => !ids.has(s.id));
+    S.events = S.events.filter(e => !ids.has(e.studentId));
+    IDX = null; IDXN = -1;
+    S.plan = S.plan.filter(p => !ids.has(p.studentId));
+    S.excuses = S.excuses.filter(x => !ids.has(x.studentId));
+    S.exemptions = (S.exemptions || []).filter(ex => !(ex.targetType === 'student' && ids.has(ex.targetId)));
+    S.tickets = (S.tickets || []).filter(t => !(t.studentId && ids.has(t.studentId)));
+  }
+
+  S.sections = S.sections.filter(s => s.id !== sectionId);
+  (S.teachers || []).forEach(t => { if (Array.isArray(t.sections)) t.sections = t.sections.filter(id => id !== sectionId); });
+  syncTeacherScopes();
+  if (S.marks) {
+    if (targetSec) S.marks.forEach(m => { if (m.sectionId === sectionId) m.sectionId = targetSec.id; });
+    else S.marks = S.marks.filter(m => m.sectionId !== sectionId);
+  }
+  if (S.timetables && S.timetables[sectionId]) delete S.timetables[sectionId];
+  (S.posts || []).forEach(p => { if (Array.isArray(p.sections)) p.sections = p.sections.filter(id => id !== sectionId); });
+
+  if (targetSec) {
+    log('حذف شعبة مع نقل طلابها', `${label} · نُقل ${secStudents.length} طالباً إلى ${sectionLabel(targetSec.id)}`, by);
+  } else {
+    log('حذف شعبة ومعلومات طلابها', `${label} · تم حذف ${secStudents.length} طالباً وبياناتهم`, by);
+  }
+  save();
+  emit('sections');
+  emit('student');
+  return { ok: true, label, studentCount: secStudents.length, movedTo: targetSec ? sectionLabel(targetSec.id) : '' };
 }
 const sectionLabel = id => { const s = section(id); const g = s && grade(s.gradeId); return s ? `${g.name} / ${s.name}` : ''; };
 const sectionShort = id => { const s = section(id); const g = s && grade(s.gradeId); return s ? `${g.short} / ${s.name}` : ''; };
@@ -2898,7 +2967,7 @@ function saveAccount({ phone, name, admin, teacher, subject, sections: secs, dis
   return { ok: true };
 }
 
-return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, holidayOn, getHoliday, offDay, isHoliday, holidayName, broadcastHolidayNotification, publishHolidayAnnouncement, publishHoliday, addHoliday, editHoliday, addHolidayRange, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, eventById, evidenceOf, markManual, addExcuse, teacherEvents, teacherExcuses, teacherStatusOf, teacherSummary, getExemption, isExempt, exemptions, addExemption, updateExemption, deleteExemption, toggleExemption, teacherMarkManual, teacherAddExcuse, simulateTeacherScan, teacherMonthReport, recentTeacherEvents, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, updateStudent, deleteStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, publishMarks, publishGradeMarks, quickPublishGradeExam, addStudentScore, deleteSheet, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, setStudentPromoStatus, studentPromoOverride, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
+return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, holidayOn, getHoliday, offDay, isHoliday, holidayName, broadcastHolidayNotification, publishHolidayAnnouncement, publishHoliday, addHoliday, editHoliday, addHolidayRange, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, updateSection, deleteSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, eventById, evidenceOf, markManual, addExcuse, teacherEvents, teacherExcuses, teacherStatusOf, teacherSummary, getExemption, isExempt, exemptions, addExemption, updateExemption, deleteExemption, toggleExemption, teacherMarkManual, teacherAddExcuse, simulateTeacherScan, teacherMonthReport, recentTeacherEvents, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, updateStudent, deleteStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, publishMarks, publishGradeMarks, quickPublishGradeExam, addStudentScore, deleteSheet, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, setStudentPromoStatus, studentPromoOverride, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
 })();
 
 
@@ -4294,18 +4363,33 @@ function faceModal(s) {
 
 /* ============ CLASSES & SECTION ============ */
 const classes = {
-  render(el) { const canAdd = ['owner', 'admin'].includes(ctx().role); el.innerHTML = topbar('الصفوف والشعب', `${sub()} · اضغط على أي شعبة لفتحها`, canAdd ? `<button class="btn" id="impc">${icon('upload', 18)}استيراد طلاب</button><button class="btn pr" id="addsec">${icon('plus', 18)}إضافة شعبة</button>` : '') + `<div id="live" style="display:flex;flex-direction:column;gap:16px"></div>`; $('#addsec', el)?.addEventListener('click', () => sectionModal()); $('#impc', el)?.addEventListener('click', () => importModal()); el.addEventListener('click', e => { const b = e.target.closest('[data-addsec]'); if (b) sectionModal(b.dataset.addsec); }); this.update(el); },
+  render(el) {
+    const canAdd = ['owner', 'admin'].includes(ctx().role);
+    el.innerHTML = topbar('الصفوف والشعب', `${sub()} · اضغط على أي شعبة لفتحها`, canAdd ? `<button class="btn" id="impc">${icon('upload', 18)}استيراد طلاب</button><button class="btn pr" id="addsec">${icon('plus', 18)}إضافة شعبة</button>` : '') + `<div id="live" style="display:flex;flex-direction:column;gap:16px"></div>`;
+    el.onclick = e => {
+      if (e.target.closest('#addsec')) { sectionModal(); return; }
+      if (e.target.closest('#impc')) { importModal(); return; }
+      const bAdd = e.target.closest('[data-addsec]');
+      if (bAdd) { sectionModal(bAdd.dataset.addsec); return; }
+      const bEdit = e.target.closest('[data-editsec]');
+      if (bEdit) { editSectionModal(bEdit.dataset.editsec, () => this.update(el)); return; }
+      const bDel = e.target.closest('[data-delsec]');
+      if (bDel) { deleteSectionModal(bDel.dataset.delsec, () => this.update(el)); return; }
+    };
+    this.update(el);
+  },
   update(el) {
     const box = $('#live', el); if (!box) return;
     const stages = [...new Set(db.grades().map(g => g.stage))];
     const hol = db.offDay();
+    const canManage = ['owner', 'admin'].includes(ctx().role);
     box.innerHTML = stages.map((stage, sti) => {
       const stageGrades = db.grades().filter(g => g.stage === stage);
       return `<div class="stg-h st${sti % 3}"><span class="stg-i">${icon('grade', 16)}</span><h2>المرحلة ${esc(stage.replace('ال', ''))}</h2><span class="stg-c">${stageGrades.length} صف</span></div><div class="tiles">${stageGrades.map(g => {
-      const list = db.students().filter(s => db.section(s.sectionId).gradeId === g.id); const x = db.summary(list);
+      const list = db.students().filter(s => db.section(s.sectionId)?.gradeId === g.id); const x = db.summary(list);
       return `<div class="tile"><div style="display:flex;gap:12px;align-items:center"><span class="tip st${sti % 3}">${icon('grade', 20)}<b>${esc(g.short || g.name.slice(0, 2))}</b></span><div style="flex:1"><b style="font-size:17px">${esc(g.name)}</b><div class="muted small">${db.sections(g.id).length} شعبة · ${list.length} طالباً</div></div>${hol ? `<span class="pill p-quiet">${icon('calendar', 13)} عطلة</span>` : `<b class="num" style="font-size:20px;color:${x.rate >= 90 ? 'var(--teal-ink)' : 'var(--amber-ink)'}">${x.rate}%</b>`}</div>
         ${hol ? '' : `<div class="bar" style="flex:none"><i style="width:${x.rate}%;background:${x.rate >= 90 ? 'var(--teal)' : 'var(--amber)'}"></i></div>`}
-        <div class="secs">${db.sections(g.id).map((s, si) => { const ss = db.students(s.id); const n = ss.length; const y = db.summary(ss); const pct = n ? Math.round(y.came / n * 100) : 0; return `<a class="sec sc c${si % 6}" href="#/section/${s.id}"><span class="sl">${esc(s.name)}</span><span class="sb"><span class="sn">الكل <em>${n}</em></span><span class="sp">${hol ? 'عطلة رسمية' : `حاضر <em>${y.came}</em>`}</span><span class="sm"><i style="width:${hol ? 0 : pct}%"></i></span></span></a>`; }).join('')}${['owner', 'admin'].includes(ctx().role) ? `<button type="button" class="sec add" data-addsec="${g.id}">${icon('plus', 16)}شعبة</button>` : ''}</div></div>`;
+        <div class="secs">${db.sections(g.id).map((s, si) => { const ss = db.students(s.id); const n = ss.length; const y = db.summary(ss); const pct = n ? Math.round(y.came / n * 100) : 0; return `<div class="sec-box"><a class="sec sc c${si % 6}" href="#/section/${s.id}"><span class="sl">${esc(s.name)}</span><span class="sb"><span class="sn">الكل <em>${n}</em></span><span class="sp">${hol ? 'عطلة رسمية' : `حاضر <em>${y.came}</em>`}</span><span class="sm"><i style="width:${hol ? 0 : pct}%"></i></span></span></a>${canManage ? `<div class="sec-acts"><button type="button" class="sec-act" data-editsec="${s.id}" title="تعديل الشعبة">${icon('edit', 12)} تعديل</button><button type="button" class="sec-act del" data-delsec="${s.id}" title="حذف الشعبة">${icon('trash', 12)} حذف</button></div>` : ''}</div>`; }).join('')}${canManage ? `<button type="button" class="sec add" data-addsec="${g.id}">${icon('plus', 16)}شعبة</button>` : ''}</div></div>`;
     }).join('')}</div>`;
     }).join('');
   },
@@ -4331,12 +4415,159 @@ function sectionModal(gradeId) {
     };
   });
 }
+function editSectionModal(sectionId, onSaved) {
+  const s = db.section(sectionId);
+  if (!s) return;
+  const g = db.grade(s.gradeId);
+  const c = ctx();
+  const u = db.credOf(c.phone)?.username;
+  const actorWithUser = `${c.name}${u ? ` (${u})` : ''}`;
+  const teachers = db.teachers();
+  const hasCustomHr = s.homeroom && !teachers.some(t => t.name === s.homeroom);
+  modal(`تعديل الشعبة: ${db.sectionLabel(sectionId)}`, `
+    <form id="esf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+      <label class="field">الصف<input class="input" value="${esc(g?.name || '')}" disabled></label>
+      <div class="grid g2" style="gap:12px">
+        <label class="field" data-k="name">اسم الشعبة<input class="input" name="name" value="${esc(s.name)}" placeholder="مثال: أ أو علمي"><span class="help"></span></label>
+        <label class="field">رقم القاعة<input class="input num" name="room" type="number" min="1" inputmode="numeric" value="${esc(s.room || '')}"></label>
+      </div>
+      <label class="field">مشرف الشعبة (اختياري)
+        <select class="input" name="homeroom">
+          <option value="">بدون</option>
+          ${hasCustomHr ? `<option value="${esc(s.homeroom)}" selected>${esc(s.homeroom)}</option>` : ''}
+          ${teachers.map(t => `<option value="${esc(t.name)}" ${t.name === s.homeroom ? 'selected' : ''}>${esc(t.name)}${t.subject ? ` · ${esc(t.subject)}` : ''}</option>`).join('')}
+        </select>
+      </label>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+        <button type="button" class="btn" data-close>إلغاء</button>
+        <button type="submit" class="btn pr">${icon('save', 16)}حفظ التعديلات</button>
+      </div>
+    </form>`, (m, close) => {
+    $('#esf', m).onsubmit = e => {
+      e.preventDefault();
+      const f = e.target;
+      const r = db.updateSection(sectionId, { name: f.name.value, room: f.room.value, homeroom: f.homeroom.value }, actorWithUser);
+      $$('[data-k]', m).forEach(x => { const k = x.dataset.k; x.classList.toggle('err', !!r.errors?.[k]); if (r.errors?.[k]) $('.help', x).textContent = r.errors[k]; });
+      if (!r.ok) return;
+      close();
+      toast('تم حفظ تعديل الشعبة', db.sectionLabel(sectionId));
+      onSaved?.();
+    };
+  });
+}
+function deleteSectionModal(sectionId, onDeleted) {
+  const s = db.section(sectionId);
+  if (!s) return;
+  const label = db.sectionLabel(sectionId);
+  const stuList = db.students(sectionId);
+  const stuCount = stuList.length;
+  const otherSecs = db.sections().filter(x => x.id !== sectionId);
+  const c = ctx();
+  const u = db.credOf(c.phone)?.username;
+  const actorWithUser = `${c.name}${u ? ` (${u})` : ''}`;
+
+  modal(`حذف الشعبة: ${label}`, `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="card" style="padding:12px 14px;background:var(--surface-100);display:flex;flex-direction:column;gap:6px">
+        <div><b>${esc(label)}</b></div>
+        <div class="small muted">
+          مشرف الشعبة: <b>${esc(s.homeroom || 'غير معيّن')}</b> · القاعة: <b class="num">${esc(s.room || '—')}</b> · عدد الطلاب: <b class="num">${stuCount}</b> طالباً
+        </div>
+      </div>
+
+      ${stuCount > 0 ? `
+        <div class="card" style="padding:12px 14px;background:var(--red-soft);border-color:#F5C6CB;display:flex;flex-direction:column;gap:8px;font-size:13px">
+          <div style="font-weight:800;color:var(--red-ink);display:flex;align-items:center;gap:6px">
+            ${icon('alert', 16)} تنبيه هام: هذه الشعبة تحتوي على <span class="num">${stuCount}</span> طالباً
+          </div>
+          <div>يرجى تحديد ما تريد فعله بمعلومات الطلاب المسجّلين في هذه الشعبة قبل الحذف:</div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label class="card" style="padding:10px 12px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;border-color:var(--red)">
+            <input type="radio" name="del-mode" value="delete" checked style="margin-top:3px">
+            <div>
+              <b style="color:var(--red-ink)">حذف الشعبة وحذف جميع معلومات الطلاب (${stuCount} طالباً)</b>
+              <div class="muted small" style="margin-top:2px">سيتم حذف بيانات الطلاب، سجلات حضورهم وبصماتهم، الأعذار، الاستثناءات، والدرجات المرتبطة بهذه الشعبة نهائياً.</div>
+            </div>
+          </label>
+          ${otherSecs.length ? `
+          <label class="card" style="padding:10px 12px;display:flex;gap:10px;align-items:flex-start;cursor:pointer">
+            <input type="radio" name="del-mode" value="move" style="margin-top:3px">
+            <div style="flex:1">
+              <b>نقل الطلاب (${stuCount} طالباً) إلى شعبة أخرى ثم حذف الشعبة</b>
+              <div class="muted small" style="margin-top:2px">تُحفظ جميع معلومات الطلاب وسجلاتهم وتُنقل للشعبة البديلة.</div>
+              <select class="input" id="move-sec-sel" style="margin-top:8px" disabled>
+                ${otherSecs.map(o => `<option value="${o.id}">${esc(db.sectionLabel(o.id))} (${db.students(o.id).length} طالب)</option>`).join('')}
+              </select>
+            </div>
+          </label>` : ''}
+        </div>
+
+        <label id="del-confirm-wrap" style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:var(--amber-soft);border:1px solid var(--amber);cursor:pointer;font-size:13px">
+          <input type="checkbox" id="del-stu-confirm" style="margin-top:3px;width:17px;height:17px;flex:none">
+          <span><b>تأكيد حذف معلومات الطلاب:</b> أؤكد رغبتي في حذف الشعبة وجميع بيانات الطلاب الـ (<span class="num">${stuCount}</span>) نهائياً، مع العلم أن هذا الإجراء لا يمكن التراجع عنه.</span>
+        </label>
+      ` : `
+        <div class="muted">هذه الشعبة فارغة ولا تحتوي على أي طلاب. هل أنت متأكد من حذفها؟</div>
+      `}
+
+      <div class="muted small">سيُوثّق الحذف في سجل العمليات باسم: <b>${esc(actorWithUser)}</b></div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;flex-wrap:wrap">
+        <button type="button" class="btn" data-close>إلغاء</button>
+        <button type="button" class="btn danger-solid" id="okdelsec" ${stuCount > 0 ? 'disabled' : ''}>
+          ${icon('trash', 16)}<span id="okdelsec-lbl">${stuCount > 0 ? `تأكيد حذف الشعبة ومعلومات الطلاب (${stuCount})` : 'تأكيد حذف الشعبة'}</span>
+        </button>
+      </div>
+    </div>`, (m, close) => {
+    const btn = $('#okdelsec', m);
+    const lbl = $('#okdelsec-lbl', m);
+    const chk = $('#del-stu-confirm', m);
+    const wrap = $('#del-confirm-wrap', m);
+    const sel = $('#move-sec-sel', m);
+    const getMode = () => $('input[name="del-mode"]:checked', m)?.value || 'delete';
+    const syncState = () => {
+      if (stuCount === 0) { btn.disabled = false; return; }
+      const mode = getMode();
+      if (sel) sel.disabled = mode !== 'move';
+      if (wrap) wrap.style.display = mode === 'delete' ? 'flex' : 'none';
+      if (mode === 'move') {
+        btn.disabled = false;
+        lbl.textContent = `تأكيد نقل الطلاب (${stuCount}) وحذف الشعبة`;
+      } else {
+        btn.disabled = !chk?.checked;
+        lbl.textContent = `تأكيد حذف الشعبة ومعلومات الطلاب (${stuCount})`;
+      }
+    };
+    $$('input[name="del-mode"]', m).forEach(r => { r.onchange = syncState; });
+    if (chk) chk.onchange = syncState;
+    syncState();
+
+    btn.onclick = () => {
+      const mode = getMode();
+      if (stuCount > 0 && mode === 'delete' && !chk?.checked) return;
+      const moveTo = mode === 'move' && sel ? sel.value : '';
+      const r = db.deleteSection(sectionId, { deleteStudents: mode === 'delete', moveToSectionId: moveTo }, actorWithUser);
+      if (!r.ok) { toast(r.error || 'تعذر حذف الشعبة', '', 'absent'); return; }
+      close();
+      if (r.movedTo) {
+        toast('تم حذف الشعبة ونقل طلابها', `${r.label} → نُقل ${r.studentCount} طالباً إلى ${r.movedTo}`);
+      } else {
+        toast('تم حذف الشعبة ومعلومات طلابها', `${r.label}${r.studentCount ? ` · حُذف ${r.studentCount} طالباً` : ''}`, 'absent');
+      }
+      onDeleted?.();
+    };
+  });
+}
 const section = {
   render(el, id) {
     const s = db.section(id); const sc = scope();
     if (!s || (sc.sections && !sc.sections.includes(id))) { el.innerHTML = topbar('غير متاح', '') + '<div class="card empty">هذه الشعبة خارج صلاحيتك.</div>'; return; }
     const canAdd = ['owner', 'admin'].includes(ctx().role);
-    el.innerHTML = topbar(db.sectionLabel(id), `${sub()} · مشرف الشعبة: ${esc(s.homeroom || '—')} · القاعة <span class="num">${s.room}</span>`, canAdd ? `<button class="btn" id="imps">${icon('upload', 18)}استيراد من Excel / Word</button><button class="btn pr" id="adds">${icon('plus', 18)}إضافة يدوي</button>` : '') + `<div id="live" style="display:flex;flex-direction:column;gap:16px"></div>`;
+    el.innerHTML = topbar(db.sectionLabel(id), `${sub()} · مشرف الشعبة: ${esc(s.homeroom || '—')} · القاعة <span class="num">${s.room}</span>`, canAdd ? `<button class="btn" id="editsec-top">${icon('edit', 16)}تعديل الشعبة</button><button class="btn danger" id="delsec-top">${icon('trash', 16)}حذف الشعبة</button><button class="btn" id="imps">${icon('upload', 18)}استيراد من Excel / Word</button><button class="btn pr" id="adds">${icon('plus', 18)}إضافة يدوي</button>` : '') + `<div id="live" style="display:flex;flex-direction:column;gap:16px"></div>`;
+    $('#editsec-top', el)?.addEventListener('click', () => editSectionModal(id, () => this.render(el, id)));
+    $('#delsec-top', el)?.addEventListener('click', () => deleteSectionModal(id, () => { location.hash = '#/classes'; }));
     $('#imps', el)?.addEventListener('click', () => importModal(id));
     $('#adds', el)?.addEventListener('click', () => addStudentModal(id));
     this.update(el, id);

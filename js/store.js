@@ -519,6 +519,64 @@ export function addSection({ gradeId, name, homeroom, room }) {
   log('إضافة شعبة', `${grade(gradeId).name} / ${name}`);
   emit('sections'); return { ok: true, section: sec };
 }
+export function updateSection(sectionId, { name, homeroom, room }, by) {
+  const sec = section(sectionId);
+  if (!sec) return { ok: false, errors: { name: 'الشعبة غير موجودة.' } };
+  const errors = {};
+  name = String(name || '').trim();
+  if (!name) errors.name = 'اكتب اسم الشعبة، مثلاً ب أو أدبي.';
+  else if (name.length > 12) errors.name = 'الاسم طويل، خليه قصير مثل «ج» أو «أدبي».';
+  else if (S.sections.some(s => s.id !== sectionId && s.gradeId === sec.gradeId && s.name === name)) errors.name = 'هذي الشعبة موجودة بنفس الصف.';
+  if (Object.keys(errors).length) return { ok: false, errors };
+  const oldLabel = sectionLabel(sectionId);
+  sec.name = name;
+  sec.homeroom = String(homeroom || '').trim();
+  if (room !== '' && room != null && Number(room) > 0) sec.room = Number(room);
+  log('تعديل شعبة', `${oldLabel} → ${sectionLabel(sectionId)}${sec.homeroom ? ' · مشرف الشعبة: ' + sec.homeroom : ''} · قاعة ${sec.room}`, by);
+  save();
+  emit('sections');
+  return { ok: true, section: sec };
+}
+export function deleteSection(sectionId, { deleteStudents = true, moveToSectionId = '' } = {}, by) {
+  const sec = section(sectionId);
+  if (!sec) return { ok: false, error: 'الشعبة غير موجودة.' };
+  const label = sectionLabel(sectionId);
+  const secStudents = students(sectionId);
+  const ids = new Set(secStudents.map(s => s.id));
+  const targetSec = moveToSectionId && moveToSectionId !== sectionId ? section(moveToSectionId) : null;
+
+  if (targetSec) {
+    secStudents.forEach(s => { s.sectionId = targetSec.id; });
+  } else if (deleteStudents) {
+    S.students = S.students.filter(s => !ids.has(s.id));
+    S.events = S.events.filter(e => !ids.has(e.studentId));
+    IDX = null; IDXN = -1;
+    S.plan = S.plan.filter(p => !ids.has(p.studentId));
+    S.excuses = S.excuses.filter(x => !ids.has(x.studentId));
+    S.exemptions = (S.exemptions || []).filter(ex => !(ex.targetType === 'student' && ids.has(ex.targetId)));
+    S.tickets = (S.tickets || []).filter(t => !(t.studentId && ids.has(t.studentId)));
+  }
+
+  S.sections = S.sections.filter(s => s.id !== sectionId);
+  (S.teachers || []).forEach(t => { if (Array.isArray(t.sections)) t.sections = t.sections.filter(id => id !== sectionId); });
+  syncTeacherScopes();
+  if (S.marks) {
+    if (targetSec) S.marks.forEach(m => { if (m.sectionId === sectionId) m.sectionId = targetSec.id; });
+    else S.marks = S.marks.filter(m => m.sectionId !== sectionId);
+  }
+  if (S.timetables && S.timetables[sectionId]) delete S.timetables[sectionId];
+  (S.posts || []).forEach(p => { if (Array.isArray(p.sections)) p.sections = p.sections.filter(id => id !== sectionId); });
+
+  if (targetSec) {
+    log('حذف شعبة مع نقل طلابها', `${label} · نُقل ${secStudents.length} طالباً إلى ${sectionLabel(targetSec.id)}`, by);
+  } else {
+    log('حذف شعبة ومعلومات طلابها', `${label} · تم حذف ${secStudents.length} طالباً وبياناتهم`, by);
+  }
+  save();
+  emit('sections');
+  emit('student');
+  return { ok: true, label, studentCount: secStudents.length, movedTo: targetSec ? sectionLabel(targetSec.id) : '' };
+}
 export const sectionLabel = id => { const s = section(id); const g = s && grade(s.gradeId); return s ? `${g.name} / ${s.name}` : ''; };
 export const sectionShort = id => { const s = section(id); const g = s && grade(s.gradeId); return s ? `${g.short} / ${s.name}` : ''; };
 export const first = name => name.split(' ')[0];
