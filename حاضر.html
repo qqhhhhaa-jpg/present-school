@@ -4682,6 +4682,22 @@ button.card[data-sheet] {
   .modal.ev-compact .evfacts b{font-size:11.5px}
 }
 
+/* ===== Fixed misty blue glow across ALL accounts (Owner, Admin, Teacher, Parent, Student & Login) ===== */
+.main .card,
+.login .card {
+  box-shadow: var(--app-glow) !important;
+  border-color: rgba(59, 130, 246, .22) !important;
+}
+.main .card .card,
+.modal .card {
+  box-shadow: none !important;
+  border-color: var(--line) !important;
+}
+.st {
+  box-shadow: var(--app-glow-sm) !important;
+  border-color: rgba(59, 130, 246, .20) !important;
+}
+
 </style>
 </head>
 <body>
