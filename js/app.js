@@ -21,6 +21,7 @@ export function toast(title, body = '', kind = 'in') {
 }
 
 export function modal(title, html, onMount) {
+  document.querySelectorAll('.scrim').forEach(s => s.remove());
   const scrim = document.createElement('div'); scrim.className = 'scrim';
   scrim.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header><h2>${esc(title)}</h2><button class="iconbtn" data-close aria-label="إغلاق">${icon('x')}</button></header>${html}</div>`;
   const close = () => { scrim.remove(); document.removeEventListener('keydown', onKey); };
@@ -771,7 +772,12 @@ function route() {
     updateNav(c, name);
   }
 
-  const main = $('#main');
+  let main = $('#main');
+  if (main && !shellNeeded) {
+    const cleanMain = main.cloneNode(false);
+    main.parentNode.replaceChild(cleanMain, main);
+    main = cleanMain;
+  }
   current = { name, arg, view: views[name], el: main };
   views[name].render(main, arg);
   bindChrome();

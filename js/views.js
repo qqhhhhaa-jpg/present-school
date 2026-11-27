@@ -368,7 +368,7 @@ const attendance = {
     $('#day', el).onchange = e => { att.day = +e.target.value; this.update(el); };
     $('#sec', el).onchange = e => { att.sec = e.target.value; this.update(el); };
     $('#aq', el).oninput = e => { att.q = e.target.value; this.update(el); };
-    el.addEventListener('click', e => {
+    el.onclick = e => {
       if (e.target.closest('#att-hol-btn')) {
         officialHolidayModal(att.day, null, () => this.update(el));
         return;
@@ -400,7 +400,7 @@ const attendance = {
       const f = e.target.closest('[data-f]'); if (f) { att.f = f.dataset.f; this.update(el); }
       const m = e.target.closest('[data-mark]'); if (m) { db.markManual(m.dataset.mark, ctx().name); toast('سُجّل الحضور يدوياً', db.student(m.dataset.mark).name); }
       const x = e.target.closest('[data-excuse]'); if (x) excuseModal(db.student(x.dataset.excuse));
-    });
+    };
     this.update(el);
   },
   update(el) {
@@ -559,6 +559,7 @@ function officialHolidayModal(defaultDay, editDay = null, onDone = null) {
     onDone = editDay;
     editDay = null;
   }
+  document.querySelectorAll('.scrim').forEach(s => s.remove());
   const curDay = typeof defaultDay === 'string' ? defaultDay : (defaultDay ? dayKey(new Date(defaultDay)) : dayKey(new Date(db.now())));
   const targetHol = editDay ? db.getHoliday(editDay) : null;
   const allHols = db.holidays();
@@ -3277,7 +3278,7 @@ const staffAtt = {
     $('#t-day', el).onchange = e => { staffAttState.day = +e.target.value; this.update(el); };
     $('#t-q', el).oninput = e => { staffAttState.q = e.target.value; this.update(el); };
 
-    el.addEventListener('click', e => {
+    el.onclick = e => {
       const f = e.target.closest('[data-tf]');
       if (f) { staffAttState.f = f.dataset.tf; this.update(el); return; }
 
@@ -3355,7 +3356,7 @@ const staffAtt = {
         teacherHistoryModal(histBtn.dataset.tHist);
         return;
       }
-    });
+    };
 
     this.update(el);
   },
