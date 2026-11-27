@@ -341,6 +341,14 @@ const dashboard = {
 
 /* ============ ATTENDANCE ============ */
 const att = { day: null, sec: '', f: 'all', q: '', appQ: '' };
+const shortSecIcon = (s, g) => {
+  const n = String(s?.name || '').trim();
+  const gs = g?.short || db.grade(s?.gradeId)?.short || '';
+  if (!n) return gs || '—';
+  if (n.length <= 2) return n;
+  if (/^ادب|^أدب/.test(n)) return (gs ? gs.replace(/[عمب]$/, '') : '') + 'أ';
+  return gs || n.slice(0, 2);
+};
 const GRADE_APP_COLORS = [
   'linear-gradient(135deg, #2563EB, #1D4ED8)',
   'linear-gradient(135deg, #059669, #047857)',
@@ -508,7 +516,7 @@ const attendance = {
               ${isHoliday ? `<span class="pill p-quiet">${icon('calendar', 13)} عطلة</span>` : `<b class="num" style="font-size:20px;color:var(--${gc}-ink)">${gx.rate}%</b>`}
             </div>
             ${isHoliday ? '' : `<div class="bar" style="flex:none"><i style="width:${gx.rate}%;background:var(--${gc})"></i></div>`}
-            <div class="secs">${secs.map((s, si) => { const ss = db.students(s.id); const n = ss.length; const y = db.summary(ss, att.day); const pct = n ? Math.round(y.came / n * 100) : 0; return `<button type="button" class="sec sc c${si % 6}" data-open-sec="${s.id}" title="فتح حضور ${esc(g.name)} شعبة ${esc(s.name)}"><span class="sl">${esc(s.name)}</span><span class="sb"><span class="sn">الكل <em>${n}</em></span><span class="sp">${isHoliday ? 'عطلة رسمية' : `حاضر <em>${y.came}</em>`}</span><span class="sm"><i style="width:${isHoliday ? 0 : pct}%"></i></span></span></button>`; }).join('')}</div>
+            <div class="secs">${secs.map((s, si) => { const ss = db.students(s.id); const n = ss.length; const y = db.summary(ss, att.day); const pct = n ? Math.round(y.came / n * 100) : 0; return `<button type="button" class="sec sc c${si % 6}" data-open-sec="${s.id}" title="فتح حضور ${esc(g.name)} شعبة ${esc(s.name)}"><span class="sl">${esc(shortSecIcon(s, g))}</span><span class="sb"><span class="sn">الكل <em>${n}</em></span><span class="sp">${isHoliday ? 'عطلة رسمية' : `حاضر <em>${y.came}</em>`}</span><span class="sm"><i style="width:${isHoliday ? 0 : pct}%"></i></span></span></button>`; }).join('')}</div>
           </div>`;
         }).join('')}</div>`).join('') : `<div class="empty">لا توجد شعب مطابقة لبحثك</div>`}
       `;
@@ -579,7 +587,7 @@ const attendance = {
     <div class="card ap-head">
       <div class="ap-hl">
         <button type="button" class="btn ap-back" id="btn-back-to-apps">${icon('arrow', 16)} كل الشعب</button>
-        <span class="ap-ico lg"><b>${esc(currentSec?.name || '')}</b><small>${esc(db.grade(currentSec?.gradeId)?.short || 'شعبة')}</small></span>
+        <span class="ap-ico lg">${icon('grade', 20)}<b>${esc(db.grade(currentSec?.gradeId)?.short || shortSecIcon(currentSec))}</b></span>
         <div style="min-width:0">
           <h2>${esc(db.sectionLabel(currentSec?.id))}</h2>
           <div class="ap-meta">
@@ -1417,7 +1425,7 @@ const classes = {
       const list = db.students().filter(s => db.section(s.sectionId)?.gradeId === g.id); const x = db.summary(list);
       return `<div class="tile"><div style="display:flex;gap:12px;align-items:center"><span class="tip st${sti % 3}">${icon('grade', 20)}<b>${esc(g.short || g.name.slice(0, 2))}</b></span><div style="flex:1"><b style="font-size:17px">${esc(g.name)}</b><div class="muted small">${db.sections(g.id).length} شعبة · ${list.length} طالباً</div></div>${hol ? `<span class="pill p-quiet">${icon('calendar', 13)} عطلة</span>` : `<b class="num" style="font-size:20px;color:${x.rate >= 90 ? 'var(--teal-ink)' : 'var(--amber-ink)'}">${x.rate}%</b>`}</div>
         ${hol ? '' : `<div class="bar" style="flex:none"><i style="width:${x.rate}%;background:${x.rate >= 90 ? 'var(--teal)' : 'var(--amber)'}"></i></div>`}
-        <div class="secs">${db.sections(g.id).map((s, si) => { const ss = db.students(s.id); const n = ss.length; const y = db.summary(ss); const pct = n ? Math.round(y.came / n * 100) : 0; return `<div class="sec-box"><a class="sec sc c${si % 6}" href="#/section/${s.id}"><span class="sl">${esc(s.name)}</span><span class="sb"><span class="sn">الكل <em>${n}</em></span><span class="sp">${hol ? 'عطلة رسمية' : `حاضر <em>${y.came}</em>`}</span><span class="sm"><i style="width:${hol ? 0 : pct}%"></i></span></span></a>${canManage ? `<div class="sec-acts"><button type="button" class="sec-act" data-editsec="${s.id}" title="تعديل الشعبة">${icon('edit', 12)} تعديل</button><button type="button" class="sec-act del" data-delsec="${s.id}" title="حذف الشعبة">${icon('trash', 12)} حذف</button></div>` : ''}</div>`; }).join('')}${canManage ? `<button type="button" class="sec add" data-addsec="${g.id}">${icon('plus', 16)}شعبة</button>` : ''}</div></div>`;
+        <div class="secs">${db.sections(g.id).map((s, si) => { const ss = db.students(s.id); const n = ss.length; const y = db.summary(ss); const pct = n ? Math.round(y.came / n * 100) : 0; return `<div class="sec-box"><a class="sec sc c${si % 6}" href="#/section/${s.id}" title="${esc(g.name)} · شعبة ${esc(s.name)}"><span class="sl">${esc(shortSecIcon(s, g))}</span><span class="sb"><span class="sn">الكل <em>${n}</em></span><span class="sp">${hol ? 'عطلة رسمية' : `حاضر <em>${y.came}</em>`}</span><span class="sm"><i style="width:${hol ? 0 : pct}%"></i></span></span></a>${canManage ? `<div class="sec-acts"><button type="button" class="sec-act" data-editsec="${s.id}" title="تعديل الشعبة">${icon('edit', 12)} تعديل</button><button type="button" class="sec-act del" data-delsec="${s.id}" title="حذف الشعبة">${icon('trash', 12)} حذف</button></div>` : ''}</div>`; }).join('')}${canManage ? `<button type="button" class="sec add" data-addsec="${g.id}">${icon('plus', 16)}شعبة</button>` : ''}</div></div>`;
     }).join('')}</div>`;
     }).join('');
   },
@@ -2137,7 +2145,7 @@ const reports = {
               const secColors = ['#1E2B5C', '#0B7F70', '#C08A2E', '#2F5592', '#6A5A9E', '#A44A55'];
               return `<button type="button" class="ap-tile" data-open-sec="${s.id}" style="--st:${stColor(rate)}" aria-label="فتح تقرير ${esc(g.name)} شعبة ${esc(s.name)}">
                 <div class="ap-top">
-                  <span class="ap-ico" style="--ic:${secColors[si % 6]}"><b>${esc(s.name)}</b><small>${esc(g.short || 'شعبة')}</small></span>
+                  <span class="ap-ico" style="--ic:${secColors[si % 6]}">${icon('grade', 18)}<b>${esc(g.short || shortSecIcon(s, g))}</b></span>
                   <span class="ap-ttl"><div>${esc(g.name)} · شعبة ${esc(s.name)}</div><p>${s.homeroom ? `مشرف الشعبة: ${esc(s.homeroom)}` : 'لا يوجد مشرف معيّن'}${s.room ? ` · قاعة ${esc(s.room)}` : ''}</p></span>
                   <span class="ap-rate">${rate}<small>%</small></span>
                 </div>
@@ -2161,7 +2169,7 @@ const reports = {
     <div class="card ap-head">
       <div class="ap-hl">
         <button type="button" class="btn ap-back" id="rep-back">${icon('arrow', 16)} كل الشعب</button>
-        <span class="ap-ico lg"><b>${esc(cur?.name || '')}</b><small>${esc(db.grade(cur?.gradeId)?.short || 'شعبة')}</small></span>
+        <span class="ap-ico lg">${icon('grade', 20)}<b>${esc(db.grade(cur?.gradeId)?.short || shortSecIcon(cur))}</b></span>
         <div style="min-width:0">
           <h2>${esc(db.sectionLabel(rep.sec))}</h2>
           <div class="ap-meta">
