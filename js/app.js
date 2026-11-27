@@ -750,7 +750,7 @@ function route() {
   const [rawName = '', rawArg] = location.hash.replace(/^#\/?/, '').split('/');
   const name = rawName.split('?')[0]; let arg = rawArg && rawArg.split('?')[0];
   try { if (arg) arg = decodeURIComponent(arg); } catch { } // Arabic section ids arrive URL-encoded
-  if (!c) { activeRoleKey = null; current = null; app.innerHTML = ''; views.login.render(app); return; }
+  if (!c) { document.body.classList.remove('msheet-open'); activeRoleKey = null; current = null; app.innerHTML = ''; views.login.render(app); window.scrollTo(0, 0); return; }
   { const u = db.credOf(c.phone); db.setActor(`${c.name}${u && !u.pending ? ' · ' + u.username : ''} (${c.roleInfo.label.split(' · ')[0]})`); }
   const allowed = [...navFor(c).map(n => n[0]), 'notes', ...(['owner', 'admin', 'teacher'].includes(c.role) ? ['student', 'section'] : [])];
   const target = allowed.includes(name) && views[name] ? name : HOME[c.role];
@@ -811,7 +811,7 @@ function onChromeClick(e) {
   if (e.target.closest('[data-bell-close]')) { closeBell(); return; }
   if (e.target.closest('#npop a')) { closeBell(); return; }
   const b = e.target.closest('[data-logout],[data-role],[data-clock]'); if (!b) return;
-  if (b.dataset.logout !== undefined) { activeRoleKey = null; db.logout(); location.hash = ''; route(); }
+  if (b.dataset.logout !== undefined) { document.body.classList.remove('msheet-open'); activeRoleKey = null; db.logout(); location.hash = ''; route(); }
   else if (b.dataset.role) { activeRoleKey = null; db.setActiveRole(b.dataset.role); location.hash = ''; route(); }
   else if (b.dataset.clock) { db.setPaused(b.dataset.clock === 'pause'); }
 }

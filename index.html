@@ -5363,38 +5363,49 @@ button.tt-dh:focus-visible {
   }
 }
 
-/* ===== Show login brand hero banner cleanly on mobile screens ===== */
+/* ===== Show login brand hero banner BELOW login fields cleanly & scrollable on mobile ===== */
 @media (max-width: 900px) {
+  html,
+  body {
+    height: auto !important;
+    min-height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
   .login {
     display: flex;
     flex-direction: column;
+    height: auto;
     min-height: 100dvh;
+    overflow: visible;
+  }
+  .login .form {
+    order: 0;
+    padding: 24px 16px 20px;
+    flex: 0 0 auto;
+    align-items: flex-start;
   }
   .login aside {
     display: flex !important;
-    order: -1;
-    padding: 22px 20px 20px;
+    order: 1;
+    margin: 4px 16px 28px;
+    padding: 22px 20px;
     gap: 14px;
-    border-radius: 0 0 24px 24px;
+    border-radius: 20px;
     box-shadow: 0 10px 28px rgba(30, 43, 92, .22);
   }
   .login aside svg {
-    height: 54px;
+    height: 52px;
     width: auto;
   }
   .login aside > div:nth-child(2) {
-    gap: 9px !important;
+    gap: 10px !important;
     font-size: 13.5px !important;
   }
   .login aside > div:last-child {
     font-size: 12px !important;
-    padding-top: 6px;
+    padding-top: 8px;
     border-top: 1px solid rgba(255, 255, 255, .14);
-  }
-  .login .form {
-    padding: 22px 16px 32px;
-    flex: 1;
-    align-items: flex-start;
   }
 }
 
@@ -13741,7 +13752,7 @@ function route() {
   const [rawName = '', rawArg] = location.hash.replace(/^#\/?/, '').split('/');
   const name = rawName.split('?')[0]; let arg = rawArg && rawArg.split('?')[0];
   try { if (arg) arg = decodeURIComponent(arg); } catch { } // Arabic section ids arrive URL-encoded
-  if (!c) { activeRoleKey = null; current = null; app.innerHTML = ''; views.login.render(app); return; }
+  if (!c) { document.body.classList.remove('msheet-open'); activeRoleKey = null; current = null; app.innerHTML = ''; views.login.render(app); window.scrollTo(0, 0); return; }
   { const u = db.credOf(c.phone); db.setActor(`${c.name}${u && !u.pending ? ' · ' + u.username : ''} (${c.roleInfo.label.split(' · ')[0]})`); }
   const allowed = [...navFor(c).map(n => n[0]), 'notes', ...(['owner', 'admin', 'teacher'].includes(c.role) ? ['student', 'section'] : [])];
   const target = allowed.includes(name) && views[name] ? name : HOME[c.role];
@@ -13802,7 +13813,7 @@ function onChromeClick(e) {
   if (e.target.closest('[data-bell-close]')) { closeBell(); return; }
   if (e.target.closest('#npop a')) { closeBell(); return; }
   const b = e.target.closest('[data-logout],[data-role],[data-clock]'); if (!b) return;
-  if (b.dataset.logout !== undefined) { activeRoleKey = null; db.logout(); location.hash = ''; route(); }
+  if (b.dataset.logout !== undefined) { document.body.classList.remove('msheet-open'); activeRoleKey = null; db.logout(); location.hash = ''; route(); }
   else if (b.dataset.role) { activeRoleKey = null; db.setActiveRole(b.dataset.role); location.hash = ''; route(); }
   else if (b.dataset.clock) { db.setPaused(b.dataset.clock === 'pause'); }
 }
