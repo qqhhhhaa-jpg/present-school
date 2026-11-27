@@ -3498,18 +3498,64 @@ async function template() {
 const tts = { sec: '', mode: 'draft', kid: null };
 const cellHtml = (c, t, extra = '') => c ? `<b>${esc(c.subject)}</b>${t && c.teacher ? `<span>${esc(c.teacher)}</span>` : ''}${extra}` : `<em>—</em>${extra}`;
 function ttGrid(grid, { editable = false, diff = null, today = -1, cur = -1, showTeacher = true, side = '', editPeriods = false } = {}) {
-  const ps = db.periods(); const chg = new Map((diff || []).map(x => [x.d + ':' + x.p, x]));
+  const ps = db.periods(); const days = db.weekDays(); const chg = new Map((diff || []).map(x => [x.d + ':' + x.p, x]));
   return `<div class="ttwrap"><table class="tt"><thead><tr><th></th>${ps.map((p, i) => {
     const isCurP = i === cur;
     const inner = `<span class="tt-pn">${esc(p.name)}</span><span class="tt-pt num">${p.label}</span>${editPeriods ? `<i class="tt-pe" aria-hidden="true">${icon('edit', 11)}</i>` : ''}`;
-    return `<th class="${isCurP ? 'cur-p' : ''}">${editPeriods ? `<button type="button" class="tt-ph" data-period="${i}" title="اضغط لتعديل اسم ووقت الحصة">${inner}</button>` : `<div class="tt-ph">${inner}</div>`}</th>`;
+    return `<th class="${isCurP ? 'cur-p' : ''}">${editPeriods ? `<button type="button" class="tt-ph p${i % 6}" data-period="${i}" title="اضغط لتعديل اسم ووقت الحصة">${inner}</button>` : `<div class="tt-ph p${i % 6}">${inner}</div>`}</th>`;
   }).join('')}</tr></thead><tbody>
-    ${db.WEEK.map((w, d) => `<tr class="${d === today ? 'today' : ''}"><th>${w}${d === today ? '<small>اليوم</small>' : ''}</th>${grid[d].map((c, p) => {
+    ${days.map((w, d) => {
+    const dayInner = `<span class="tt-dn">${esc(w)}</span>${d === today ? '<span class="tt-dt">اليوم</span>' : ''}${editPeriods ? `<i class="tt-pe" aria-hidden="true">${icon('edit', 11)}</i>` : ''}`;
+    const dayHead = editPeriods
+      ? `<button type="button" class="tt-dh d${d % 5}" data-day="${d}" title="اضغط لتعديل اسم اليوم">${dayInner}</button>`
+      : `<div class="tt-dh d${d % 5}">${dayInner}</div>`;
+    return `<tr class="${d === today ? 'today' : ''}"><th>${dayHead}</th>${grid[d].map((c, p) => {
     const x = chg.get(d + ':' + p); const isCur = d === today && p === cur;
     const was = x && side === 'draft' ? `<i class="was">كانت: ${x.from ? esc(x.from.subject) : 'فارغة'}</i>` : '';
-    return `<td class="${x ? (side === 'pub' ? 'old' : 'chg') : ''} ${isCur ? 'cur' : ''} ${c ? '' : 'empty'}">${editable ? `<button type="button" class="ttc" data-cell="${d}:${p}" aria-label="${w} ${db.periodName(p)}">${cellHtml(c, showTeacher, was)}</button>` : `<div class="ttc">${cellHtml(c, showTeacher, was)}${isCur ? '<i class="now">هسه</i>' : ''}</div>`}</td>`;
-  }).join('')}</tr>`).join('')}
+    return `<td class="${x ? (side === 'pub' ? 'old' : 'chg') : ''} ${isCur ? 'cur' : ''} ${c ? '' : 'empty'}">${editable ? `<button type="button" class="ttc" data-cell="${d}:${p}" aria-label="${esc(w)} ${db.periodName(p)}">${cellHtml(c, showTeacher, was)}</button>` : `<div class="ttc">${cellHtml(c, showTeacher, was)}${isCur ? '<i class="now">هسه</i>' : ''}</div>`}</td>`;
+  }).join('')}</tr>`;
+  }).join('')}
   </tbody></table></div>`;
+}
+function ttDayModal(d, onDone) {
+  const days = db.weekDays();
+  const curName = days[d];
+  if (curName == null) return;
+  modal(`تعديل اليوم: ${curName}`, `
+    <form id="tdf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+      <label class="field">اسم اليوم
+        <input class="input" name="name" value="${esc(curName)}" placeholder="مثلاً: الأحد أو السبت" maxlength="20">
+      </label>
+      <div class="small" id="td-err" style="color:var(--red-ink);font-weight:700;display:none"></div>
+      <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-top:4px">
+        <button type="button" class="btn sm" id="td-reset" title="إرجاع أسماء الأيام الافتراضية">استعادة الافتراضي</button>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn" data-close>إلغاء</button>
+          <button type="submit" class="btn pr">${icon('save', 16)}حفظ التعديل</button>
+        </div>
+      </div>
+    </form>`, (m, close) => {
+    const f = $('#tdf', m);
+    const err = $('#td-err', m);
+    $('#td-reset', m).onclick = () => {
+      db.resetWeekDays(ctx().name);
+      close();
+      toast('تمت استعادة أسماء الأيام الافتراضية');
+      onDone?.();
+    };
+    f.onsubmit = e => {
+      e.preventDefault();
+      const r = db.updateWeekDay(d, f.name.value, ctx().name);
+      if (!r.ok) {
+        err.textContent = r.error;
+        err.style.display = 'block';
+        return;
+      }
+      close();
+      toast('تم تعديل اسم اليوم', r.name);
+      onDone?.();
+    };
+  });
 }
 function ttPeriodModal(i, onDone) {
   const p = db.periods()[i];
@@ -3558,7 +3604,7 @@ function ttPeriodModal(i, onDone) {
 function ttCellModal(secId, d, p, onDone) {
   const t = db.ttOf(secId); const c = t.draft[d][p]; const was = t.pub ? t.pub[d][p] : null;
   const teachers = db.teachers();
-  modal(`${db.WEEK[d]} · ${db.periodName(p)}`, `<form id="tcf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+  modal(`${db.weekDays()[d]} · ${db.periodName(p)}`, `<form id="tcf" style="display:flex;flex-direction:column;gap:12px" novalidate>
     <div class="muted small">${esc(db.sectionLabel(secId))} · <span class="num">${db.periods()[p].label}</span>${t.pub ? ` · المنشور حالياً: <b>${was ? esc(was.subject) : 'فارغة'}</b>` : ''}</div>
     <label class="field" id="sf">المادة<input class="input" name="subject" value="${esc(c?.subject || '')}" placeholder="مثلاً: الرياضيات" maxlength="30"><span class="help"></span></label>
     <div class="chips">${db.SUBJECTS.map(s => `<button type="button" class="chip" data-sub="${esc(s)}">${esc(s)}</button>`).join('')}</div>
@@ -3586,6 +3632,7 @@ const timetableView = {
     el.addEventListener('click', e => {
       const m = e.target.closest('[data-mode]'); if (m) { tts.mode = m.dataset.mode; $$('[data-mode]', el).forEach(b => b.setAttribute('aria-pressed', b === m)); this.update(el); }
       const ph = e.target.closest('[data-period]'); if (ph) { ttPeriodModal(+ph.dataset.period, () => this.update(el)); return; }
+      const dh = e.target.closest('[data-day]'); if (dh) { ttDayModal(+dh.dataset.day, () => this.update(el)); return; }
       const cell = e.target.closest('[data-cell]'); if (cell) { const [d, p] = cell.dataset.cell.split(':').map(Number); ttCellModal(tts.sec, d, p, () => this.update(el)); }
       if (e.target.closest('[data-pub]')) {
         const n = db.ttDiff(tts.sec).length; const first = !db.ttOf(tts.sec).pub;
@@ -3610,7 +3657,7 @@ const timetableView = {
     let body = '';
     if (tts.mode === 'draft') body = `<div class="card"><div class="ch"><h2>المسودة (عندك)</h2><span class="muted small">${can ? 'اضغط على أي حصة أو على عنوان الحصة لتعديل الاسم والوقت' : ''}${diff.length ? ' · <span class="lgchg"></span>متغيّرة عن المنشور' : ''}</span></div>${ttGrid(t.draft, { editable: can, editPeriods: canPeriods, diff, today, side: 'draft' })}</div>`;
     else if (tts.mode === 'pub') body = `<div class="card"><div class="ch"><h2>المنشور للطلاب وأولياء الأمور</h2><span class="muted small">هذا اللي يشوفوه هسه</span></div>${t.pub ? ttGrid(t.pub, { today, editPeriods: canPeriods }) : '<div class="empty">ما انتشر بعد</div>'}</div>`;
-    else body = `<div class="card"><div class="ch"><h2>التغييرات اللي راح تنتشر</h2><span class="muted small">${diff.length} تغيير</span></div>${diff.length ? `<div class="chlist">${diff.map(x => `<div class="chrow"><span class="when">${db.WEEK[x.d]} · ${db.periodName(x.p)}</span><span class="from">${x.from ? esc(x.from.subject) : 'فارغة'}</span><span class="arr">←</span><span class="to ${x.to ? '' : 'del'}">${x.to ? esc(x.to.subject) : 'محذوفة'}</span>${x.to?.teacher && x.to.teacher !== x.from?.teacher ? `<span class="muted small">${esc(x.to.teacher)}</span>` : ''}</div>`).join('')}</div>` : '<div class="empty">ما أكو فرق: المسودة نفس المنشور</div>'}</div>
+    else body = `<div class="card"><div class="ch"><h2>التغييرات اللي راح تنتشر</h2><span class="muted small">${diff.length} تغيير</span></div>${diff.length ? `<div class="chlist">${diff.map(x => `<div class="chrow"><span class="when">${esc(db.weekDays()[x.d])} · ${db.periodName(x.p)}</span><span class="from">${x.from ? esc(x.from.subject) : 'فارغة'}</span><span class="arr">←</span><span class="to ${x.to ? '' : 'del'}">${x.to ? esc(x.to.subject) : 'محذوفة'}</span>${x.to?.teacher && x.to.teacher !== x.from?.teacher ? `<span class="muted small">${esc(x.to.teacher)}</span>` : ''}</div>`).join('')}</div>` : '<div class="empty">ما أكو فرق: المسودة نفس المنشور</div>'}</div>
       <div class="ttcmp"><div class="card"><div class="ch"><h2>عندي (المسودة)</h2></div>${ttGrid(t.draft, { diff, showTeacher: false, side: 'draft' })}</div><div class="card"><div class="ch"><h2>المنشور للطلاب</h2></div>${t.pub ? ttGrid(t.pub, { diff, showTeacher: false, side: 'pub' }) : '<div class="empty">ما انتشر بعد</div>'}</div></div>`;
     box.innerHTML = bar + body;
   },

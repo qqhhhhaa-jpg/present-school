@@ -1713,6 +1713,29 @@ export const markHistory = (sheetId, studentId) => ((markSheet(sheetId) || {}).h
    Each section has a working copy (draft) that the school and the section's teachers edit, and the
    published copy that students and parents see. Nothing reaches them until someone presses «نشر». */
 export const WEEK = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+export function weekDays() {
+  const custom = Array.isArray(S?.settings?.weekDays) ? S.settings.weekDays : [];
+  return WEEK.map((w, i) => String(custom[i] || '').trim() || w);
+}
+export function updateWeekDay(index, name, by) {
+  if (index < 0 || index >= WEEK.length) return { ok: false, error: 'اليوم غير صحيح.' };
+  const cleanName = String(name || '').trim();
+  if (!cleanName) return { ok: false, error: 'اكتب اسم اليوم.' };
+  if (cleanName.length > 20) return { ok: false, error: 'اسم اليوم طويل.' };
+  if (!Array.isArray(S.settings.weekDays)) S.settings.weekDays = Array.from({ length: WEEK.length }, () => null);
+  S.settings.weekDays[index] = cleanName;
+  log('تعديل اسم يوم بالجدول', `${WEEK[index]} → ${cleanName}`, by);
+  save();
+  emit('tt');
+  return { ok: true, name: cleanName };
+}
+export function resetWeekDays(by) {
+  delete S.settings.weekDays;
+  log('استعادة أسماء أيام الأسبوع الافتراضية', '', by);
+  save();
+  emit('tt');
+  return { ok: true };
+}
 export const SUBJECTS = ['الرياضيات', 'اللغة العربية', 'العلوم', 'اللغة الإنكليزية', 'التربية الإسلامية', 'الاجتماعيات', 'الحاسوب', 'الفنية', 'الرياضة'];
 const ORD_P = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة'];
 export function periods() {

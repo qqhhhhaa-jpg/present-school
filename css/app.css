@@ -4889,9 +4889,24 @@ button.card[data-sheet] {
   color: var(--ink);
   transition: transform .14s ease;
 }
-.main .card.mk-card:hover { transform: translateY(-2px); }
-.mk-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.mk-top b { font-size: 15px; font-weight: 800; color: var(--ink); }
+
+.main .card.mk-card:hover {
+  transform: translateY(-2px);
+}
+
+.mk-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mk-top b {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
 .mk-badge {
   font-size: 11px;
   font-weight: 700;
@@ -4899,9 +4914,25 @@ button.card[data-sheet] {
   border-radius: 999px;
   white-space: nowrap;
 }
-.mk-pct { font-size: 28px; font-weight: 800; line-height: 1.1; }
-.mk-bar { height: 6px; border-radius: 999px; background: rgba(30, 43, 92, .08); overflow: hidden; }
-.mk-bar i { display: block; height: 100%; border-radius: 999px; }
+
+.mk-pct {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.mk-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(30, 43, 92, .08);
+  overflow: hidden;
+}
+
+.mk-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
 
 /* Pass (> 65%): Green */
 .main .card.mk-card.mk-pass {
@@ -4909,9 +4940,19 @@ button.card[data-sheet] {
   border-color: rgba(11, 127, 112, .38) !important;
   box-shadow: 0 0 0 1px rgba(11, 127, 112, .16), 0 6px 20px 0 rgba(11, 127, 112, .20), 0 0 28px 2px rgba(16, 185, 129, .16) !important;
 }
-.mk-pass .mk-pct { color: var(--teal-ink); }
-.mk-pass .mk-badge { background: var(--teal); color: #fff; }
-.mk-pass .mk-bar i { background: var(--teal); }
+
+.mk-pass .mk-pct {
+  color: var(--teal-ink);
+}
+
+.mk-pass .mk-badge {
+  background: var(--teal);
+  color: #fff;
+}
+
+.mk-pass .mk-bar i {
+  background: var(--teal);
+}
 
 /* Caution (50% - 65%): Yellow + gentle note */
 .main .card.mk-card.mk-warn {
@@ -4919,9 +4960,19 @@ button.card[data-sheet] {
   border-color: rgba(217, 146, 20, .48) !important;
   box-shadow: 0 0 0 1px rgba(217, 146, 20, .18), 0 6px 20px 0 rgba(242, 169, 59, .26), 0 0 28px 2px rgba(245, 158, 11, .18) !important;
 }
-.mk-warn .mk-pct { color: var(--amber-ink); }
-.mk-warn .mk-badge { background: var(--amber); color: var(--on-amber); }
-.mk-warn .mk-bar i { background: var(--amber); }
+
+.mk-warn .mk-pct {
+  color: var(--amber-ink);
+}
+
+.mk-warn .mk-badge {
+  background: var(--amber);
+  color: var(--on-amber);
+}
+
+.mk-warn .mk-bar i {
+  background: var(--amber);
+}
 
 /* Fail (< 50%): Red */
 .main .card.mk-card.mk-fail {
@@ -4929,9 +4980,19 @@ button.card[data-sheet] {
   border-color: rgba(200, 69, 63, .44) !important;
   box-shadow: 0 0 0 1px rgba(200, 69, 63, .18), 0 6px 20px 0 rgba(200, 69, 63, .24), 0 0 28px 2px rgba(239, 68, 68, .18) !important;
 }
-.mk-fail .mk-pct { color: var(--red-ink); }
-.mk-fail .mk-badge { background: var(--red); color: #fff; }
-.mk-fail .mk-bar i { background: var(--red); }
+
+.mk-fail .mk-pct {
+  color: var(--red-ink);
+}
+
+.mk-fail .mk-badge {
+  background: var(--red);
+  color: #fff;
+}
+
+.mk-fail .mk-bar i {
+  background: var(--red);
+}
 
 .main .card.mk-card.mk-sel {
   outline: 2px solid var(--brand);
@@ -4949,6 +5010,7 @@ button.card[data-sheet] {
   font-weight: 700;
   line-height: 1.45;
 }
+
 .mk-note-inline {
   margin-top: 4px;
   display: inline-block;
@@ -5026,3 +5088,95 @@ button.tt-ph:focus-visible { outline: 2px solid var(--focus); outline-offset: 2p
   background: var(--teal);
   color: #fff;
 }
+
+/* ===== Colored Timetable Periods & Days Header Cards ===== */
+.tt thead th:first-child,
+.tt tbody th { width: 98px; padding-inline-end: 0; }
+.tt-ph.p0, .tt-dh.d0 { --pc: #1E2B5C; --pcs: #E8EEFA; }
+.tt-ph.p1, .tt-dh.d1 { --pc: #0B7F70; --pcs: #E3F4F0; }
+.tt-ph.p2, .tt-dh.d2 { --pc: #2F5592; --pcs: #E6EFFB; }
+.tt-ph.p3, .tt-dh.d3 { --pc: #6A5A9E; --pcs: #EFEBF8; }
+.tt-ph.p4, .tt-dh.d4 { --pc: #B7791F; --pcs: #FBF1DC; }
+.tt-ph.p5 { --pc: #A44A55; --pcs: #F8E8EA; }
+
+.tt-ph {
+  border-color: color-mix(in srgb, var(--pc, #1E2B5C) 28%, transparent);
+  border-top: 3px solid var(--pc, #1E2B5C);
+  background: linear-gradient(160deg, #FFFFFF 0%, var(--pcs, #E8EEFA) 100%);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--pc, #1E2B5C) 14%, transparent);
+}
+.tt-ph .tt-pn { color: var(--pc, #1E2B5C); }
+.tt-ph .tt-pt {
+  background: var(--pc, #1E2B5C);
+  color: #fff;
+}
+button.tt-ph:hover {
+  border-color: var(--pc, #1E2B5C);
+  background: linear-gradient(160deg, #FFFFFF 0%, color-mix(in srgb, var(--pcs, #E8EEFA) 88%, var(--pc, #1E2B5C)) 100%);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--pc, #1E2B5C) 24%, transparent);
+}
+button.tt-ph:hover .tt-pe { color: var(--pc, #1E2B5C); opacity: 1; }
+button.tt-ph:hover .tt-pt { background: var(--pc, #1E2B5C); color: #fff; }
+
+.tt-dh {
+  position: relative;
+  width: 100%;
+  min-height: 62px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 6px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--pc, #1E2B5C) 28%, transparent);
+  border-inline-start: 3.5px solid var(--pc, #1E2B5C);
+  background: linear-gradient(160deg, #FFFFFF 0%, var(--pcs, #E8EEFA) 100%);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--pc, #1E2B5C) 14%, transparent);
+  font: inherit;
+  color: var(--pc, #1E2B5C);
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.tt-dh .tt-dn {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--pc, #1E2B5C);
+  line-height: 1.2;
+}
+.tt-dh .tt-dt {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: var(--pc, #1E2B5C);
+  color: #fff;
+  padding: 1px 8px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+.tt-dh .tt-pe {
+  position: absolute;
+  top: 5px;
+  inset-inline-end: 6px;
+  display: inline-flex;
+  color: var(--pc, #1E2B5C);
+  opacity: .45;
+  font-style: normal;
+  transition: opacity .15s ease;
+}
+button.tt-dh { cursor: pointer; }
+button.tt-dh:hover {
+  border-color: var(--pc, #1E2B5C);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--pc, #1E2B5C) 24%, transparent);
+  transform: translateY(-1px);
+}
+button.tt-dh:hover .tt-pe { opacity: 1; }
+button.tt-dh:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.tt tr.today .tt-dh {
+  border-color: var(--teal);
+  border-inline-start-color: var(--teal);
+  box-shadow: 0 4px 12px rgba(11, 127, 112, .22);
+}
+.tt tr.today .tt-dh .tt-dt { background: var(--teal); color: #fff; }
+.ttcmp .tt-dh { min-height: 46px; padding: 5px 4px; }
