@@ -476,106 +476,64 @@ const attendance = {
         return { grade: g, secs, colorIndex: idx };
       }).filter(g => g.secs.length > 0);
 
+      const stColor = r => r >= 90 ? 'var(--teal)' : r >= 75 ? 'var(--amber)' : 'var(--red)';
       container.innerHTML = `
-      <!-- Top Control & School Stats Bar -->
-      <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;padding:14px 18px;border-radius:16px">
-        <label class="field" style="min-width:180px;margin-bottom:0">اليوم
+      <div class="card ap-bar">
+        <label class="field" style="min-width:190px">اليوم
           <select class="input" id="day">
             ${db.days().map((d, i) => `<option value="${d}" ${d === att.day ? 'selected' : ''}>${i === 0 ? 'اليوم · ' : ''}${fmtDay(new Date(d))}</option>`).join('')}
           </select>
         </label>
-        <label class="field" style="flex:1;min-width:220px;margin-bottom:0">بحث عن شعبة أو صف
-          <input class="input" id="app-q" value="${esc(att.appQ || '')}" placeholder="ابحث باسم الصف أو الشعبة أو المربي...">
+        <label class="field" style="flex:1;min-width:220px">بحث عن صف أو شعبة
+          <input class="input" id="app-q" value="${esc(att.appQ || '')}" placeholder="اسم الصف، الشعبة أو المربي">
         </label>
-        <div style="display:flex;gap:8px;align-items:center;padding-bottom:4px;flex-wrap:wrap">
-          <span class="pill" style="background:var(--surface-300);color:var(--ink);font-weight:700">إجمالي المدرسة: ${schoolStudents.length} طالب</span>
-          ${isHoliday ? `
-            <span class="pill" style="background:#E0E7FF;color:#3730A3;font-weight:700">🏖️ عطلة رسمية</span>
-          ` : `
-            <span class="pill" style="background:#DCFCE7;color:#166534;font-weight:700">حاضر: ${schoolSummary.came}</span>
-            <span class="pill" style="background:#FEE2E2;color:#991B1B;font-weight:700">غائب: ${schoolSummary.absent}</span>
-            <span class="pill" style="background:#FEF3C7;color:#92400E;font-weight:700">متأخر: ${schoolSummary.late}</span>
-          `}
+        <div class="ap-kpis" aria-label="ملخص المدرسة">
+          <div class="ap-kpi"><b>${schoolStudents.length}</b><span>الطلاب</span></div>
+          ${isHoliday ? `<div class="ap-kpi"><b style="font-size:13px;padding:3px 0">${icon('calendar', 14)}</b><span>عطلة رسمية</span></div>` : `
+          <div class="ap-kpi t"><b>${schoolSummary.came}</b><span>حاضر</span></div>
+          <div class="ap-kpi r"><b>${schoolSummary.absent}</b><span>غائب</span></div>
+          <div class="ap-kpi a"><b>${schoolSummary.late}</b><span>متأخر</span></div>`}
         </div>
       </div>
 
-      <!-- App Categories / Stages -->
-      ${gradesWithSecs.length ? `
-        <div style="display:flex;flex-direction:column;gap:20px">
-          ${gradesWithSecs.map(({ grade: g, secs, colorIndex }) => {
-            const gradColor = GRADE_APP_COLORS[colorIndex % GRADE_APP_COLORS.length];
-            return `
-            <div>
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-                <div style="display:flex;align-items:center;gap:8px">
-                  <span style="font-size:20px">📱</span>
-                  <h2 style="font-size:18px;font-weight:800;color:var(--ink);margin:0">
-                    تطبيقات ${esc(g.name)}
-                  </h2>
-                  <span class="pill p-quiet" style="font-size:11px">${esc(g.stage || 'المرحلة')}</span>
+      ${gradesWithSecs.length ? gradesWithSecs.map(({ grade: g, secs }) => `
+        <section class="ap-group">
+          <div class="ap-ghead">
+            <span class="ap-gmark"></span>
+            <h2>${esc(g.name)}</h2>
+            ${g.stage ? `<span class="pill p-quiet">${esc(g.stage)}</span>` : ''}
+            <span class="ap-gcount">${secs.length} شعبة</span>
+          </div>
+          <div class="ap-grid">
+            ${secs.map(s => {
+              const secStus = db.students(s.id);
+              const sm = db.summary(secStus, att.day);
+              const st = isHoliday ? 'var(--brand)' : stColor(sm.rate);
+              return `
+              <button type="button" class="ap-tile" data-open-sec="${s.id}" style="--st:${st}" aria-label="فتح حضور ${esc(g.name)} شعبة ${esc(s.name)}">
+                <div class="ap-top">
+                  <span class="ap-ico"><b>${esc(s.name)}</b><small>${esc(g.short || 'شعبة')}</small></span>
+                  <span class="ap-ttl">
+                    <div>${esc(g.name)} · شعبة ${esc(s.name)}</div>
+                    <p>${s.homeroom ? `المربي: ${esc(s.homeroom)}` : 'لا يوجد مربٍّ معيّن'}${s.room ? ` · قاعة ${esc(s.room)}` : ''}</p>
+                  </span>
+                  ${isHoliday ? '' : `<span class="ap-rate">${sm.rate}<small>%</small></span>`}
                 </div>
-                <span class="muted small">${secs.length} شعبة</span>
-              </div>
-
-              <!-- Apps Grid for this Grade -->
-              <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:14px">
-                ${secs.map(s => {
-                  const secStus = db.students(s.id);
-                  const secSummary = db.summary(secStus, att.day);
-                  return `
-                  <div class="card" data-open-sec="${s.id}" style="cursor:pointer;padding:16px;border-radius:18px;border:1px solid var(--border);background:var(--surface-100);box-shadow:0 3px 10px rgba(0,0,0,0.04);transition:transform .18s ease,box-shadow .18s ease;display:flex;flex-direction:column;gap:12px;position:relative" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 22px rgba(0,0,0,0.08)'" onmouseout="this.style.transform='none';this.style.boxShadow='0 3px 10px rgba(0,0,0,0.04)'">
-                    <div style="display:flex;gap:12px;align-items:center">
-                      <div style="width:50px;height:50px;border-radius:14px;background:${gradColor};color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;box-shadow:0 4px 10px rgba(0,0,0,0.15);flex:none">
-                        ${esc(s.name)}
-                      </div>
-                      <div style="flex:1;min-width:0">
-                        <div style="font-weight:800;font-size:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                          ${esc(g.name)} (${esc(s.name)})
-                        </div>
-                        <div class="muted small" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                          ${s.homeroom ? `مربي الشعبة: ${esc(s.homeroom)}` : 'تطبيق حضور الشعبة'}${s.room ? ` · قاعة ${esc(s.room)}` : ''}
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Attendance metrics inside the App tile -->
-                    <div style="background:var(--surface-200);padding:8px 12px;border-radius:12px;display:flex;flex-direction:column;gap:5px">
-                      ${isHoliday ? `
-                        <div style="text-align:center;font-weight:700;color:#3730A3;font-size:12px;display:flex;align-items:center;justify-content:center;gap:6px">
-                          <span>🏖️</span> <span>عطلة رسمية معتمدة</span>
-                        </div>
-                      ` : `
-                        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700">
-                          <span style="color:var(--ink)">نسبة الحضور</span>
-                          <span style="color:${secSummary.rate >= 90 ? 'var(--teal)' : 'var(--amber)'}">${secSummary.rate}%</span>
-                        </div>
-                        <div class="bar" style="height:5px;border-radius:4px;background:var(--surface-300);overflow:hidden">
-                          <i style="width:${secSummary.rate}%;background:${secSummary.rate >= 90 ? 'var(--teal)' : 'var(--amber)'};display:block;height:100%"></i>
-                        </div>
-                        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:2px;font-weight:600">
-                          <span style="color:var(--teal)">✓ ${secSummary.came} حاضر</span>
-                          <span style="color:var(--red)">✕ ${secSummary.absent} غائب</span>
-                          <span style="color:var(--amber)">⏰ ${secSummary.late} متأخر</span>
-                        </div>
-                      `}
-                    </div>
-
-                    <!-- Action Link -->
-                    <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border);font-size:13px">
-                      <span class="muted" style="font-weight:600">${secStus.length} طالباً</span>
-                      <span style="font-weight:800;color:var(--brand);display:flex;align-items:center;gap:4px">
-                        دخول لتطبيق الشعبة ⬅️
-                      </span>
-                    </div>
-                  </div>`;
-                }).join('')}
-              </div>
-            </div>`;
-          }).join('')}
-        </div>
-      ` : `
-        <div class="empty">لا توجد شعب مطابقة لبحثك</div>
-      `}
+                ${isHoliday ? `<div class="ap-hol">${icon('calendar', 14)} عطلة رسمية · الجميع معفى من البصمة</div>` : `
+                <div class="ap-meter"><i style="width:${sm.rate}%"></i></div>
+                <div class="ap-stats">
+                  <span class="t"><b>${sm.came}</b>حاضر</span>
+                  <span class="r"><b>${sm.absent}</b>غائب</span>
+                  <span class="a"><b>${sm.late}</b>متأخر</span>
+                </div>`}
+                <div class="ap-foot">
+                  <span>${icon('users', 13)} ${secStus.length} طالب</span>
+                  <span class="ap-go">فتح الشعبة ${icon('back', 14)}</span>
+                </div>
+              </button>`;
+            }).join('')}
+          </div>
+        </section>`).join('') : `<div class="empty">لا توجد شعب مطابقة لبحثك</div>`}
       `;
 
       $('#day', container).onchange = e => { att.day = +e.target.value; this.update(el); };
@@ -641,47 +599,32 @@ const attendance = {
     </div>` : '';
 
     container.innerHTML = `
-    <!-- Section App Header Bar -->
-    <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;border-radius:18px;padding:14px 18px;background:linear-gradient(135deg, var(--surface-100) 0%, var(--surface-200) 100%);border:1px solid var(--border);margin-bottom:12px">
-      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-        <button type="button" class="btn pr" id="btn-back-to-apps" style="font-weight:700;display:flex;align-items:center;gap:6px;min-height:40px;border-radius:10px">
-          ${icon('arrow', 16)} العودة لكل تطبيقات الصفوف
-        </button>
-        <div style="width:48px;height:48px;border-radius:14px;background:${appColor};color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;box-shadow:0 3px 10px rgba(0,0,0,0.12);flex:none">
-          ${esc(currentSec?.name || '')}
-        </div>
-        <div>
-          <div style="font-size:19px;font-weight:800;color:var(--ink)">
-            تطبيق حضور: ${esc(db.sectionLabel(currentSec?.id))}
-          </div>
-          <div class="muted small">
-            ${currentSec?.homeroom ? `مربي الشعبة: <b>${esc(currentSec.homeroom)}</b> · ` : ''}
-            ${currentSec?.room ? `القاعة: <b>${esc(currentSec.room)}</b> · ` : ''}
-            إجمالي طلاب الشعبة: <b>${list.length}</b> طالباً
+    <div class="card ap-head">
+      <div class="ap-hl">
+        <button type="button" class="btn ap-back" id="btn-back-to-apps">${icon('arrow', 16)} كل الشعب</button>
+        <span class="ap-ico lg"><b>${esc(currentSec?.name || '')}</b><small>${esc(db.grade(currentSec?.gradeId)?.short || 'شعبة')}</small></span>
+        <div style="min-width:0">
+          <h2>${esc(db.sectionLabel(currentSec?.id))}</h2>
+          <div class="ap-meta">
+            ${currentSec?.homeroom ? `<span class="ap-chip">المربي: <b>${esc(currentSec.homeroom)}</b></span>` : ''}
+            ${currentSec?.room ? `<span class="ap-chip">القاعة: <b>${esc(currentSec.room)}</b></span>` : ''}
+            <span class="ap-chip">الطلاب: <b>${list.length}</b></span>
           </div>
         </div>
       </div>
-
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <label class="field" style="margin-bottom:0;min-width:160px">
-          <select class="input" id="sec-day">
-            ${db.days().map((d, i) => `<option value="${d}" ${d === att.day ? 'selected' : ''}>${i === 0 ? 'اليوم · ' : ''}${fmtDay(new Date(d))}</option>`).join('')}
-          </select>
-        </label>
-      </div>
-    </div>
-
-    <!-- Search within this section only -->
-    <div class="card" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding:12px 16px;border-radius:14px;margin-bottom:12px">
-      <label class="field" style="flex:1;min-width:220px;margin-bottom:0">بحث بين طلاب شعبة (${esc(currentSec?.name || '')})
-        <input class="input" id="aq" value="${esc(att.q)}" placeholder="اكتب اسم الطالب للبحث السريع...">
+      <label class="field" style="margin-bottom:0;min-width:180px">اليوم
+        <select class="input" id="sec-day">
+          ${db.days().map((d, i) => `<option value="${d}" ${d === att.day ? 'selected' : ''}>${i === 0 ? 'اليوم · ' : ''}${fmtDay(new Date(d))}</option>`).join('')}
+        </select>
       </label>
-      <div class="small muted" style="padding-bottom:10px">
-        يتم عرض طلاب هذه الشعبة حصراً (${list.length} طالباً)
-      </div>
     </div>
 
-    <!-- Filter segment -->
+    <div class="ap-tools">
+      <label class="field">بحث في طلاب الشعبة
+        <input class="input" id="aq" value="${esc(att.q)}" placeholder="اكتب اسم الطالب">
+      </label>
+    </div>
+
     <div class="seg" id="fseg" role="group" aria-label="تصفية حسب الحالة" style="margin-bottom:12px">
       ${F.map(([k, l]) => `<button data-f="${k}" aria-pressed="${att.f === k}">${l} <span class="num">${counts[k] || 0}</span></button>`).join('')}
     </div>
