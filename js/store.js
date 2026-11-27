@@ -1714,14 +1714,57 @@ export const markHistory = (sheetId, studentId) => ((markSheet(sheetId) || {}).h
    published copy that students and parents see. Nothing reaches them until someone presses «نشر». */
 export const WEEK = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
 export const SUBJECTS = ['الرياضيات', 'اللغة العربية', 'العلوم', 'اللغة الإنكليزية', 'التربية الإسلامية', 'الاجتماعيات', 'الحاسوب', 'الفنية', 'الرياضة'];
+const ORD_P = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة'];
 export function periods() {
   const [h, m] = S.settings.start.split(':').map(Number); let t = h * 60 + m; const out = [];
-  for (let i = 0; i < 6; i++) { if (i === 3) t += 15; out.push({ n: i + 1, from: t, to: t + 45 }); t += 50; }
+  const custom = Array.isArray(S.settings.periods) ? S.settings.periods : [];
+  for (let i = 0; i < 6; i++) {
+    if (i === 3) t += 15;
+    const defFrom = t, defTo = t + 45;
+    const c = custom[i] || {};
+    const from = Number.isFinite(c.from) ? c.from : defFrom;
+    const to = Number.isFinite(c.to) && c.to > from ? c.to : defTo;
+    const name = String(c.name || '').trim() || ORD_P[i];
+    out.push({ n: i + 1, name, from, to });
+    t += 50;
+  }
   const hm = x => `${Math.floor(x / 60)}:${String(x % 60).padStart(2, '0')}`;
-  return out.map(p => ({ ...p, label: `${hm(p.from)}–${hm(p.to)}` }));
+  const hm2 = x => `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`;
+  return out.map(p => ({ ...p, fromStr: hm2(p.from), toStr: hm2(p.to), label: `${hm(p.from)}–${hm(p.to)}` }));
 }
-const ORD_P = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة'];
-export const periodName = i => `الحصة ${ORD_P[i]}`;
+export const periodName = i => {
+  const c = String(S?.settings?.periods?.[i]?.name || '').trim();
+  if (c) return c.startsWith('الحصة') ? c : `الحصة ${c}`;
+  return `الحصة ${ORD_P[i] || (i + 1)}`;
+};
+export function updatePeriod(index, { name, from, to }, by) {
+  if (index < 0 || index >= 6) return { ok: false, error: 'رقم الحصة غير صحيح.' };
+  const cleanName = String(name || '').trim();
+  if (!cleanName) return { ok: false, error: 'اكتب اسم الحصة.' };
+  if (cleanName.length > 24) return { ok: false, error: 'اسم الحصة طويل.' };
+  const toMin = str => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(str || '').trim());
+    if (!m) return NaN;
+    const hh = +m[1], mm = +m[2];
+    return hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59 ? hh * 60 + mm : NaN;
+  };
+  const fMin = toMin(from), tMin = toMin(to);
+  if (!Number.isFinite(fMin) || !Number.isFinite(tMin)) return { ok: false, error: 'اختر وقت البداية والنهاية بشكل صحيح.' };
+  if (tMin <= fMin) return { ok: false, error: 'وقت النهاية يجب أن يكون بعد وقت البداية.' };
+  if (!Array.isArray(S.settings.periods)) S.settings.periods = Array.from({ length: 6 }, () => null);
+  S.settings.periods[index] = { name: cleanName, from: fMin, to: tMin };
+  log('تعديل الحصة والوقت', `${cleanName} · ${from}–${to}`, by);
+  save();
+  emit('tt');
+  return { ok: true, period: periods()[index] };
+}
+export function resetPeriods(by) {
+  delete S.settings.periods;
+  log('استعادة أوقات الحصص الافتراضية', '', by);
+  save();
+  emit('tt');
+  return { ok: true };
+}
 const teacherFor = (subject, secId) => S.teachers.find(t => t.subject === subject && t.sections.includes(secId))?.name || '';
 function seedTT() {
   const tt = {};

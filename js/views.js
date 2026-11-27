@@ -3497,15 +3497,63 @@ async function template() {
 /* ============ TIMETABLE ============ */
 const tts = { sec: '', mode: 'draft', kid: null };
 const cellHtml = (c, t, extra = '') => c ? `<b>${esc(c.subject)}</b>${t && c.teacher ? `<span>${esc(c.teacher)}</span>` : ''}${extra}` : `<em>—</em>${extra}`;
-function ttGrid(grid, { editable = false, diff = null, today = -1, cur = -1, showTeacher = true, side = '' } = {}) {
+function ttGrid(grid, { editable = false, diff = null, today = -1, cur = -1, showTeacher = true, side = '', editPeriods = false } = {}) {
   const ps = db.periods(); const chg = new Map((diff || []).map(x => [x.d + ':' + x.p, x]));
-  return `<div class="ttwrap"><table class="tt"><thead><tr><th></th>${ps.map((p, i) => `<th><b>${db.periodName(i).replace('الحصة ', '')}</b><span class="num">${p.label}</span></th>`).join('')}</tr></thead><tbody>
+  return `<div class="ttwrap"><table class="tt"><thead><tr><th></th>${ps.map((p, i) => {
+    const isCurP = i === cur;
+    const inner = `<span class="tt-pn">${esc(p.name)}</span><span class="tt-pt num">${p.label}</span>${editPeriods ? `<i class="tt-pe" aria-hidden="true">${icon('edit', 11)}</i>` : ''}`;
+    return `<th class="${isCurP ? 'cur-p' : ''}">${editPeriods ? `<button type="button" class="tt-ph" data-period="${i}" title="اضغط لتعديل اسم ووقت الحصة">${inner}</button>` : `<div class="tt-ph">${inner}</div>`}</th>`;
+  }).join('')}</tr></thead><tbody>
     ${db.WEEK.map((w, d) => `<tr class="${d === today ? 'today' : ''}"><th>${w}${d === today ? '<small>اليوم</small>' : ''}</th>${grid[d].map((c, p) => {
     const x = chg.get(d + ':' + p); const isCur = d === today && p === cur;
     const was = x && side === 'draft' ? `<i class="was">كانت: ${x.from ? esc(x.from.subject) : 'فارغة'}</i>` : '';
     return `<td class="${x ? (side === 'pub' ? 'old' : 'chg') : ''} ${isCur ? 'cur' : ''} ${c ? '' : 'empty'}">${editable ? `<button type="button" class="ttc" data-cell="${d}:${p}" aria-label="${w} ${db.periodName(p)}">${cellHtml(c, showTeacher, was)}</button>` : `<div class="ttc">${cellHtml(c, showTeacher, was)}${isCur ? '<i class="now">هسه</i>' : ''}</div>`}</td>`;
   }).join('')}</tr>`).join('')}
   </tbody></table></div>`;
+}
+function ttPeriodModal(i, onDone) {
+  const p = db.periods()[i];
+  if (!p) return;
+  modal(`تعديل الحصة: ${p.name}`, `
+    <form id="tpf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+      <label class="field" id="tp-name">اسم الحصة
+        <input class="input" name="name" value="${esc(p.name)}" placeholder="مثلاً: الأولى أو الاستراحة" maxlength="24">
+        <span class="help"></span>
+      </label>
+      <div class="grid g2" style="gap:12px">
+        <label class="field">من الساعة<input class="input num" type="time" name="from" value="${p.fromStr}"></label>
+        <label class="field">إلى الساعة<input class="input num" type="time" name="to" value="${p.toStr}"></label>
+      </div>
+      <div class="small" id="tp-err" style="color:var(--red-ink);font-weight:700;display:none"></div>
+      <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-top:4px">
+        <button type="button" class="btn sm" id="tp-reset" title="إرجاع الأسماء والأوقات الافتراضية لكل الحصص">استعادة الافتراضي</button>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn" data-close>إلغاء</button>
+          <button type="submit" class="btn pr">${icon('save', 16)}حفظ التعديل</button>
+        </div>
+      </div>
+    </form>`, (m, close) => {
+    const f = $('#tpf', m);
+    const err = $('#tp-err', m);
+    $('#tp-reset', m).onclick = () => {
+      db.resetPeriods(ctx().name);
+      close();
+      toast('تمت استعادة أسماء وأوقات الحصص الافتراضية');
+      onDone?.();
+    };
+    f.onsubmit = e => {
+      e.preventDefault();
+      const r = db.updatePeriod(i, { name: f.name.value, from: f.from.value, to: f.to.value }, ctx().name);
+      if (!r.ok) {
+        err.textContent = r.error;
+        err.style.display = 'block';
+        return;
+      }
+      close();
+      toast('تم تعديل الحصة والوقت', `${r.period.name} · ${r.period.label}`);
+      onDone?.();
+    };
+  });
 }
 function ttCellModal(secId, d, p, onDone) {
   const t = db.ttOf(secId); const c = t.draft[d][p]; const was = t.pub ? t.pub[d][p] : null;
@@ -3537,6 +3585,7 @@ const timetableView = {
     $('#tsec', el).onchange = e => { tts.sec = e.target.value; this.update(el); };
     el.addEventListener('click', e => {
       const m = e.target.closest('[data-mode]'); if (m) { tts.mode = m.dataset.mode; $$('[data-mode]', el).forEach(b => b.setAttribute('aria-pressed', b === m)); this.update(el); }
+      const ph = e.target.closest('[data-period]'); if (ph) { ttPeriodModal(+ph.dataset.period, () => this.update(el)); return; }
       const cell = e.target.closest('[data-cell]'); if (cell) { const [d, p] = cell.dataset.cell.split(':').map(Number); ttCellModal(tts.sec, d, p, () => this.update(el)); }
       if (e.target.closest('[data-pub]')) {
         const n = db.ttDiff(tts.sec).length; const first = !db.ttOf(tts.sec).pub;
@@ -3557,9 +3606,10 @@ const timetableView = {
     const bar = `<div class="card ttbar ${diff.length ? 'pending' : ''}">
       <div style="flex:1;min-width:220px">${t.pub ? `<b>${diff.length ? `${diff.length} تغيير بالمسودة ما انتشر بعد` : 'المسودة مطابقة للمنشور ✓'}</b><div class="muted small">آخر نشر: ${esc(fmtDay(new Date(t.pubAt)))} · <span class="num">${fmtTime(t.pubAt)}</span> · بواسطة ${esc(t.pubBy)}</div>` : '<b>هذا الجدول بعده ما انتشر</b><div class="muted small">الطلاب وأولياء الأمور ما يشوفون شي لحد ما تنشره.</div>'}</div>
       ${can ? `${diff.length && t.pub ? `<button class="btn" data-revert>تراجع عن التغييرات</button>` : ''}<button class="btn pr" data-pub ${diff.length || !t.pub ? '' : 'disabled'}>${icon('send', 16)}نشر للطلاب وأولياء الأمور</button>` : '<span class="muted small">عرض فقط: هذي الشعبة مو من شعبك</span>'}</div>`;
+    const canPeriods = ['owner', 'admin'].includes(c.role) || can;
     let body = '';
-    if (tts.mode === 'draft') body = `<div class="card"><div class="ch"><h2>المسودة (عندك)</h2><span class="muted small">${can ? 'اضغط على أي حصة حتى تعدّلها أو تحذفها' : ''}${diff.length ? ' · <span class="lgchg"></span>متغيّرة عن المنشور' : ''}</span></div>${ttGrid(t.draft, { editable: can, diff, today, side: 'draft' })}</div>`;
-    else if (tts.mode === 'pub') body = `<div class="card"><div class="ch"><h2>المنشور للطلاب وأولياء الأمور</h2><span class="muted small">هذا اللي يشوفوه هسه</span></div>${t.pub ? ttGrid(t.pub, { today }) : '<div class="empty">ما انتشر بعد</div>'}</div>`;
+    if (tts.mode === 'draft') body = `<div class="card"><div class="ch"><h2>المسودة (عندك)</h2><span class="muted small">${can ? 'اضغط على أي حصة أو على عنوان الحصة لتعديل الاسم والوقت' : ''}${diff.length ? ' · <span class="lgchg"></span>متغيّرة عن المنشور' : ''}</span></div>${ttGrid(t.draft, { editable: can, editPeriods: canPeriods, diff, today, side: 'draft' })}</div>`;
+    else if (tts.mode === 'pub') body = `<div class="card"><div class="ch"><h2>المنشور للطلاب وأولياء الأمور</h2><span class="muted small">هذا اللي يشوفوه هسه</span></div>${t.pub ? ttGrid(t.pub, { today, editPeriods: canPeriods }) : '<div class="empty">ما انتشر بعد</div>'}</div>`;
     else body = `<div class="card"><div class="ch"><h2>التغييرات اللي راح تنتشر</h2><span class="muted small">${diff.length} تغيير</span></div>${diff.length ? `<div class="chlist">${diff.map(x => `<div class="chrow"><span class="when">${db.WEEK[x.d]} · ${db.periodName(x.p)}</span><span class="from">${x.from ? esc(x.from.subject) : 'فارغة'}</span><span class="arr">←</span><span class="to ${x.to ? '' : 'del'}">${x.to ? esc(x.to.subject) : 'محذوفة'}</span>${x.to?.teacher && x.to.teacher !== x.from?.teacher ? `<span class="muted small">${esc(x.to.teacher)}</span>` : ''}</div>`).join('')}</div>` : '<div class="empty">ما أكو فرق: المسودة نفس المنشور</div>'}</div>
       <div class="ttcmp"><div class="card"><div class="ch"><h2>عندي (المسودة)</h2></div>${ttGrid(t.draft, { diff, showTeacher: false, side: 'draft' })}</div><div class="card"><div class="ch"><h2>المنشور للطلاب</h2></div>${t.pub ? ttGrid(t.pub, { diff, showTeacher: false, side: 'pub' }) : '<div class="empty">ما انتشر بعد</div>'}</div></div>`;
     box.innerHTML = bar + body;

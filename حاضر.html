@@ -4731,31 +4731,151 @@ button.card[data-sheet] {
 }
 
 /* ===== Compact side-by-side proof modal (RTL: info right, photo left, zero scroll) ===== */
-.modal.ev-compact{width:min(660px,96vw);padding:16px 18px;gap:10px;overflow:visible}
-.modal.ev-compact header{padding-bottom:6px;border-bottom:1px solid var(--line)}
-.modal.ev-compact header h2{font-size:15.5px;margin:0}
-.ev-split{display:grid;grid-template-columns:1fr 205px;gap:14px;align-items:stretch}
-.ev-info-col{display:flex;flex-direction:column;gap:8px;min-width:0}
-.modal.ev-compact .ev-ttl{padding:7px 10px;border-radius:10px;font-size:12px;align-items:center}
-.modal.ev-compact .ev-ttl svg{margin-top:0}
-.modal.ev-compact .evfacts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
-.modal.ev-compact .evfacts div{padding:7px 10px;border-radius:9px}
-.modal.ev-compact .evfacts span{font-size:11px}
-.modal.ev-compact .evfacts b{font-size:12.5px;line-height:1.35;word-break:break-word}
-.ev-photo-col{display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center}
-.ev-photo-col img{width:100%;height:245px;object-fit:cover;border-radius:12px;border:1px solid var(--line);background:#1B2235;display:block}
-.ev-photo-col img.fp{object-fit:contain;background:#F7F9FC}
-.ev-tabs{display:flex;gap:4px;width:100%;justify-content:center;flex-wrap:wrap}
-.ev-tab{flex:1;border:1px solid var(--line);background:var(--surface-100);color:var(--muted);border-radius:8px;padding:4px 6px;font:700 11px var(--font-ar);cursor:pointer;white-space:nowrap}
-.ev-tab.on{background:var(--brand);color:#fff;border-color:var(--brand)}
-.ev-side-box{padding:14px 10px;min-height:190px;justify-content:center;max-width:none}
-@media (max-width:580px){
-  .modal.ev-compact{padding:12px 14px}
-  .ev-split{grid-template-columns:1fr 125px;gap:10px}
-  .ev-photo-col img{height:165px}
-  .modal.ev-compact .evfacts{grid-template-columns:1fr 1fr;gap:5px}
-  .modal.ev-compact .evfacts div{padding:5px 7px}
-  .modal.ev-compact .evfacts b{font-size:11.5px}
+.modal.ev-compact {
+  width: min(660px, 96vw);
+  padding: 16px 18px;
+  gap: 10px;
+  overflow: visible
+}
+
+.modal.ev-compact header {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line)
+}
+
+.modal.ev-compact header h2 {
+  font-size: 15.5px;
+  margin: 0
+}
+
+.ev-split {
+  display: grid;
+  grid-template-columns: 1fr 205px;
+  gap: 14px;
+  align-items: stretch
+}
+
+.ev-info-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0
+}
+
+.modal.ev-compact .ev-ttl {
+  padding: 7px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  align-items: center
+}
+
+.modal.ev-compact .ev-ttl svg {
+  margin-top: 0
+}
+
+.modal.ev-compact .evfacts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px
+}
+
+.modal.ev-compact .evfacts div {
+  padding: 7px 10px;
+  border-radius: 9px
+}
+
+.modal.ev-compact .evfacts span {
+  font-size: 11px
+}
+
+.modal.ev-compact .evfacts b {
+  font-size: 12.5px;
+  line-height: 1.35;
+  word-break: break-word
+}
+
+.ev-photo-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center
+}
+
+.ev-photo-col img {
+  width: 100%;
+  height: 245px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #1B2235;
+  display: block
+}
+
+.ev-photo-col img.fp {
+  object-fit: contain;
+  background: #F7F9FC
+}
+
+.ev-tabs {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap
+}
+
+.ev-tab {
+  flex: 1;
+  border: 1px solid var(--line);
+  background: var(--surface-100);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font: 700 11px var(--font-ar);
+  cursor: pointer;
+  white-space: nowrap
+}
+
+.ev-tab.on {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand)
+}
+
+.ev-side-box {
+  padding: 14px 10px;
+  min-height: 190px;
+  justify-content: center;
+  max-width: none
+}
+
+@media (max-width:580px) {
+  .modal.ev-compact {
+    padding: 12px 14px
+  }
+
+  .ev-split {
+    grid-template-columns: 1fr 125px;
+    gap: 10px
+  }
+
+  .ev-photo-col img {
+    height: 165px
+  }
+
+  .modal.ev-compact .evfacts {
+    grid-template-columns: 1fr 1fr;
+    gap: 5px
+  }
+
+  .modal.ev-compact .evfacts div {
+    padding: 5px 7px
+  }
+
+  .modal.ev-compact .evfacts b {
+    font-size: 11.5px
+  }
 }
 
 /* ===== Fixed misty blue glow across ALL accounts (Owner, Admin, Teacher, Parent, Student & Login) ===== */
@@ -4764,11 +4884,13 @@ button.card[data-sheet] {
   box-shadow: var(--app-glow) !important;
   border-color: rgba(59, 130, 246, .22) !important;
 }
+
 .main .card .card,
 .modal .card {
   box-shadow: none !important;
   border-color: var(--line) !important;
 }
+
 .st {
   box-shadow: var(--app-glow-sm) !important;
   border-color: rgba(59, 130, 246, .20) !important;
@@ -4856,6 +4978,72 @@ button.card[data-sheet] {
   color: var(--amber-ink);
   font-size: 11.5px;
   font-weight: 700;
+}
+
+/* ===== Timetable polished & clickable period headers ===== */
+.tt thead th { padding-bottom: 4px; }
+.tt-ph {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 6px 7px;
+  border-radius: 12px;
+  border: 1px solid rgba(30, 43, 92, .13);
+  background: linear-gradient(180deg, #FFFFFF 0%, #F1F5FB 100%);
+  box-shadow: 0 2px 8px rgba(30, 43, 92, .06);
+  font: inherit;
+  color: var(--ink);
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.tt-ph .tt-pn {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1.25;
+}
+.tt-ph .tt-pt {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--brand);
+  background: rgba(30, 43, 92, .07);
+  padding: 2px 8px;
+  border-radius: 999px;
+  line-height: 1.3;
+  letter-spacing: .1px;
+}
+.tt-ph .tt-pe {
+  position: absolute;
+  top: 5px;
+  inset-inline-end: 6px;
+  display: inline-flex;
+  color: var(--muted);
+  opacity: .5;
+  font-style: normal;
+  transition: opacity .15s ease, color .15s ease;
+}
+button.tt-ph { cursor: pointer; }
+button.tt-ph:hover {
+  border-color: var(--teal);
+  background: linear-gradient(180deg, #FFFFFF 0%, #E8F6F3 100%);
+  box-shadow: 0 4px 12px rgba(11, 127, 112, .14);
+  transform: translateY(-1px);
+}
+button.tt-ph:hover .tt-pe { opacity: 1; color: var(--teal-ink); }
+button.tt-ph:hover .tt-pt { background: rgba(11, 127, 112, .12); color: var(--teal-ink); }
+button.tt-ph:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.tt thead th.cur-p .tt-ph {
+  border-color: var(--teal);
+  background: linear-gradient(180deg, #F0FAF8 0%, #DFF3EE 100%);
+}
+.tt thead th.cur-p .tt-pt {
+  background: var(--teal);
+  color: #fff;
 }
 
 </style>
@@ -6857,14 +7045,57 @@ const markHistory = (sheetId, studentId) => ((markSheet(sheetId) || {}).history 
    published copy that students and parents see. Nothing reaches them until someone presses «نشر». */
 const WEEK = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
 const SUBJECTS = ['الرياضيات', 'اللغة العربية', 'العلوم', 'اللغة الإنكليزية', 'التربية الإسلامية', 'الاجتماعيات', 'الحاسوب', 'الفنية', 'الرياضة'];
+const ORD_P = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة'];
 function periods() {
   const [h, m] = S.settings.start.split(':').map(Number); let t = h * 60 + m; const out = [];
-  for (let i = 0; i < 6; i++) { if (i === 3) t += 15; out.push({ n: i + 1, from: t, to: t + 45 }); t += 50; }
+  const custom = Array.isArray(S.settings.periods) ? S.settings.periods : [];
+  for (let i = 0; i < 6; i++) {
+    if (i === 3) t += 15;
+    const defFrom = t, defTo = t + 45;
+    const c = custom[i] || {};
+    const from = Number.isFinite(c.from) ? c.from : defFrom;
+    const to = Number.isFinite(c.to) && c.to > from ? c.to : defTo;
+    const name = String(c.name || '').trim() || ORD_P[i];
+    out.push({ n: i + 1, name, from, to });
+    t += 50;
+  }
   const hm = x => `${Math.floor(x / 60)}:${String(x % 60).padStart(2, '0')}`;
-  return out.map(p => ({ ...p, label: `${hm(p.from)}–${hm(p.to)}` }));
+  const hm2 = x => `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`;
+  return out.map(p => ({ ...p, fromStr: hm2(p.from), toStr: hm2(p.to), label: `${hm(p.from)}–${hm(p.to)}` }));
 }
-const ORD_P = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة'];
-const periodName = i => `الحصة ${ORD_P[i]}`;
+const periodName = i => {
+  const c = String(S?.settings?.periods?.[i]?.name || '').trim();
+  if (c) return c.startsWith('الحصة') ? c : `الحصة ${c}`;
+  return `الحصة ${ORD_P[i] || (i + 1)}`;
+};
+function updatePeriod(index, { name, from, to }, by) {
+  if (index < 0 || index >= 6) return { ok: false, error: 'رقم الحصة غير صحيح.' };
+  const cleanName = String(name || '').trim();
+  if (!cleanName) return { ok: false, error: 'اكتب اسم الحصة.' };
+  if (cleanName.length > 24) return { ok: false, error: 'اسم الحصة طويل.' };
+  const toMin = str => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(str || '').trim());
+    if (!m) return NaN;
+    const hh = +m[1], mm = +m[2];
+    return hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59 ? hh * 60 + mm : NaN;
+  };
+  const fMin = toMin(from), tMin = toMin(to);
+  if (!Number.isFinite(fMin) || !Number.isFinite(tMin)) return { ok: false, error: 'اختر وقت البداية والنهاية بشكل صحيح.' };
+  if (tMin <= fMin) return { ok: false, error: 'وقت النهاية يجب أن يكون بعد وقت البداية.' };
+  if (!Array.isArray(S.settings.periods)) S.settings.periods = Array.from({ length: 6 }, () => null);
+  S.settings.periods[index] = { name: cleanName, from: fMin, to: tMin };
+  log('تعديل الحصة والوقت', `${cleanName} · ${from}–${to}`, by);
+  save();
+  emit('tt');
+  return { ok: true, period: periods()[index] };
+}
+function resetPeriods(by) {
+  delete S.settings.periods;
+  log('استعادة أوقات الحصص الافتراضية', '', by);
+  save();
+  emit('tt');
+  return { ok: true };
+}
 const teacherFor = (subject, secId) => S.teachers.find(t => t.subject === subject && t.sections.includes(secId))?.name || '';
 function seedTT() {
   const tt = {};
@@ -7203,7 +7434,7 @@ function saveAccount({ phone, name, admin, teacher, subject, sections: secs, dis
   return { ok: true };
 }
 
-return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, holidayOn, getHoliday, offDay, isHoliday, holidayName, broadcastHolidayNotification, publishHolidayAnnouncement, publishHoliday, addHoliday, editHoliday, addHolidayRange, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, updateSection, deleteSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, PROOF_RETENTION_DAYS, pruneExpiredProofs, attachEventProof, proofStorageStats, eventById, evidenceOf, markManual, addExcuse, teacherEvents, teacherExcuses, teacherStatusOf, teacherSummary, getExemption, isExempt, exemptions, addExemption, updateExemption, deleteExemption, toggleExemption, teacherMarkManual, teacherAddExcuse, simulateTeacherScan, teacherMonthReport, recentTeacherEvents, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, updateStudent, deleteStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, publishMarks, publishGradeMarks, quickPublishGradeExam, addStudentScore, deleteSheet, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, setStudentPromoStatus, studentPromoOverride, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
+return { subscribe, now, clock, setSpeed, setPaused, resetDemo, setMode, holidays, holidayOn, getHoliday, offDay, isHoliday, holidayName, broadcastHolidayNotification, publishHolidayAnnouncement, publishHoliday, addHoliday, editHoliday, addHolidayRange, removeHoliday, init, settings, protection, setProtection, grades, sections, section, grade, students, student, guardian, devices, device, teachers, SECTION_LETTERS, nextSectionName, gradeByName, ensureGrade, addSection, updateSection, deleteSection, sectionLabel, sectionShort, first, days, STATUS, statusOf, summary, recentEvents, absentStreak, PROOF_RETENTION_DAYS, pruneExpiredProofs, attachEventProof, proofStorageStats, eventById, evidenceOf, markManual, addExcuse, teacherEvents, teacherExcuses, teacherStatusOf, teacherSummary, getExemption, isExempt, exemptions, addExemption, updateExemption, deleteExemption, toggleExemption, teacherMarkManual, teacherAddExcuse, simulateTeacherScan, teacherMonthReport, recentTeacherEvents, PUSH, addDevice, firstHandshake, removeDevice, updateDevice, setDeviceOnline, simulateScan, checkStudent, sectionByText, importStudents, addStudent, updateStudent, deleteStudent, captureFace, photoOf, photosOf, search, notes, unread, readAll, setActor, audit, rolesFor, requestCode, safeCompare, verifyCode, resetLogins, isStaff, credOf, generateCreds, checkNewPassword, passwordStrength, setOwnPassword, changeOwnPassword, requestReset, loginWithPassword, session, setActiveRole, logout, sessionValid, kickOut, takeKicked, childrenOf, teacher, excuseOf, updateSettings, monthReport, POST_TYPES, posts, canManagePost, updatePost, deletePost, isRead, markRead, unreadPosts, newPosts, markSeen, markReadMany, unreadForStudent, readersOf, addPost, EXAM_TYPES, marks, markSheet, sheetStats, isMarkRead, newMarks, readAllMarks, addMarks, publishMarks, publishGradeMarks, quickPublishGradeExam, addStudentScore, deleteSheet, canEditSheet, editMark, markHistory, WEEK, SUBJECTS, periods, periodName, updatePeriod, resetPeriods, ttOf, ttDiff, ttPending, ttCanEdit, ttSet, ttRevert, ttPublish, ttPublished, ttNew, ttMarkSeen, ttToday, promoRules, setPromoRules, nextGradeOf, sectionSubjects, subjectResult, promotionOf, PROMO_STATUS, setStudentPromoStatus, studentPromoOverride, promotionBoard, runPromotion, promotions, undoPromotion, chatOf, chatPush, studentFacts, schoolFacts, ruleAnswer, escalate, tickets, openTickets, replyTicket, chatUnread, markChatSeen, closeTicket, accounts, TEACHER_PERMS, syncTeacherScopes, teacherPerms, teacherCan, teacherScopeText, saveAccount };
 })();
 
 
@@ -10705,15 +10936,63 @@ async function template() {
 /* ============ TIMETABLE ============ */
 const tts = { sec: '', mode: 'draft', kid: null };
 const cellHtml = (c, t, extra = '') => c ? `<b>${esc(c.subject)}</b>${t && c.teacher ? `<span>${esc(c.teacher)}</span>` : ''}${extra}` : `<em>—</em>${extra}`;
-function ttGrid(grid, { editable = false, diff = null, today = -1, cur = -1, showTeacher = true, side = '' } = {}) {
+function ttGrid(grid, { editable = false, diff = null, today = -1, cur = -1, showTeacher = true, side = '', editPeriods = false } = {}) {
   const ps = db.periods(); const chg = new Map((diff || []).map(x => [x.d + ':' + x.p, x]));
-  return `<div class="ttwrap"><table class="tt"><thead><tr><th></th>${ps.map((p, i) => `<th><b>${db.periodName(i).replace('الحصة ', '')}</b><span class="num">${p.label}</span></th>`).join('')}</tr></thead><tbody>
+  return `<div class="ttwrap"><table class="tt"><thead><tr><th></th>${ps.map((p, i) => {
+    const isCurP = i === cur;
+    const inner = `<span class="tt-pn">${esc(p.name)}</span><span class="tt-pt num">${p.label}</span>${editPeriods ? `<i class="tt-pe" aria-hidden="true">${icon('edit', 11)}</i>` : ''}`;
+    return `<th class="${isCurP ? 'cur-p' : ''}">${editPeriods ? `<button type="button" class="tt-ph" data-period="${i}" title="اضغط لتعديل اسم ووقت الحصة">${inner}</button>` : `<div class="tt-ph">${inner}</div>`}</th>`;
+  }).join('')}</tr></thead><tbody>
     ${db.WEEK.map((w, d) => `<tr class="${d === today ? 'today' : ''}"><th>${w}${d === today ? '<small>اليوم</small>' : ''}</th>${grid[d].map((c, p) => {
     const x = chg.get(d + ':' + p); const isCur = d === today && p === cur;
     const was = x && side === 'draft' ? `<i class="was">كانت: ${x.from ? esc(x.from.subject) : 'فارغة'}</i>` : '';
     return `<td class="${x ? (side === 'pub' ? 'old' : 'chg') : ''} ${isCur ? 'cur' : ''} ${c ? '' : 'empty'}">${editable ? `<button type="button" class="ttc" data-cell="${d}:${p}" aria-label="${w} ${db.periodName(p)}">${cellHtml(c, showTeacher, was)}</button>` : `<div class="ttc">${cellHtml(c, showTeacher, was)}${isCur ? '<i class="now">هسه</i>' : ''}</div>`}</td>`;
   }).join('')}</tr>`).join('')}
   </tbody></table></div>`;
+}
+function ttPeriodModal(i, onDone) {
+  const p = db.periods()[i];
+  if (!p) return;
+  modal(`تعديل الحصة: ${p.name}`, `
+    <form id="tpf" style="display:flex;flex-direction:column;gap:12px" novalidate>
+      <label class="field" id="tp-name">اسم الحصة
+        <input class="input" name="name" value="${esc(p.name)}" placeholder="مثلاً: الأولى أو الاستراحة" maxlength="24">
+        <span class="help"></span>
+      </label>
+      <div class="grid g2" style="gap:12px">
+        <label class="field">من الساعة<input class="input num" type="time" name="from" value="${p.fromStr}"></label>
+        <label class="field">إلى الساعة<input class="input num" type="time" name="to" value="${p.toStr}"></label>
+      </div>
+      <div class="small" id="tp-err" style="color:var(--red-ink);font-weight:700;display:none"></div>
+      <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-top:4px">
+        <button type="button" class="btn sm" id="tp-reset" title="إرجاع الأسماء والأوقات الافتراضية لكل الحصص">استعادة الافتراضي</button>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn" data-close>إلغاء</button>
+          <button type="submit" class="btn pr">${icon('save', 16)}حفظ التعديل</button>
+        </div>
+      </div>
+    </form>`, (m, close) => {
+    const f = $('#tpf', m);
+    const err = $('#tp-err', m);
+    $('#tp-reset', m).onclick = () => {
+      db.resetPeriods(ctx().name);
+      close();
+      toast('تمت استعادة أسماء وأوقات الحصص الافتراضية');
+      onDone?.();
+    };
+    f.onsubmit = e => {
+      e.preventDefault();
+      const r = db.updatePeriod(i, { name: f.name.value, from: f.from.value, to: f.to.value }, ctx().name);
+      if (!r.ok) {
+        err.textContent = r.error;
+        err.style.display = 'block';
+        return;
+      }
+      close();
+      toast('تم تعديل الحصة والوقت', `${r.period.name} · ${r.period.label}`);
+      onDone?.();
+    };
+  });
 }
 function ttCellModal(secId, d, p, onDone) {
   const t = db.ttOf(secId); const c = t.draft[d][p]; const was = t.pub ? t.pub[d][p] : null;
@@ -10745,6 +11024,7 @@ const timetableView = {
     $('#tsec', el).onchange = e => { tts.sec = e.target.value; this.update(el); };
     el.addEventListener('click', e => {
       const m = e.target.closest('[data-mode]'); if (m) { tts.mode = m.dataset.mode; $$('[data-mode]', el).forEach(b => b.setAttribute('aria-pressed', b === m)); this.update(el); }
+      const ph = e.target.closest('[data-period]'); if (ph) { ttPeriodModal(+ph.dataset.period, () => this.update(el)); return; }
       const cell = e.target.closest('[data-cell]'); if (cell) { const [d, p] = cell.dataset.cell.split(':').map(Number); ttCellModal(tts.sec, d, p, () => this.update(el)); }
       if (e.target.closest('[data-pub]')) {
         const n = db.ttDiff(tts.sec).length; const first = !db.ttOf(tts.sec).pub;
@@ -10765,9 +11045,10 @@ const timetableView = {
     const bar = `<div class="card ttbar ${diff.length ? 'pending' : ''}">
       <div style="flex:1;min-width:220px">${t.pub ? `<b>${diff.length ? `${diff.length} تغيير بالمسودة ما انتشر بعد` : 'المسودة مطابقة للمنشور ✓'}</b><div class="muted small">آخر نشر: ${esc(fmtDay(new Date(t.pubAt)))} · <span class="num">${fmtTime(t.pubAt)}</span> · بواسطة ${esc(t.pubBy)}</div>` : '<b>هذا الجدول بعده ما انتشر</b><div class="muted small">الطلاب وأولياء الأمور ما يشوفون شي لحد ما تنشره.</div>'}</div>
       ${can ? `${diff.length && t.pub ? `<button class="btn" data-revert>تراجع عن التغييرات</button>` : ''}<button class="btn pr" data-pub ${diff.length || !t.pub ? '' : 'disabled'}>${icon('send', 16)}نشر للطلاب وأولياء الأمور</button>` : '<span class="muted small">عرض فقط: هذي الشعبة مو من شعبك</span>'}</div>`;
+    const canPeriods = ['owner', 'admin'].includes(c.role) || can;
     let body = '';
-    if (tts.mode === 'draft') body = `<div class="card"><div class="ch"><h2>المسودة (عندك)</h2><span class="muted small">${can ? 'اضغط على أي حصة حتى تعدّلها أو تحذفها' : ''}${diff.length ? ' · <span class="lgchg"></span>متغيّرة عن المنشور' : ''}</span></div>${ttGrid(t.draft, { editable: can, diff, today, side: 'draft' })}</div>`;
-    else if (tts.mode === 'pub') body = `<div class="card"><div class="ch"><h2>المنشور للطلاب وأولياء الأمور</h2><span class="muted small">هذا اللي يشوفوه هسه</span></div>${t.pub ? ttGrid(t.pub, { today }) : '<div class="empty">ما انتشر بعد</div>'}</div>`;
+    if (tts.mode === 'draft') body = `<div class="card"><div class="ch"><h2>المسودة (عندك)</h2><span class="muted small">${can ? 'اضغط على أي حصة أو على عنوان الحصة لتعديل الاسم والوقت' : ''}${diff.length ? ' · <span class="lgchg"></span>متغيّرة عن المنشور' : ''}</span></div>${ttGrid(t.draft, { editable: can, editPeriods: canPeriods, diff, today, side: 'draft' })}</div>`;
+    else if (tts.mode === 'pub') body = `<div class="card"><div class="ch"><h2>المنشور للطلاب وأولياء الأمور</h2><span class="muted small">هذا اللي يشوفوه هسه</span></div>${t.pub ? ttGrid(t.pub, { today, editPeriods: canPeriods }) : '<div class="empty">ما انتشر بعد</div>'}</div>`;
     else body = `<div class="card"><div class="ch"><h2>التغييرات اللي راح تنتشر</h2><span class="muted small">${diff.length} تغيير</span></div>${diff.length ? `<div class="chlist">${diff.map(x => `<div class="chrow"><span class="when">${db.WEEK[x.d]} · ${db.periodName(x.p)}</span><span class="from">${x.from ? esc(x.from.subject) : 'فارغة'}</span><span class="arr">←</span><span class="to ${x.to ? '' : 'del'}">${x.to ? esc(x.to.subject) : 'محذوفة'}</span>${x.to?.teacher && x.to.teacher !== x.from?.teacher ? `<span class="muted small">${esc(x.to.teacher)}</span>` : ''}</div>`).join('')}</div>` : '<div class="empty">ما أكو فرق: المسودة نفس المنشور</div>'}</div>
       <div class="ttcmp"><div class="card"><div class="ch"><h2>عندي (المسودة)</h2></div>${ttGrid(t.draft, { diff, showTeacher: false, side: 'draft' })}</div><div class="card"><div class="ch"><h2>المنشور للطلاب</h2></div>${t.pub ? ttGrid(t.pub, { diff, showTeacher: false, side: 'pub' }) : '<div class="empty">ما انتشر بعد</div>'}</div></div>`;
     box.innerHTML = bar + body;
