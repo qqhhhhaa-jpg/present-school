@@ -508,7 +508,7 @@ const attendance = {
               ${isHoliday ? `<span class="pill p-quiet">${icon('calendar', 13)} عطلة</span>` : `<b class="num" style="font-size:20px;color:var(--${gc}-ink)">${gx.rate}%</b>`}
             </div>
             ${isHoliday ? '' : `<div class="bar" style="flex:none"><i style="width:${gx.rate}%;background:var(--${gc})"></i></div>`}
-            <div class="secs">${secs.map((s, si) => { const y = db.summary(db.students(s.id), att.day); const pct = y.total ? Math.round(y.came / y.total * 100) : 0; return `<button type="button" class="sec sc c${si % 6}" data-open-sec="${s.id}" title="فتح حضور ${esc(g.name)} شعبة ${esc(s.name)}"><span class="sl">${esc(s.name)}</span><span class="sb"><span class="sn">${isHoliday ? `عطلة · <em>${y.total}</em>` : `<em>${y.came}</em>/${y.total}`}</span><span class="sm"><i style="width:${isHoliday ? 0 : pct}%"></i></span></span></button>`; }).join('')}</div>
+            <div class="secs">${secs.map((s, si) => { const ss = db.students(s.id); const n = ss.length; const y = db.summary(ss, att.day); const pct = n ? Math.round(y.came / n * 100) : 0; return `<button type="button" class="sec sc c${si % 6}" data-open-sec="${s.id}" title="فتح حضور ${esc(g.name)} شعبة ${esc(s.name)}"><span class="sl">${esc(s.name)}</span><span class="sb"><span class="sn">الكل <em>${n}</em></span><span class="sp">${isHoliday ? 'عطلة رسمية' : `حاضر <em>${y.came}</em>`}</span><span class="sm"><i style="width:${isHoliday ? 0 : pct}%"></i></span></span></button>`; }).join('')}</div>
           </div>`;
         }).join('')}</div>`).join('') : `<div class="empty">لا توجد شعب مطابقة لبحثك</div>`}
       `;

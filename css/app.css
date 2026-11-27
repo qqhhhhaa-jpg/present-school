@@ -607,6 +607,8 @@ html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;width:0;height:0}
 .sec.sc .sb{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
 .sec.sc .sn{font-size:12px;color:var(--muted);font-weight:600;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums}
 .sec.sc .sn em{font-style:normal;font-size:14px;font-weight:800;color:var(--ink)}
+.sec.sc .sp{font-size:11px;color:var(--muted);font-weight:600;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums}
+.sec.sc .sp em{font-style:normal;font-weight:800;color:var(--c)}
 .sec.sc .sm{height:4px;border-radius:3px;background:var(--surface-300);overflow:hidden}
 .sec.sc .sm i{display:block;height:100%;border-radius:3px;background:var(--c)}
 .sec.sc.c0{--c:#1E2B5C;--cs:#EEF1F8} .sec.sc.c1{--c:#0B7F70;--cs:#E8F4F1} .sec.sc.c2{--c:#C08A2E;--cs:#FBF3E3}
